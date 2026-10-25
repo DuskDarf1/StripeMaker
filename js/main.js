@@ -45,7 +45,7 @@
       }
     });
     document.addEventListener("keydown", event => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || document.querySelector("dialog[open]")) return;
       const activeButton = buttons.find(button => button.getAttribute("aria-expanded") === "true");
       showEditor(null);
       activeButton?.focus();
@@ -80,6 +80,8 @@
     } else if (typeof prefersDarkScheme?.addListener === 'function') {
       prefersDarkScheme.addListener(syncThemeWithSystem);
     }
+
+    window.StripeMaker = { showEditor };
 
     // Copy, Download, and Clear all are placeholders until their features are requested.
   });

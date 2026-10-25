@@ -66,6 +66,29 @@
       </div>
       <div class="editorContent"></div>
     </section>
+
+    <section id="scaleEditor" class="editor" aria-labelledby="scaleTitle" hidden>
+      <div class="editorBar">
+        <h2 id="scaleTitle" class="editorTitle">
+          <span class="material-symbols-outlined" aria-hidden="true">straighten</span>
+          Set Scale
+        </h2>
+      </div>
+      <div class="editorContent">
+        <p class="scaleHint">Zoom in and drag the two yellow points across one travel lane, from the center of one line to the center of the next. A standard lane is 12 ft (144 in).</p>
+        <div class="scaleReadout">
+          <output id="scalePixels" for="scaleInches">0 px</output>
+          <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+          <input id="scaleInches" type="number" min="0.1" step="any" value="144" aria-label="Measured distance in inches" />
+          <span>in</span>
+        </div>
+        <p id="scaleResult" class="scaleResult" aria-live="polite"></p>
+        <div class="headActions">
+          <button type="button" id="applyScale">Apply</button>
+          <button type="button" id="cancelScale">Cancel</button>
+        </div>
+      </div>
+    </section>
   </div>
 
   <section id="sheetsMenu" class="headsMenu" aria-labelledby="sheetsTitle" hidden>
@@ -75,12 +98,18 @@
     </div>
     <div class="headActions">
       <button type="button" id="uploadSheet">Upload Sheet</button>
+      <button type="button" id="setScale" disabled>Set Scale</button>
       <button type="button" id="removeSheet" disabled>Remove</button>
     </div>
     <input id="sheetFile" type="file" accept=".tif,.tiff,.jpg,.jpeg,.png,image/tiff,image/jpeg,image/png" multiple hidden aria-label="Upload sheet images" />
     <p id="sheetsEmpty">No sheets yet.</p>
     <ul id="sheetList" aria-label="Sheets"></ul>
     <p id="sheetStatus" role="status" aria-live="polite"></p>
+    <div class="headActions">
+      <button type="button" id="openSheetGuide">
+        <span class="material-symbols-outlined" aria-hidden="true">help</span>How to get sheets
+      </button>
+    </div>
   </section>
 
   <nav id="configBar" aria-label="StripeMaker tools">
@@ -131,5 +160,22 @@
       </button>
     </div>
   </nav>
+
+  <dialog id="sheetGuide" aria-labelledby="sheetGuideTitle">
+    <h3 id="sheetGuideTitle">How to Get Sheets</h3>
+    <p>Sheets are aerial photos (often called <em>orthoimagery</em>) of the road you're redesigning. Most states and counties publish free, high-resolution photos.</p>
+    <ol>
+      <li><strong>Find your county or state imagery.</strong> Search for <em>"[your county] GIS aerial imagery download"</em> or <em>"[your state] orthoimagery download"</em>. Pick the newest year with 3–6 inch resolution.</li>
+      <li><strong>Download your road as a GeoTIFF (.tif).</strong> GeoTIFFs carry their own scale, so StripeMaker measures them automatically.</li>
+      <li><strong>Upload it with Upload Sheet.</strong> Add as many sheets as you need and drag them into order.</li>
+    </ol>
+    <h4>If you get stuck</h4>
+    <ul>
+      <li><strong>No local imagery?</strong> The <a href="https://apps.nationalmap.gov/downloader/" target="_blank" rel="noopener noreferrer">USGS National Map Downloader</a> covers the whole U.S. at lower resolution. Choose Imagery, find your road, and download its tiles.</li>
+      <li><strong>Got a .sid, .ecw, or .jp2 file?</strong> Open it in <a href="https://qgis.org" target="_blank" rel="noopener noreferrer">QGIS</a> (free), right-click the layer, choose Export › Save As, and pick GeoTIFF.</li>
+      <li><strong>Only have a screenshot?</strong> JPEG and PNG work too. Use Set Scale to measure one lane so markings come out the right size.</li>
+    </ul>
+    <div class="options"><button type="button" id="closeSheetGuide">OK</button></div>
+  </dialog>
 </body>
 </html>

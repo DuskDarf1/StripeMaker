@@ -74,8 +74,32 @@ hr { border: 0; border-top: 1px solid rgba(var(--baseColor), 0.45); margin: 0.75
   background: rgba(var(--baseColor), 0.3);
   border: 1px solid transparent;
   border-radius: 0;
+  position: relative;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
 }
 .headListButton.active { border-color: var(--selectedColor); background: rgba(var(--baseColor), 0.6); }
+.headListButton.panelWiggle { animation: textEditorBlockWiggle 0.12s ease-in-out infinite alternate; animation-delay: var(--wiggle-delay, 0s); }
+.headListButton.dragging { opacity: 0.5; cursor: grabbing; animation: none !important; }
+.headListButton.dropBefore::before, .headListButton.dropAfter::after {
+  content: "";
+  position: absolute;
+  left: 0.35rem;
+  right: 0.35rem;
+  height: 0.15rem;
+  background: var(--selectedColor);
+  border-radius: 0.15rem;
+  pointer-events: none;
+}
+.headListButton.dropBefore::before { top: -0.1rem; }
+.headListButton.dropAfter::after { bottom: -0.1rem; }
+@keyframes textEditorBlockWiggle {
+  from { transform: rotate(-2deg) scale(1.02); }
+  to { transform: rotate(2deg) scale(1.02); }
+}
+.dragGhost { position: fixed; margin: 0; z-index: 10; pointer-events: none; opacity: 0.8; }
+.sheetName { min-width: 0; }
 .sheetScale { flex: 0 0 auto; font-size: 0.65rem; opacity: 0.8; white-space: nowrap; }
 #sheetStatus:empty { display: none; }
 
@@ -83,6 +107,88 @@ hr { border: 0; border-top: 1px solid rgba(var(--baseColor), 0.45); margin: 0.75
 #workspace { position: relative; overflow: hidden; }
 #workspace.hasSheet { cursor: grab; touch-action: none; }
 #workspace.hasSheet.panning { cursor: grabbing; }
-.sheetImage { position: absolute; top: 0; left: 0; transform-origin: 0 0; user-select: none; }
+.sheetImage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  user-select: none;
+  /* A constant 3 px white border at any zoom. */
+  outline: calc(3px / var(--zoom, 1)) solid #fff;
+}
 .sheetImage canvas { position: absolute; display: block; }
 .sheetImage img { display: block; width: 100%; height: 100%; -webkit-user-drag: none; pointer-events: none; }
+#openSheetGuide { gap: 0.25rem; }
+#openSheetGuide .material-symbols-outlined { font-size: 1rem; }
+
+/* Set Scale: SignalMaker's yellow editor-overlay handles, as point markers. */
+.scaleOverlay { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+.scaleOverlay svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.scaleLineShadow { stroke: #252628; stroke-width: 4px; }
+.scaleLine { stroke: #ffdf00; stroke-width: 2px; }
+button.scaleHandle {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: 2px solid #ffdf00;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #665900, inset 0 0 0 1px #665900;
+  cursor: move;
+  touch-action: none;
+  pointer-events: auto;
+}
+button.scaleHandle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  background: #ffdf00;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #665900;
+}
+button.scaleHandle::before { content: ""; position: absolute; inset: -10px; border-radius: 50%; }
+button.scaleHandle:focus-visible { outline: 2px solid var(--textColor); outline-offset: 3px; }
+#scaleEditor { width: 20rem; }
+.scaleHint { font-size: 0.75rem; line-height: 1.35; }
+.scaleReadout { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.6rem; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.scaleReadout output { min-width: 4.5rem; text-align: right; }
+.scaleReadout .material-symbols-outlined { font-size: 1rem; }
+.scaleReadout input { width: 5rem; }
+.scaleResult { margin-top: 0.35rem; font-size: 0.7rem; opacity: 0.8; }
+
+/* SignMaker v2.2's dialog pattern (GPL-3.0), sized for reading. */
+#sheetGuide::backdrop { background-color: rgb(0, 0, 0, 0.3); }
+#sheetGuide {
+  border: 0;
+  padding: 1rem;
+  width: min(36rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  background: var(--hotbarColor);
+  color: var(--textColor);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+#sheetGuide h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+#sheetGuide h4 { margin: 0.75rem 0 0.25rem; font-family: "Overpass", sans-serif; font-size: 0.8rem; }
+#sheetGuide p { margin: 0 0 0.5rem; }
+#sheetGuide ol, #sheetGuide ul { margin: 0; padding-left: 1.25rem; }
+#sheetGuide li { margin-bottom: 0.35rem; }
+#sheetGuide a { color: inherit; }
+#sheetGuide .options { display: flex; justify-content: flex-end; margin-top: 0.75rem; }
+#sheetGuide .options button { padding: 0.25rem 1rem; font-size: 0.75rem; }
+#sheetGuide .options button:hover { background: var(--selectedColor); }
+
+@media (prefers-reduced-motion: reduce) {
+  .headListButton.panelWiggle { animation: none; }
+}
+@media (max-width: 768px) {
+  #scaleEditor { width: 100%; }
+}
+.headsMenu .headActions button { white-space: nowrap; }

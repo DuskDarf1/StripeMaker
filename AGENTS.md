@@ -28,11 +28,24 @@ MUTCD-compliant pavement markings onto them.
 ## Current scope
 
 - Sheets: users upload aerial imagery of the roads they are redesigning. Accept
-  GeoTIFF (`.tif`/`.tiff`, the standard ortho download), JPEG, and PNG. Read
-  GeoTIFF georeferencing to get true inches per pixel; JPEG/PNG have no scale.
-  Do not fetch imagery from map providers; users download sheets themselves.
-  Large GeoTIFFs render as 4096 px canvas tiles. The workspace pans by drag,
-  zooms by wheel/pinch, and refits on double-click.
+  GeoTIFF (`.tif`/`.tiff`, the standard ortho download), JPEG, and PNG; several
+  sheets may be uploaded. Read GeoTIFF georeferencing to get true inches per
+  pixel; JPEG/PNG have no scale until set. Do not fetch imagery from map
+  providers; the popover's "How to get sheets" dialog tells users how to
+  download sheets themselves. Large GeoTIFFs render as 4096 px canvas tiles.
+- Each displayed sheet has a constant 3 px white border at any zoom.
+- The Sheets list reorders like SignalMaker's Heads list: drag-and-drop with
+  wiggle, faded source, and insertion markers; touch dragging; up/down arrows.
+  The popover stays open while reordering or selecting.
+- Set Scale (Sheets popover) shows two yellow point handles joined by a straight
+  line. Users zoom in and drag them across one 12 ft (144 in) travel lane. The
+  readout shows `XX px → XX in`; only inches are editable (default 144). Apply
+  stores inches per pixel on the sheet, overriding GeoTIFF scale. Arrow keys
+  nudge a focused handle; Escape or Cancel exits. Scale is required for
+  true-size pavement markings later.
+- Workspace navigation: trackpad pinch (ctrl+wheel or Safari gestures) zooms
+  smoothly, two-finger scroll pans, a mouse wheel zooms, drag pans, touch
+  pinch zooms, and double-click refits.
 - Markings, Intersections, Signs, Simulator, Levels, Copy, Download, and Clear
   all are placeholders and do nothing yet. Dark/light mode is functional.
 

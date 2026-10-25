@@ -5,16 +5,23 @@
   const SUPPORTED = /\.(tiff?|jpe?g|png)$/i;
   // GeoTIFF ProjLinearUnitsGeoKey codes: metre, international foot, US survey foot.
   const INCHES_PER_UNIT = { 9001: 1 / 0.0254, 9002: 12, 9003: 1200 / 3937 / 0.0254 };
+  const MAX_ZOOM = 16;
 
   document.addEventListener("DOMContentLoaded", () => {
     const workspace = document.getElementById("workspace");
     const stage = document.getElementById("previewStage");
     const fileInput = document.getElementById("sheetFile");
     const uploadButton = document.getElementById("uploadSheet");
+    const scaleButton = document.getElementById("setScale");
     const removeButton = document.getElementById("removeSheet");
     const list = document.getElementById("sheetList");
     const empty = document.getElementById("sheetsEmpty");
     const status = document.getElementById("sheetStatus");
+    const guide = document.getElementById("sheetGuide");
+    const scaleEditor = document.getElementById("scaleEditor");
+    const scalePixels = document.getElementById("scalePixels");
+    const scaleInches = document.getElementById("scaleInches");
+    const scaleResult = document.getElementById("scaleResult");
     const sheets = [];
     let selected = null;
     let nextId = 1;
@@ -68,21 +75,26 @@
     }
 
     // Pan/zoom view: translate + scale on one layer, anchored at the stage's top-left.
+    function fitScale(sheet) {
+      const box = stage.getBoundingClientRect();
+      return Math.min(box.width / sheet.width, box.height / sheet.height);
+    }
     function fitSheet(sheet) {
       const box = stage.getBoundingClientRect();
-      const scale = Math.min(box.width / sheet.width, box.height / sheet.height);
+      const scale = fitScale(sheet);
       sheet.view = { scale, x: (box.width - sheet.width * scale) / 2, y: (box.height - sheet.height * scale) / 2, fitted: true };
       applyView(sheet);
     }
     function applyView(sheet) {
       const { scale, x, y } = sheet.view;
       sheet.content.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+      sheet.content.style.setProperty("--zoom", scale);
+      if (sheet === selected) drawScaleLine();
     }
     function zoomAt(sheet, factor, clientX, clientY) {
       const box = stage.getBoundingClientRect();
       const view = sheet.view;
-      const fit = Math.min(box.width / sheet.width, box.height / sheet.height);
-      const scale = Math.min(8, Math.max(fit / 2, view.scale * factor));
+      const scale = Math.min(MAX_ZOOM, Math.max(fitScale(sheet) / 2, view.scale * factor));
       const px = clientX - box.left;
       const py = clientY - box.top;
       view.x = px - (px - view.x) * (scale / view.scale);
@@ -91,29 +103,43 @@
       view.fitted = false;
       applyView(sheet);
     }
+    function panBy(sheet, dx, dy) {
+      sheet.view.x += dx;
+      sheet.view.y += dy;
+      sheet.view.fitted = false;
+      applyView(sheet);
+    }
 
     function formatScale(inches) {
       if (!inches) return "No scale";
       return `${inches < 10 ? inches.toFixed(1) : Math.round(inches)} in/px`;
     }
 
+    // Rows are reused and moved, never rebuilt, so focus and click targets stay attached.
     function renderList() {
-      list.replaceChildren(...sheets.map(sheet => {
-        const item = document.createElement("li");
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "headListButton";
-        button.dataset.sheetId = sheet.id;
-        const name = document.createElement("span");
-        name.textContent = sheet.name;
-        const scale = document.createElement("span");
-        scale.className = "sheetScale";
-        scale.textContent = formatScale(sheet.inchesPerPixel);
-        button.append(name, scale);
-        button.title = `${sheet.name} (${sheet.width} × ${sheet.height} px)`;
-        item.append(button);
-        return item;
-      }));
+      const rows = new Map([...list.children].map(item => [Number(item.dataset.sheetId), item]));
+      for (const sheet of sheets) {
+        let item = rows.get(sheet.id);
+        if (!item) {
+          item = document.createElement("li");
+          item.dataset.sheetId = sheet.id;
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "headListButton";
+          button.dataset.sheetId = sheet.id;
+          button.setAttribute("aria-keyshortcuts", "ArrowUp ArrowDown");
+          button.innerHTML = '<span class="sheetName"></span><span class="sheetScale"></span>';
+          item.append(button);
+        }
+        const button = item.firstChild;
+        button.querySelector(".sheetName").textContent = sheet.name;
+        button.querySelector(".sheetScale").textContent = formatScale(sheet.inchesPerPixel);
+        button.draggable = sheets.length > 1;
+        button.title = `${sheet.name} (${sheet.width} × ${sheet.height} px). Drag to reorder; arrow keys also move this sheet`;
+        list.append(item);
+        rows.delete(sheet.id);
+      }
+      rows.forEach(item => item.remove());
       empty.hidden = sheets.length > 0;
       updateSelection();
     }
@@ -121,14 +147,16 @@
       list.querySelectorAll(".headListButton").forEach(button => {
         const active = Number(button.dataset.sheetId) === selected?.id;
         button.classList.toggle("active", active);
-        button.setAttribute("aria-pressed", String(active));
+        button.setAttribute("aria-current", String(active));
       });
       removeButton.disabled = !selected;
+      scaleButton.disabled = !selected;
     }
 
     function select(sheet) {
+      if (sheet !== selected) endScale();
       selected = sheet;
-      stage.replaceChildren(...(sheet ? [sheet.content] : []));
+      stage.replaceChildren(...(sheet ? [sheet.content, overlay] : []));
       workspace.classList.toggle("hasSheet", Boolean(sheet));
       if (sheet && !sheet.view) fitSheet(sheet);
       updateSelection();
@@ -166,10 +194,6 @@
       fileInput.value = "";
       addFiles(files);
     });
-    list.addEventListener("click", event => {
-      const button = event.target.closest(".headListButton");
-      if (button) select(sheets.find(sheet => sheet.id === Number(button.dataset.sheetId)));
-    });
     removeButton.addEventListener("click", () => {
       const index = sheets.indexOf(selected);
       if (index < 0) return;
@@ -178,12 +202,268 @@
       select(sheets[Math.min(index, sheets.length - 1)] ?? null);
       renderList();
     });
+    document.getElementById("openSheetGuide").addEventListener("click", () => guide.showModal());
+    document.getElementById("closeSheetGuide").addEventListener("click", () => guide.close());
 
+    // Reordering follows SignalMaker's Heads list: wiggle, faded source, insertion
+    // markers, mouse drag-and-drop, touch dragging with a ghost, and up/down arrow keys.
+    let listDrag = null;
+    let touchDrag = null;
+    let suppressClickUntil = 0;
+    const listButtons = () => [...list.querySelectorAll(".headListButton")];
+
+    function moveSheet(from, insertAt) {
+      if (from < 0 || insertAt < 0 || insertAt > sheets.length) return;
+      const [sheet] = sheets.splice(from, 1);
+      sheets.splice(insertAt > from ? insertAt - 1 : insertAt, 0, sheet);
+      renderList();
+    }
+    function dropIndex(clientY) {
+      const buttons = listButtons();
+      buttons.forEach(button => button.classList.remove("dropBefore", "dropAfter"));
+      let index = buttons.findIndex(button => {
+        const rect = button.getBoundingClientRect();
+        return clientY < rect.top + rect.height / 2;
+      });
+      if (index < 0) index = buttons.length;
+      const target = buttons[Math.min(index, buttons.length - 1)];
+      if (target && !target.classList.contains("dragging")) target.classList.add(index < buttons.length ? "dropBefore" : "dropAfter");
+      return index;
+    }
+    function scrollList(clientY) {
+      const rect = list.getBoundingClientRect();
+      if (clientY < rect.top + 20) list.scrollTop -= 12;
+      else if (clientY > rect.bottom - 20) list.scrollTop += 12;
+    }
+    function beginListDrag(button) {
+      listDrag = { from: sheets.findIndex(sheet => sheet.id === Number(button.dataset.sheetId)) };
+      listButtons().forEach(row => {
+        row.classList.add("panelWiggle");
+        row.style.setProperty("--wiggle-delay", `${Math.random() * 0.12}s`);
+      });
+      button.classList.add("dragging");
+    }
+    function endListDrag() {
+      listButtons().forEach(row => {
+        row.classList.remove("panelWiggle", "dragging", "dropBefore", "dropAfter");
+        row.style.removeProperty("--wiggle-delay");
+      });
+      listDrag = null;
+    }
+
+    list.addEventListener("click", event => {
+      const button = event.target.closest(".headListButton");
+      if (!button || Date.now() < suppressClickUntil) return;
+      select(sheets.find(sheet => sheet.id === Number(button.dataset.sheetId)));
+    });
+    list.addEventListener("dragstart", event => {
+      const button = event.target.closest(".headListButton");
+      if (!button || sheets.length < 2) return;
+      beginListDrag(button);
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", String(listDrag.from));
+    });
+    list.addEventListener("dragover", event => {
+      if (!listDrag) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      scrollList(event.clientY);
+      dropIndex(event.clientY);
+    });
+    list.addEventListener("drop", event => {
+      if (!listDrag) return;
+      event.preventDefault();
+      const { from } = listDrag;
+      const to = dropIndex(event.clientY);
+      endListDrag();
+      moveSheet(from, to);
+    });
+    list.addEventListener("dragleave", event => {
+      if (!list.contains(event.relatedTarget)) listButtons().forEach(row => row.classList.remove("dropBefore", "dropAfter"));
+    });
+    list.addEventListener("dragend", () => {
+      suppressClickUntil = Date.now() + 250;
+      endListDrag();
+    });
+    list.addEventListener("keydown", event => {
+      const button = event.target.closest(".headListButton");
+      if (!button || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
+      event.preventDefault();
+      const index = sheets.findIndex(sheet => sheet.id === Number(button.dataset.sheetId));
+      moveSheet(index, event.key === "ArrowUp" ? index - 1 : index + 2);
+      button.focus();
+    });
+    list.addEventListener("pointerdown", event => {
+      if (event.pointerType === "mouse" || !event.isPrimary || sheets.length < 2) return;
+      const button = event.target.closest(".headListButton");
+      if (!button) return;
+      touchDrag = { button, pointerId: event.pointerId, x: event.clientX, y: event.clientY, ghost: null };
+      list.setPointerCapture(event.pointerId);
+    });
+    list.addEventListener("pointermove", event => {
+      const drag = touchDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const dy = event.clientY - drag.y;
+      if (!drag.ghost && Math.hypot(event.clientX - drag.x, dy) < 6) return;
+      event.preventDefault();
+      if (!drag.ghost) {
+        const rect = drag.button.getBoundingClientRect();
+        drag.left = rect.left;
+        drag.top = rect.top;
+        drag.ghost = drag.button.cloneNode(true);
+        drag.ghost.className = "dragGhost headListButton";
+        drag.ghost.inert = true;
+        drag.ghost.setAttribute("aria-hidden", "true");
+        Object.assign(drag.ghost.style, { width: `${rect.width}px`, height: `${rect.height}px`, left: `${rect.left}px` });
+        document.body.append(drag.ghost);
+        beginListDrag(drag.button);
+      }
+      drag.ghost.style.top = `${drag.top + dy}px`;
+      scrollList(event.clientY);
+      dropIndex(event.clientY);
+    });
+    function endTouchDrag(event, cancelled = false) {
+      const drag = touchDrag;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      touchDrag = null;
+      if (list.hasPointerCapture(event.pointerId)) list.releasePointerCapture(event.pointerId);
+      if (!drag.ghost) return;
+      drag.ghost.remove();
+      suppressClickUntil = Date.now() + 250;
+      const { from } = listDrag;
+      const to = dropIndex(event.clientY);
+      endListDrag();
+      if (!cancelled) moveSheet(from, to);
+    }
+    list.addEventListener("pointerup", event => endTouchDrag(event));
+    list.addEventListener("pointercancel", event => endTouchDrag(event, true));
+
+    // Set Scale: two handles in image pixels joined by a straight line. The readout
+    // converts their pixel distance to the inches the user enters.
+    const overlay = document.createElement("div");
+    overlay.className = "scaleOverlay";
+    overlay.hidden = true;
+    overlay.innerHTML = `<svg aria-hidden="true"><line class="scaleLineShadow"/><line class="scaleLine"/></svg>
+      <button type="button" class="scaleHandle" data-handle="a" aria-label="Scale start point" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>
+      <button type="button" class="scaleHandle" data-handle="b" aria-label="Scale end point" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>`;
+    const handles = { a: overlay.querySelector('[data-handle="a"]'), b: overlay.querySelector('[data-handle="b"]') };
+    let scale = null;
+
+    const pixelDistance = () => Math.hypot(scale.b.x - scale.a.x, scale.b.y - scale.a.y);
+    function toImage(sheet, clientX, clientY) {
+      const box = stage.getBoundingClientRect();
+      return {
+        x: Math.min(sheet.width, Math.max(0, (clientX - box.left - sheet.view.x) / sheet.view.scale)),
+        y: Math.min(sheet.height, Math.max(0, (clientY - box.top - sheet.view.y) / sheet.view.scale)),
+      };
+    }
+    function drawScaleLine() {
+      if (!scale || !selected) return;
+      const { x, y, scale: zoom } = selected.view;
+      const points = { a: { x: x + scale.a.x * zoom, y: y + scale.a.y * zoom }, b: { x: x + scale.b.x * zoom, y: y + scale.b.y * zoom } };
+      overlay.querySelectorAll("line").forEach(line => {
+        line.setAttribute("x1", points.a.x);
+        line.setAttribute("y1", points.a.y);
+        line.setAttribute("x2", points.b.x);
+        line.setAttribute("y2", points.b.y);
+      });
+      for (const key of ["a", "b"]) {
+        handles[key].style.left = `${points[key].x}px`;
+        handles[key].style.top = `${points[key].y}px`;
+      }
+      updateReadout();
+    }
+    function updateReadout() {
+      const pixels = pixelDistance();
+      const inches = Number(scaleInches.value);
+      scalePixels.textContent = `${pixels.toFixed(1)} px`;
+      const valid = pixels >= 1 && inches > 0;
+      document.getElementById("applyScale").disabled = !valid;
+      scaleResult.textContent = valid ? `= ${formatScale(inches / pixels)}` : "Drag the points apart and enter a distance.";
+    }
+    function startScale() {
+      if (!selected) return;
+      window.StripeMaker?.showEditor(null);
+      const box = stage.getBoundingClientRect();
+      const center = toImage(selected, box.left + box.width / 2, box.top + box.height / 2);
+      const half = Math.min(100 / selected.view.scale, selected.width / 4);
+      scale = {
+        a: { x: Math.max(0, center.x - half), y: center.y },
+        b: { x: Math.min(selected.width, center.x + half), y: center.y },
+      };
+      overlay.hidden = false;
+      scaleEditor.hidden = false;
+      drawScaleLine();
+      handles.a.focus({ preventScroll: true });
+    }
+    function endScale() {
+      scale = null;
+      overlay.hidden = true;
+      scaleEditor.hidden = true;
+    }
+
+    scaleButton.addEventListener("click", startScale);
+    scaleInches.addEventListener("input", updateReadout);
+    document.getElementById("cancelScale").addEventListener("click", endScale);
+    document.getElementById("applyScale").addEventListener("click", () => {
+      const pixels = pixelDistance();
+      const inches = Number(scaleInches.value);
+      if (!selected || pixels < 1 || !(inches > 0)) return;
+      selected.inchesPerPixel = inches / pixels;
+      endScale();
+      renderList();
+    });
+    document.getElementById("configBar").addEventListener("click", event => {
+      if (event.target.closest("[data-editor]")) endScale();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && scale && !document.querySelector("dialog[open]")) endScale();
+    });
+    for (const [key, handle] of Object.entries(handles)) {
+      handle.addEventListener("pointerdown", event => {
+        event.stopPropagation();
+        handle.setPointerCapture(event.pointerId);
+      });
+      handle.addEventListener("pointermove", event => {
+        if (!handle.hasPointerCapture(event.pointerId) || !scale) return;
+        scale[key] = toImage(selected, event.clientX, event.clientY);
+        drawScaleLine();
+      });
+      // Arrow keys nudge one screen pixel at the current zoom; Shift moves ten.
+      handle.addEventListener("keydown", event => {
+        const moves = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+        if (!moves[event.key] || !scale) return;
+        event.preventDefault();
+        const step = (event.shiftKey ? 10 : 1) / selected.view.scale;
+        const point = scale[key];
+        point.x = Math.min(selected.width, Math.max(0, point.x + moves[event.key][0] * step));
+        point.y = Math.min(selected.height, Math.max(0, point.y + moves[event.key][1] * step));
+        drawScaleLine();
+      });
+    }
+
+    // Trackpad pinches arrive as ctrl+wheel (Chrome, Firefox) or gesture events (Safari)
+    // and zoom smoothly; two-finger scrolls pan; mouse wheels zoom in steps.
     workspace.addEventListener("wheel", event => {
       if (!selected) return;
       event.preventDefault();
-      zoomAt(selected, Math.exp(-event.deltaY * 0.0015), event.clientX, event.clientY);
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? stage.clientHeight : 1;
+      const dx = event.deltaX * unit;
+      const dy = event.deltaY * unit;
+      const trackpad = event.wheelDeltaY ? event.wheelDeltaY === -3 * event.deltaY : event.deltaMode === 0;
+      if (event.ctrlKey) zoomAt(selected, Math.exp(-dy * 0.01), event.clientX, event.clientY);
+      else if (trackpad) panBy(selected, -dx, -dy);
+      else zoomAt(selected, Math.exp(-dy * 0.002), event.clientX, event.clientY);
     }, { passive: false });
+    let gestureScale = 1;
+    workspace.addEventListener("gesturestart", event => { event.preventDefault(); gestureScale = 1; });
+    workspace.addEventListener("gesturechange", event => {
+      event.preventDefault();
+      if (!selected) return;
+      zoomAt(selected, event.scale / gestureScale, event.clientX, event.clientY);
+      gestureScale = event.scale;
+    });
+    workspace.addEventListener("gestureend", event => event.preventDefault());
 
     // One pointer pans; two pointers pinch-zoom around their midpoint.
     const pointers = new Map();
@@ -204,10 +484,7 @@
       const current = { x: event.clientX, y: event.clientY };
       pointers.set(event.pointerId, current);
       if (pointers.size === 1) {
-        selected.view.x += current.x - last.x;
-        selected.view.y += current.y - last.y;
-        selected.view.fitted = false;
-        applyView(selected);
+        panBy(selected, current.x - last.x, current.y - last.y);
       } else if (pointers.size === 2) {
         const [a, b] = [...pointers.values()];
         const distance = Math.hypot(a.x - b.x, a.y - b.y);
@@ -222,7 +499,9 @@
     }
     workspace.addEventListener("pointerup", endPointer);
     workspace.addEventListener("pointercancel", endPointer);
-    workspace.addEventListener("dblclick", () => { if (selected) fitSheet(selected); });
+    workspace.addEventListener("dblclick", event => {
+      if (selected && !event.target.closest(".scaleHandle")) fitSheet(selected);
+    });
     window.addEventListener("resize", () => { if (selected?.view.fitted) fitSheet(selected); });
   });
 })();
