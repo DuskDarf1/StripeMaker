@@ -37,6 +37,15 @@
       </div>
       <div class="editorContent"></div>
     </section>
+    <section id="signsEditor" class="editor" aria-labelledby="signsTitle" hidden>
+      <div class="editorBar">
+        <h2 id="signsTitle" class="editorTitle" tabindex="-1">
+          <span class="material-symbols-outlined" aria-hidden="true">signpost</span>
+          Signs
+        </h2>
+      </div>
+      <div class="editorContent"></div>
+    </section>
   </div>
 
   <section id="sheetsMenu" class="headsMenu" aria-labelledby="sheetsTitle" hidden>
@@ -61,6 +70,11 @@
       aria-label="Intersections" aria-controls="intersectionsEditor" aria-expanded="false" title="Intersections">
       <span class="material-symbols-outlined" aria-hidden="true">add_road</span>
       <span class="configLabel">Intersections</span>
+    </button>
+    <button type="button" class="configOption" data-editor="signsEditor"
+      aria-label="Signs" aria-controls="signsEditor" aria-expanded="false" title="Signs">
+      <span class="material-symbols-outlined" aria-hidden="true">signpost</span>
+      <span class="configLabel">Signs</span>
     </button>
     <button type="button" id="copy" class="configOption" aria-label="Copy" title="Copy">
       <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>

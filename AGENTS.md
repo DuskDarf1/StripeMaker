@@ -16,7 +16,7 @@ MUTCD-compliant pavement markings onto them.
   up-opening popover menus. Do not introduce a new design system, decorative
   cards, or custom UI controls.
 - Bottom toolbar, in order: Sheets (an up-opening popover like SignalMaker's
-  Heads tab), Markings, Intersections, then Copy, Download, Dark/light mode, and
+  Heads tab), Markings, Intersections, Signs, then Copy, Download, Dark/light mode, and
   Clear all.
 - Follow SignalMaker's automatic theme behavior: use the system theme at startup
   and respond to system changes live. Manual toggles are session overrides;
@@ -27,7 +27,7 @@ MUTCD-compliant pavement markings onto them.
 
 ## Current scope
 
-- First build: the UI shell only. Sheets, Markings, Intersections, Copy,
+- First build: the UI shell only. Sheets, Markings, Intersections, Signs, Copy,
   Download, and Clear all are placeholders and do nothing yet. Only Dark/light
   mode is functional.
 
