@@ -6,6 +6,8 @@
   <meta name="description" content="StripeMaker pavement marking editor." />
   <title>StripeMaker</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='86' font-size='86' text-anchor='middle'%3E%F0%9F%9B%A3%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+  <script src="js/vendor/geotiff.js"></script>
+  <script src="js/sheets.js"></script>
   <script src="js/main.js"></script>
   <link href="css/page.css" rel="stylesheet" />
   <link href="css/form.css" rel="stylesheet" />
@@ -55,12 +57,30 @@
       </div>
       <div class="editorContent"></div>
     </section>
+    <section id="levelsEditor" class="editor" aria-labelledby="levelsTitle" hidden>
+      <div class="editorBar">
+        <h2 id="levelsTitle" class="editorTitle" tabindex="-1">
+          <span class="material-symbols-outlined" aria-hidden="true">flyover</span>
+          Levels
+        </h2>
+      </div>
+      <div class="editorContent"></div>
+    </section>
   </div>
 
   <section id="sheetsMenu" class="headsMenu" aria-labelledby="sheetsTitle" hidden>
     <div class="headPopoverHeader">
       <h2 id="sheetsTitle">Sheets</h2>
+      <span class="headPopoverHint">GeoTIFF, JPEG, PNG</span>
     </div>
+    <div class="headActions">
+      <button type="button" id="uploadSheet">Upload Sheet</button>
+      <button type="button" id="removeSheet" disabled>Remove</button>
+    </div>
+    <input id="sheetFile" type="file" accept=".tif,.tiff,.jpg,.jpeg,.png,image/tiff,image/jpeg,image/png" multiple hidden aria-label="Upload sheet images" />
+    <p id="sheetsEmpty">No sheets yet.</p>
+    <ul id="sheetList" aria-label="Sheets"></ul>
+    <p id="sheetStatus" role="status" aria-live="polite"></p>
   </section>
 
   <nav id="configBar" aria-label="StripeMaker tools">
@@ -89,6 +109,11 @@
       aria-label="Simulator" aria-controls="simulatorEditor" aria-expanded="false" title="Simulator">
       <span class="material-symbols-outlined" aria-hidden="true">directions_car</span>
       <span class="configLabel">Simulator</span>
+    </button>
+    <button type="button" class="configOption" data-editor="levelsEditor"
+      aria-label="Levels" aria-controls="levelsEditor" aria-expanded="false" title="Levels">
+      <span class="material-symbols-outlined" aria-hidden="true">flyover</span>
+      <span class="configLabel">Levels</span>
     </button>
     <button type="button" id="copy" class="configOption" aria-label="Copy" title="Copy">
       <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>

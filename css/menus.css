@@ -56,3 +56,33 @@ hr { border: 0; border-top: 1px solid rgba(var(--baseColor), 0.45); margin: 0.75
   .fieldRow > label { flex-basis: 8rem; }
   .headsMenu { max-height: 55dvh; }
 }
+
+/* SignalMaker's Heads list rows, reused for the Sheets list. */
+#sheetList { display: flex; flex-direction: column; gap: 0.2rem; width: 100%; list-style: none; padding: 0 0.15rem 0 0; margin: 0.5rem 0; max-height: 8.5rem; overflow-y: auto; }
+#sheetList:empty { display: none; }
+#sheetList li { flex: 0 0 auto; }
+.headListButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.75rem;
+  text-align: left;
+  overflow-wrap: anywhere;
+  background: rgba(var(--baseColor), 0.3);
+  border: 1px solid transparent;
+  border-radius: 0;
+}
+.headListButton.active { border-color: var(--selectedColor); background: rgba(var(--baseColor), 0.6); }
+.sheetScale { flex: 0 0 auto; font-size: 0.65rem; opacity: 0.8; white-space: nowrap; }
+#sheetStatus:empty { display: none; }
+
+/* Sheet viewer: the stage keeps its padded fit area; the image pans beyond it. */
+#workspace { position: relative; overflow: hidden; }
+#workspace.hasSheet { cursor: grab; touch-action: none; }
+#workspace.hasSheet.panning { cursor: grabbing; }
+.sheetImage { position: absolute; top: 0; left: 0; transform-origin: 0 0; user-select: none; }
+.sheetImage canvas { position: absolute; display: block; }
+.sheetImage img { display: block; width: 100%; height: 100%; -webkit-user-drag: none; pointer-events: none; }
