@@ -46,6 +46,15 @@
       </div>
       <div class="editorContent"></div>
     </section>
+    <section id="simulatorEditor" class="editor" aria-labelledby="simulatorTitle" hidden>
+      <div class="editorBar">
+        <h2 id="simulatorTitle" class="editorTitle" tabindex="-1">
+          <span class="material-symbols-outlined" aria-hidden="true">directions_car</span>
+          Simulator
+        </h2>
+      </div>
+      <div class="editorContent"></div>
+    </section>
   </div>
 
   <section id="sheetsMenu" class="headsMenu" aria-labelledby="sheetsTitle" hidden>
@@ -75,6 +84,11 @@
       aria-label="Signs" aria-controls="signsEditor" aria-expanded="false" title="Signs">
       <span class="material-symbols-outlined" aria-hidden="true">signpost</span>
       <span class="configLabel">Signs</span>
+    </button>
+    <button type="button" class="configOption" data-editor="simulatorEditor"
+      aria-label="Simulator" aria-controls="simulatorEditor" aria-expanded="false" title="Simulator">
+      <span class="material-symbols-outlined" aria-hidden="true">directions_car</span>
+      <span class="configLabel">Simulator</span>
     </button>
     <button type="button" id="copy" class="configOption" aria-label="Copy" title="Copy">
       <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
