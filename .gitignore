@@ -1,0 +1,17 @@
+# OS and editor files
+.DS_Store
+._*
+Thumbs.db
+.vscode/
+
+# Local verification artifacts
+node_modules/
+artifacts/
+tmp/
+verification/
+verification-*/
+test-results/
+playwright-report/
+__pycache__/
+*.pyc
+

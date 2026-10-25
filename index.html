@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="StripeMaker pavement marking editor." />
+  <title>StripeMaker</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='86' font-size='86' text-anchor='middle'%3E%F0%9F%9B%A3%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+  <script src="js/main.js"></script>
+  <link href="css/page.css" rel="stylesheet" />
+  <link href="css/form.css" rel="stylesheet" />
+  <link href="css/menus.css" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+</head>
+<body>
+  <main id="workspace" aria-label="Sheet preview">
+    <div id="previewStage"></div>
+  </main>
+
+  <div class="modals">
+    <section id="markingsEditor" class="editor" aria-labelledby="markingsTitle" hidden>
+      <div class="editorBar">
+        <h2 id="markingsTitle" class="editorTitle" tabindex="-1">
+          <span class="material-symbols-outlined" aria-hidden="true">edit_road</span>
+          Markings
+        </h2>
+      </div>
+      <div class="editorContent"></div>
+    </section>
+
+    <section id="intersectionsEditor" class="editor" aria-labelledby="intersectionsTitle" hidden>
+      <div class="editorBar">
+        <h2 id="intersectionsTitle" class="editorTitle" tabindex="-1">
+          <span class="material-symbols-outlined" aria-hidden="true">add_road</span>
+          Intersections
+        </h2>
+      </div>
+      <div class="editorContent"></div>
+    </section>
+  </div>
+
+  <section id="sheetsMenu" class="headsMenu" aria-labelledby="sheetsTitle" hidden>
+    <div class="headPopoverHeader">
+      <h2 id="sheetsTitle">Sheets</h2>
+    </div>
+  </section>
+
+  <nav id="configBar" aria-label="StripeMaker tools">
+    <button type="button" class="configOption" data-editor="sheetsMenu"
+      aria-label="Sheets" aria-controls="sheetsMenu" aria-expanded="false" title="Sheets">
+      <span class="material-symbols-outlined" aria-hidden="true">layers</span>
+      <span class="configLabel">Sheets</span>
+      <span class="material-symbols-outlined dropdownIcon" aria-hidden="true">expand_more</span>
+    </button>
+    <button type="button" class="configOption" data-editor="markingsEditor"
+      aria-label="Markings" aria-controls="markingsEditor" aria-expanded="false" title="Markings">
+      <span class="material-symbols-outlined" aria-hidden="true">edit_road</span>
+      <span class="configLabel">Markings</span>
+    </button>
+    <button type="button" class="configOption" data-editor="intersectionsEditor"
+      aria-label="Intersections" aria-controls="intersectionsEditor" aria-expanded="false" title="Intersections">
+      <span class="material-symbols-outlined" aria-hidden="true">add_road</span>
+      <span class="configLabel">Intersections</span>
+    </button>
+    <button type="button" id="copy" class="configOption" aria-label="Copy" title="Copy">
+      <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+    </button>
+    <button type="button" id="download" class="configOption" aria-label="Download" title="Download">
+      <span class="material-symbols-outlined" aria-hidden="true">download</span>
+    </button>
+    <button type="button" id="darkMode" class="configOption" aria-label="Dark mode"
+      aria-pressed="false" title="Dark mode">
+      <span class="material-symbols-outlined" aria-hidden="true">dark_mode</span>
+    </button>
+    <div class="historyBar" role="group" aria-label="Drawing history">
+      <button type="button" id="clearAll" class="historyButton" aria-label="Clear all" title="Clear all">
+        <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+      </button>
+    </div>
+  </nav>
+</body>
+</html>
