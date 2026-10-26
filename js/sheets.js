@@ -198,7 +198,7 @@
     }
     const record = sheet => ({
       name: sheet.name, inchesPerPixel: sheet.inchesPerPixel, view: sheet.view,
-      roads: sheet.roads ?? [], nodes: sheet.nodes ?? [],
+      roads: sheet.roads ?? [], joints: sheet.joints ?? [],
     });
     function saveFailed(error) {
       status.textContent = `Couldn't save sheets for next time: ${error?.message || "storage unavailable"}.`;

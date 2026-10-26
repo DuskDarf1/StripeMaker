@@ -43,18 +43,23 @@ MUTCD-compliant pavement markings onto them.
 
 ## Road model
 
-- Roads are one-way: a line between two nodes with traffic flowing from start
-  to end. All of a road's lanes move together with its nodes.
-- Nodes are shared per sheet. Dragging a road's node onto another node (or
-  clicking an existing node while drawing) connects them; moving a shared node
-  moves every road on it. Option/Alt-drag pulls the selected road's end free.
-- Two roads joining the same two nodes in opposite directions form a two-way
-  road: each half sits to the right of the shared line, with its own lane count,
-  and they share one curve. Roads continuing through a node keep a smooth
-  tangent when a curve handle is dragged.
-- Roads are 100% opaque asphalt. Nodes are drawn as small yellow steering wheels.
-- Not yet designed: how lanes line up across a joint between roads (e.g. a
-  two-way half continuing into a one-way road), and per-road marking edits.
+- A road is a one-way group of parallel lanes; traffic flows from start to end.
+  **Every lane has its own line with a node at each end**, and all of a road's
+  lanes act together: dragging any lane node moves that whole road end.
+- Roads join **lane to lane**: one lane's end node joins another lane's start
+  node (ends only join starts). Each road end sits on a joint, a point plus a
+  direction of travel shared by everything joined there. Lane links fix each
+  road's sideways position, so joined ends line up (the joining road turns to
+  match) and then move together. Joints can hold several roads for splits,
+  merges, lane adds, and lane drops.
+- Two-way roads are two one-way roads side by side: joining a road whose travel
+  is opposite places it left edge to left edge, forming the double yellow. Each
+  side keeps its own lane count.
+- Option/Alt-drag pulls a road end off its joint. Curve handles turn the whole
+  joint, keeping joined roads lined up.
+- Roads are 100% opaque asphalt. Lane nodes are small yellow steering wheels,
+  shown for every lane of every road while the Elements tab is open.
+- Not yet designed: per-road marking edits.
 
 ## Current scope
 
@@ -67,7 +72,7 @@ MUTCD-compliant pavement markings onto them.
   node or handle; Delete removes the selected road; Escape cancels drawing or
   deselects. Roads belong to the sheet they were drawn on.
 - Persistence: sheets (original files), their order, selection, scale, view,
-  roads, and nodes are saved to IndexedDB (`StripeMaker` database) and restored
+  roads, and joints are saved to IndexedDB (`StripeMaker` database) and restored
   on reload. Files are written once; small records save shortly after changes.
 
 - Sheets: users upload aerial imagery of the roads they are redesigning. Accept

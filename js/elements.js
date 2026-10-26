@@ -1,8 +1,13 @@
 (() => {
-  // Roads are one-way lines between two nodes, stored in sheet image pixels. Nodes
-  // are shared, so roads joined at a node move together. Two roads joining the
-  // same nodes in opposite directions form a two-way road. Lane widths are in feet
-  // and drawn true size from the sheet's inches per pixel.
+  // Roads are one-way groups of parallel lanes, stored in sheet image pixels. Every
+  // lane has its own line with a node at each end, and a road's lanes move together.
+  // Roads connect lane to lane: one lane's end node joins another lane's start node.
+  //
+  // Each road end sits on a joint: a point and a direction of travel shared by every
+  // road end connected there. Lane-to-lane links fix each road's sideways position
+  // on the joint, so joined ends line up and move together. A road joined in the
+  // opposite direction sits beside the other road, left edge to left edge, making
+  // a two-way road with a double yellow centerline.
   //
   // Markings follow FDOT Standard Plans Index 711-001 (FY 2025-26). Dimensions are
   // to the centerline of markings.
@@ -17,7 +22,8 @@
   const MIN_LANE_WIDTH = 8;
   const MAX_LANE_WIDTH = 20;
   const CURVE_SEGMENTS = 96;
-  const SNAP_PIXELS = 12;
+  const SNAP_PIXELS = 14;
+  const LEFT_EDGE = -0.5;             // lane "index" of a road's left edge
   const SVG = "http://www.w3.org/2000/svg";
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -31,21 +37,22 @@
     const widthInput = document.getElementById("roadLaneWidth");
     const defaults = { lanes: 1, laneWidth: 12 };
     const openCurves = new Set();
+    const nodeButtons = new Map();
     let selectedRoad = null;
     let drawing = null;
+    let drag = null;
     let snapTarget = null;
 
     const overlay = document.createElement("div");
     overlay.className = "roadOverlay";
     overlay.hidden = true;
-    overlay.innerHTML = `<svg aria-hidden="true"><line class="roadControlLine"/><line class="roadControlLine"/><circle class="roadSnap" r="14"/></svg>
-      <button type="button" class="roadNode" aria-label="Road start point" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>
-      <button type="button" class="roadNode" aria-label="Road end point" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>
+    overlay.innerHTML = `<svg aria-hidden="true"><line class="roadControlLine"/><line class="roadControlLine"/><circle class="roadSnap" r="15"/></svg>
+      <span class="roadNode preview" aria-hidden="true"></span>
       <button type="button" class="roadControl" aria-label="Start curve handle" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>
       <button type="button" class="roadControl" aria-label="End curve handle" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>`;
     const controlLines = [...overlay.querySelectorAll("line")];
     const snapRing = overlay.querySelector(".roadSnap");
-    const nodeButtons = [...overlay.querySelectorAll(".roadNode")];
+    const startMarker = overlay.querySelector(".roadNode.preview");
     const controlButtons = [...overlay.querySelectorAll(".roadControl")];
     sheets.addOverlay(overlay);
 
@@ -53,18 +60,28 @@
     const inchesToPixels = (sheet, inches) => inches / sheet.inchesPerPixel;
     const feetToPixels = (sheet, feet) => inchesToPixels(sheet, feet * 12);
     const nextId = items => items.reduce((max, item) => Math.max(max, item.id), 0) + 1;
-    const nodeOf = (sheet, id) => sheet.nodes.find(node => node.id === id);
-    const roadsAt = (sheet, id) => sheet.roads.filter(road => road.nodes.includes(id));
+    const unit = v => {
+      const length = Math.hypot(v.x, v.y) || 1;
+      return { x: v.x / length, y: v.y / length };
+    };
+    const rightOf = v => ({ x: -v.y, y: v.x });
+    const dot = (a, b) => a.x * b.x + a.y * b.y;
+    const jointOf = (sheet, id) => sheet.joints.find(joint => joint.id === id);
+    const roadOf = (sheet, id) => sheet.roads.find(road => road.id === id);
+    const attachments = (sheet, joint) => sheet.roads.flatMap(road => road.ends
+      .map((end, e) => ({ road, e, end }))).filter(({ end }) => end.joint === joint.id);
+    // Sideways position of a lane's center (or the left edge), right of travel.
+    const laneLateral = (sheet, road, lane) => (Math.min(lane, road.lanes - 1) + 0.5 - road.lanes / 2) * feetToPixels(sheet, road.laneWidth);
     const pairOf = (sheet, road) => sheet.roads.find(other => other !== road
-      && other.nodes[0] === road.nodes[1] && other.nodes[1] === road.nodes[0]);
+      && other.ends[0].joint === road.ends[1].joint && other.ends[1].joint === road.ends[0].joint);
 
     function save() {
       if (sheets.selected) sheets.save(sheets.selected);
     }
     function layerFor(sheet) {
-      sheet.roads ??= [];
-      sheet.nodes ??= [];
       if (!sheet.roadLayer) {
+        sheet.roads = (sheet.roads ?? []).filter(road => road.ends);
+        sheet.joints ??= [];
         sheet.roadLayer = document.createElementNS(SVG, "svg");
         sheet.roadLayer.classList.add("roadLayer");
         sheet.roadLayer.setAttribute("viewBox", `0 0 ${sheet.width} ${sheet.height}`);
@@ -74,12 +91,55 @@
       return sheet.roadLayer;
     }
 
-    // Each end's Bézier handle is stored relative to its node, pointing along the
-    // road; an end without a handle pulls straight.
-    function centerline(a, b, handles) {
-      if (!handles[0] && !handles[1]) return [{ x: a.x, y: a.y }, { x: b.x, y: b.y }];
-      const c0 = { x: a.x + (handles[0]?.x ?? 0), y: a.y + (handles[0]?.y ?? 0) };
-      const c1 = { x: b.x + (handles[1]?.x ?? 0), y: b.y + (handles[1]?.y ?? 0) };
+    // Road centers at each end. The joint's root road is centered on the joint;
+    // links place the rest sideways so their linked lanes coincide.
+    function solve(sheet) {
+      layerFor(sheet);
+      const solved = new Map();
+      const separation = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES);
+      for (const joint of sheet.joints) {
+        const here = attachments(sheet, joint);
+        if (!here.length) continue;
+        const byRoad = new Map(here.map(item => [item.road.id, item]));
+        const root = byRoad.has(joint.root) ? joint.root : here[0].road.id;
+        const offsets = new Map([[root, 0]]);
+        for (let grew = true; grew;) {
+          grew = false;
+          for (const link of joint.links) {
+            for (const [from, fromLane, to, toLane] of [[link.a, link.ai, link.b, link.bi], [link.b, link.bi, link.a, link.ai]]) {
+              const a = byRoad.get(from);
+              const b = byRoad.get(to);
+              if (!a || !b || !offsets.has(from) || offsets.has(to)) continue;
+              const reference = link.pair
+                ? offsets.get(from) + a.end.sign * (laneLateral(sheet, a.road, LEFT_EDGE) - separation)
+                : offsets.get(from) + a.end.sign * laneLateral(sheet, a.road, fromLane);
+              offsets.set(to, reference - b.end.sign * laneLateral(sheet, b.road, link.pair ? LEFT_EDGE : toLane));
+              grew = true;
+            }
+          }
+        }
+        const normal = joint.dir ? rightOf(joint.dir) : { x: 0, y: 0 };
+        for (const { road, e, end } of here) {
+          const offset = offsets.get(road.id) ?? 0;
+          solved.set(`${road.id}:${e}`, {
+            x: joint.x + normal.x * offset, y: joint.y + normal.y * offset,
+            travel: joint.dir && { x: joint.dir.x * end.sign, y: joint.dir.y * end.sign },
+          });
+        }
+      }
+      return solved;
+    }
+
+    // A cubic Bézier between the road's end centers, leaving each end along its
+    // joint's direction; a free end with no direction pulls straight.
+    function centerline(road, solved) {
+      const a = solved.get(`${road.id}:0`);
+      const b = solved.get(`${road.id}:1`);
+      if (!a.travel && !b.travel) return [{ x: a.x, y: a.y }, { x: b.x, y: b.y }];
+      const chord = Math.hypot(b.x - a.x, b.y - a.y);
+      const [l0, l1] = road.ends.map(end => end.length ?? chord / 3);
+      const c0 = a.travel ? { x: a.x + a.travel.x * l0, y: a.y + a.travel.y * l0 } : a;
+      const c1 = b.travel ? { x: b.x - b.travel.x * l1, y: b.y - b.travel.y * l1 } : b;
       const points = [];
       for (let i = 0; i <= CURVE_SEGMENTS; i++) {
         const t = i / CURVE_SEGMENTS;
@@ -97,28 +157,21 @@
       return points.map((point, i) => {
         const prev = points[Math.max(0, i - 1)];
         const next = points[Math.min(points.length - 1, i + 1)];
-        const dx = next.x - prev.x;
-        const dy = next.y - prev.y;
-        const length = Math.hypot(dx, dy) || 1;
-        return { x: point.x - dy / length * distance, y: point.y + dx / length * distance };
+        const normal = rightOf(unit({ x: next.x - prev.x, y: next.y - prev.y }));
+        return { x: point.x + normal.x * distance, y: point.y + normal.y * distance };
       });
+    }
+    const endOf = (points, e) => points[e ? points.length - 1 : 0];
+    function travelAt(road, e, solved) {
+      const line = centerline(road, solved);
+      const [a, b] = e ? line.slice(-2) : line.slice(0, 2);
+      return unit({ x: b.x - a.x, y: b.y - a.y });
+    }
+    function lanePoint(sheet, road, e, lane, solved) {
+      return endOf(offset(centerline(road, solved), laneLateral(sheet, road, lane)), e);
     }
     const pathData = points => `M${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join("L")}`;
 
-    // A one-way road is centered on its line. Half of a two-way road sits to the
-    // right of the shared line, with its yellow line forming half of the double
-    // yellow centerline.
-    function geometry(sheet, road) {
-      const line = centerline(nodeOf(sheet, road.nodes[0]), nodeOf(sheet, road.nodes[1]), road.handles);
-      const width = road.lanes * feetToPixels(sheet, road.laneWidth);
-      const twoWay = Boolean(pairOf(sheet, road));
-      const left = twoWay ? 0 : -width / 2;
-      const margin = inchesToPixels(sheet, PAVEMENT_MARGIN_INCHES);
-      return {
-        line, left, right: left + width, twoWay,
-        outline: [...offset(line, twoWay ? 0 : left - margin), ...offset(line, left + width + margin).reverse()],
-      };
-    }
     function strokePath(points, color, width, dash) {
       const path = document.createElementNS(SVG, "path");
       path.setAttribute("class", "roadMarking");
@@ -128,21 +181,22 @@
       if (dash) path.setAttribute("stroke-dasharray", dash);
       return path;
     }
-    function drawRoad(sheet, road, layers, className = "") {
-      const { line, left, right, twoWay, outline } = geometry(sheet, road);
+    // Yellow left edge, white right edge, and white skip lines between lanes.
+    function drawRoad(sheet, road, line, layers, className = "") {
+      const laneWidth = feetToPixels(sheet, road.laneWidth);
+      const half = road.lanes * laneWidth / 2;
+      const margin = inchesToPixels(sheet, PAVEMENT_MARGIN_INCHES);
       const band = document.createElementNS(SVG, "path");
       band.setAttribute("class", `roadBand ${className}`);
-      band.setAttribute("d", `${pathData(outline)}Z`);
+      band.setAttribute("d", `${pathData([...offset(line, -half - margin), ...offset(line, half + margin).reverse()])}Z`);
       layers.pavement.append(band);
       const lineWidth = inchesToPixels(sheet, LINE_INCHES);
-      const yellowAt = twoWay ? inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES) / 2 : left;
-      const laneWidth = feetToPixels(sheet, road.laneWidth);
       const skip = `${feetToPixels(sheet, SKIP_STRIPE_FEET)} ${feetToPixels(sheet, SKIP_GAP_FEET)}`;
       const group = document.createElementNS(SVG, "g");
       if (className) group.setAttribute("class", className);
-      for (let i = 1; i < road.lanes; i++) group.append(strokePath(offset(line, left + i * laneWidth), WHITE, lineWidth, skip));
-      group.append(strokePath(offset(line, yellowAt), YELLOW, lineWidth));
-      group.append(strokePath(offset(line, right), WHITE, lineWidth));
+      for (let i = 1; i < road.lanes; i++) group.append(strokePath(offset(line, i * laneWidth - half), WHITE, lineWidth, skip));
+      group.append(strokePath(offset(line, -half), YELLOW, lineWidth));
+      group.append(strokePath(offset(line, half), WHITE, lineWidth));
       layers.markings.append(group);
       if (className === "selected") {
         const ring = band.cloneNode();
@@ -153,23 +207,22 @@
 
     function render() {
       const sheet = sheets.selected;
+      let solved = null;
       if (sheet) {
         const layer = layerFor(sheet);
+        solved = solve(sheet);
         const layers = Object.fromEntries(["pavement", "markings", "selection"].map(name => {
           const group = document.createElementNS(SVG, "g");
           group.setAttribute("class", `road${name[0].toUpperCase()}${name.slice(1)}`);
           return [name, group];
         }));
         if (sheet.inchesPerPixel) {
-          sheet.roads.forEach(road => drawRoad(sheet, road, layers, road === selectedRoad ? "selected" : ""));
-          if (drawing?.start && drawing.cursor) {
-            const ghost = { ...sheet, nodes: [{ ...drawing.start, id: -1 }, { ...drawing.cursor, id: -2 }], roads: [] };
-            drawRoad(ghost, { ...defaults, nodes: [-1, -2], handles: [null, null] }, layers, "preview");
-          }
+          sheet.roads.forEach(road => drawRoad(sheet, road, centerline(road, solved), layers, road === selectedRoad ? "selected" : ""));
+          if (drawing?.start && drawing.cursor) drawRoad(sheet, defaults, [drawing.start, drawing.cursor], layers, "preview");
         }
         layer.replaceChildren(layers.pavement, layers.markings, layers.selection);
       }
-      drawOverlay();
+      drawOverlay(solved);
       updatePanel();
     }
     function changed() {
@@ -183,33 +236,67 @@
       element.style.top = `${screen.y}px`;
       return screen;
     }
-    function drawOverlay() {
+    function nodeButton(key) {
+      let button = nodeButtons.get(key);
+      if (button) return button;
+      const [road, end, lane] = key.split(":").map(Number);
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "roadNode";
+      Object.assign(button.dataset, { road, end, lane });
+      button.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight ArrowUp ArrowDown");
+      bindNode(button);
+      nodeButtons.set(key, button);
+      overlay.append(button);
+      return button;
+    }
+    // Every lane of every road shows a steering-wheel node at each end.
+    function drawOverlay(solved = sheets.selected && solve(sheets.selected)) {
       const sheet = sheets.selected;
-      const road = active() && !drawing ? selectedRoad : null;
-      overlay.hidden = !sheet || !(road || drawing?.start || snapTarget);
+      overlay.hidden = !sheet || !active() || !sheet.inchesPerPixel;
+      overlay.classList.toggle("drawing", Boolean(drawing));
+      const seen = new Set();
+      if (!overlay.hidden) {
+        for (const road of sheet.roads) {
+          const line = centerline(road, solved);
+          for (let lane = 0; lane < road.lanes; lane++) {
+            const laneLine = offset(line, laneLateral(sheet, road, lane));
+            for (const e of [0, 1]) {
+              const key = `${road.id}:${e}:${lane}`;
+              const button = nodeButton(key);
+              seen.add(key);
+              button.classList.toggle("selected", road === selectedRoad);
+              button.setAttribute("aria-label", `Road ${road.id}, lane ${lane + 1} ${e ? "end" : "start"}`);
+              place(button, endOf(laneLine, e));
+            }
+          }
+        }
+      }
+      for (const [key, button] of nodeButtons) {
+        if (seen.has(key)) continue;
+        button.remove();
+        nodeButtons.delete(key);
+      }
       if (overlay.hidden) return;
+      startMarker.hidden = !drawing?.start;
+      if (drawing?.start) place(startMarker, drawing.start);
       snapRing.setAttribute("visibility", snapTarget ? "visible" : "hidden");
       if (snapTarget) {
         const at = sheets.toScreen(snapTarget);
         snapRing.setAttribute("cx", at.x);
         snapRing.setAttribute("cy", at.y);
       }
-      const nodes = road ? road.nodes.map(id => nodeOf(sheet, id)) : [drawing?.start];
-      nodeButtons.forEach((button, i) => {
-        const node = nodes[i];
-        const handle = road && openCurves.has(`${road.id}:${i}`) ? road.handles[i] : null;
-        button.hidden = !node;
-        button.classList.toggle("preview", !road);
-        controlButtons[i].hidden = !handle;
-        controlLines[i].setAttribute("visibility", handle ? "visible" : "hidden");
-        if (!node) return;
-        const from = place(button, node);
+      controlButtons.forEach((button, e) => {
+        const handle = selectedRoad && !drawing && openCurves.has(`${selectedRoad.id}:${e}`) ? handlePoint(sheet, selectedRoad, e, solved) : null;
+        button.hidden = !handle;
+        controlLines[e].setAttribute("visibility", handle ? "visible" : "hidden");
         if (!handle) return;
-        const to = place(controlButtons[i], { x: node.x + handle.x, y: node.y + handle.y });
-        controlLines[i].setAttribute("x1", from.x);
-        controlLines[i].setAttribute("y1", from.y);
-        controlLines[i].setAttribute("x2", to.x);
-        controlLines[i].setAttribute("y2", to.y);
+        const from = sheets.toScreen(handle.from);
+        const to = place(button, handle.at);
+        controlLines[e].setAttribute("x1", from.x);
+        controlLines[e].setAttribute("y1", from.y);
+        controlLines[e].setAttribute("x2", to.x);
+        controlLines[e].setAttribute("y2", to.y);
       });
     }
 
@@ -226,10 +313,10 @@
       workspace.classList.toggle("elementsActive", active());
       if (!sheet) hint.textContent = "Upload a sheet first.";
       else if (!ready) hint.textContent = "Set this sheet's scale first (Sheets › Set Scale) so lanes draw true size.";
-      else if (drawing && !drawing.start) hint.textContent = "Click the road's start point. Click an existing point to connect to it.";
-      else if (drawing) hint.textContent = "Click the end point. Traffic flows from start to end. Esc cancels.";
-      else if (selectedRoad) hint.textContent = "Drag a yellow point onto another road's point to connect them; Option-drag pulls this road's end free. Double-click a point to curve the road.";
-      else hint.textContent = "Add a one-way road, or click a road to edit it. For a two-way road, draw a second road from one road's end back to its start.";
+      else if (drawing && !drawing.start) hint.textContent = "Click the road's start point, or a lane's end node to continue from it.";
+      else if (drawing) hint.textContent = "Click the end point, or a lane's start node to join it. Traffic flows from start to end. Esc cancels.";
+      else if (selectedRoad) hint.textContent = "Drag a lane's end node onto another lane's start node to join them. Join opposite roads for a two-way road. Option-drag pulls an end free; double-click a node to curve.";
+      else hint.textContent = "Add a one-way road, or click a road to edit it.";
     }
 
     function selectRoad(road) {
@@ -247,15 +334,22 @@
       render();
     }
 
-    // The nearest node within snapping distance, skipping the given node ids.
-    function snapNode(sheet, point, skip = []) {
+    // The nearest lane node within snapping distance that an end of `road` can join:
+    // ends join starts, and never a joint the road already uses.
+    function snapLane(sheet, solved, point, e, road = null) {
       let best = null;
       let bestDistance = SNAP_PIXELS / sheet.view.scale;
-      for (const node of sheet.nodes) {
-        const distance = Math.hypot(node.x - point.x, node.y - point.y);
-        if (distance <= bestDistance && !skip.includes(node.id)) {
-          best = node;
-          bestDistance = distance;
+      for (const other of sheet.roads) {
+        if (other === road) continue;
+        const f = 1 - e;
+        if (road && road.ends.some(end => end.joint === other.ends[f].joint)) continue;
+        for (let lane = 0; lane < other.lanes; lane++) {
+          const at = lanePoint(sheet, other, f, lane, solved);
+          const distance = Math.hypot(at.x - point.x, at.y - point.y);
+          if (distance <= bestDistance) {
+            best = { road: other, e: f, lane, x: at.x, y: at.y };
+            bestDistance = distance;
+          }
         }
       }
       return best;
@@ -270,51 +364,94 @@
       return inside;
     }
     function roadAt(sheet, point) {
+      const solved = solve(sheet);
       const slop = 6 / sheet.view.scale;
       for (const road of [...sheet.roads].reverse()) {
-        const { line, left, right, twoWay } = geometry(sheet, road);
-        const polygon = [...offset(line, (twoWay ? 0 : left) - slop), ...offset(line, right + slop).reverse()];
-        if (insidePolygon(point, polygon)) return road;
+        const line = centerline(road, solved);
+        const half = road.lanes * feetToPixels(sheet, road.laneWidth) / 2 + slop;
+        if (insidePolygon(point, [...offset(line, -half), ...offset(line, half).reverse()])) return road;
       }
       return null;
     }
 
-    // Two halves of a two-way road share one curve; other roads continuing
-    // through a node keep a smooth tangent.
-    function shareHandle(sheet, road, end) {
-      const nodeId = road.nodes[end];
-      const vector = road.handles[end];
-      const pair = pairOf(sheet, road);
-      if (pair) pair.handles[1 - end] = vector && { ...vector };
-      if (!vector) return;
-      const node = nodeOf(sheet, nodeId);
-      for (const other of roadsAt(sheet, nodeId)) {
-        if (other === road || other === pair) continue;
-        const index = other.nodes.indexOf(nodeId);
-        const far = nodeOf(sheet, other.nodes[1 - index]);
-        const away = other.handles[index] ?? { x: far.x - node.x, y: far.y - node.y };
-        const length = Math.hypot(away.x, away.y);
-        const cos = (away.x * vector.x + away.y * vector.y) / (length * Math.hypot(vector.x, vector.y) || 1);
-        if (Math.abs(cos) < 0.7) continue;
-        const scale = Math.sign(cos) * (other.handles[index] ? length : Math.hypot(vector.x, vector.y)) / Math.hypot(vector.x, vector.y);
-        other.handles[index] = { x: vector.x * scale, y: vector.y * scale };
-        const otherPair = pairOf(sheet, other);
-        if (otherPair) otherPair.handles[1 - index] = { ...other.handles[index] };
+    function newJoint(sheet, point, root, dir = null) {
+      const joint = { id: nextId(sheet.joints), x: point.x, y: point.y, dir, root, links: [] };
+      sheet.joints.push(joint);
+      return joint;
+    }
+    // Joins lane `lane` at end `e` of `road` to the target lane. The road's end (and
+    // anything already joined to it) moves onto the target's joint, turning to its
+    // direction so the ends line up. Opposite directions join left edge to left edge.
+    function connect(sheet, road, e, lane, target) {
+      const host = jointOf(sheet, target.road.ends[target.e].joint);
+      const moving = jointOf(sheet, road.ends[e].joint);
+      if (host === moving || road.ends[1 - e].joint === host.id) return;
+      const solved = solve(sheet);
+      const pair = dot(travelAt(road, e, solved), travelAt(target.road, target.e, solved)) < 0;
+      host.dir ??= travelAt(target.road, target.e, solved);
+      for (const item of attachments(sheet, moving)) {
+        item.end.sign = dot(travelAt(item.road, item.e, solved), host.dir) < 0 ? -1 : 1;
+        item.end.joint = host.id;
+      }
+      host.links.push(...moving.links, { a: target.road.id, ai: target.lane, b: road.id, bi: lane, pair });
+      sheet.joints.splice(sheet.joints.indexOf(moving), 1);
+    }
+    // After links or roads leave a joint, each still-linked group keeps its own
+    // joint, left where it was.
+    function regroup(sheet, joint, before) {
+      const here = attachments(sheet, joint);
+      if (!here.length) {
+        sheet.joints.splice(sheet.joints.indexOf(joint), 1);
+        return;
+      }
+      const remaining = new Map(here.map(item => [item.road.id, item]));
+      let first = true;
+      while (remaining.size) {
+        const rootId = remaining.has(joint.root) ? joint.root : remaining.keys().next().value;
+        const group = new Set([rootId]);
+        remaining.delete(rootId);
+        for (let grew = true; grew;) {
+          grew = false;
+          for (const { a, b } of joint.links) {
+            for (const [from, to] of [[a, b], [b, a]]) {
+              if (group.has(from) && remaining.has(to)) {
+                group.add(to);
+                remaining.delete(to);
+                grew = true;
+              }
+            }
+          }
+        }
+        const rootItem = here.find(item => item.road.id === rootId);
+        const at = before.get(`${rootId}:${rootItem.e}`);
+        const target = first ? joint : newJoint(sheet, at, rootId, joint.dir && { ...joint.dir });
+        Object.assign(target, { x: at.x, y: at.y, root: rootId });
+        if (!first) {
+          here.filter(item => group.has(item.road.id)).forEach(item => { item.end.joint = target.id; });
+          target.links = joint.links.filter(link => group.has(link.a) && group.has(link.b));
+          joint.links = joint.links.filter(link => !target.links.includes(link));
+        }
+        first = false;
       }
     }
-    // A road drawn or connected as the opposite half of another adopts its curve.
-    function adoptPairCurve(sheet, road) {
-      const pair = pairOf(sheet, road);
-      if (pair) road.handles = [pair.handles[1] && { ...pair.handles[1] }, pair.handles[0] && { ...pair.handles[0] }];
+    function detach(sheet, road, e) {
+      const joint = jointOf(sheet, road.ends[e].joint);
+      if (attachments(sheet, joint).length < 2) return;
+      const before = solve(sheet);
+      const at = before.get(`${road.id}:${e}`);
+      joint.links = joint.links.filter(link => link.a !== road.id && link.b !== road.id);
+      road.ends[e] = { ...road.ends[e], joint: newJoint(sheet, at, road.id, at.travel).id, sign: 1 };
+      regroup(sheet, joint, before);
     }
-    function dropUnusedNodes(sheet) {
-      sheet.nodes = sheet.nodes.filter(node => sheet.roads.some(road => road.nodes.includes(node.id)));
-    }
-    function nodeFor(sheet, point) {
-      if (point.id) return point.id;
-      const node = { id: nextId(sheet.nodes), x: point.x, y: point.y };
-      sheet.nodes.push(node);
-      return node.id;
+
+    function handlePoint(sheet, road, e, solved) {
+      const line = centerline(road, solved);
+      const from = endOf(line, e);
+      const other = endOf(line, 1 - e);
+      const travel = solved.get(`${road.id}:${e}`).travel ?? travelAt(road, e, solved);
+      const length = road.ends[e].length ?? Math.hypot(other.x - from.x, other.y - from.y) / 3;
+      const away = e ? -1 : 1;
+      return { from, at: { x: from.x + travel.x * length * away, y: from.y + travel.y * length * away } };
     }
 
     addButton.addEventListener("click", () => (drawing ? stopDrawing() : startDrawing()));
@@ -322,8 +459,15 @@
     function deleteRoad() {
       const sheet = sheets.selected;
       if (!sheet?.roads || !selectedRoad) return;
-      sheet.roads.splice(sheet.roads.indexOf(selectedRoad), 1);
-      dropUnusedNodes(sheet);
+      const before = solve(sheet);
+      const road = selectedRoad;
+      sheet.roads.splice(sheet.roads.indexOf(road), 1);
+      for (const end of road.ends) {
+        const joint = jointOf(sheet, end.joint);
+        if (!joint) continue;
+        joint.links = joint.links.filter(link => link.a !== road.id && link.b !== road.id);
+        regroup(sheet, joint, before);
+      }
       selectedRoad = null;
       changed();
     }
@@ -344,12 +488,11 @@
     bindNumber(lanesInput, "lanes", 1, MAX_LANES, Math.round);
     bindNumber(widthInput, "laneWidth", MIN_LANE_WIDTH, MAX_LANE_WIDTH, value => Math.round(value * 2) / 2);
 
-    // While drawing, points snap to existing nodes so the new road connects.
-    function drawingPoint(sheet, clientX, clientY, skip) {
+    // While drawing, points snap to lane nodes so the new road joins them.
+    function drawingPoint(sheet, clientX, clientY) {
       const point = sheets.toImage(clientX, clientY);
-      const node = snapNode(sheet, point, skip);
-      snapTarget = node;
-      return node ? { id: node.id, x: node.x, y: node.y } : point;
+      snapTarget = snapLane(sheet, solve(sheet), point, drawing.start ? 1 : 0);
+      return snapTarget ? { x: snapTarget.x, y: snapTarget.y, target: snapTarget } : point;
     }
 
     // A click (not a pan) places road points while drawing, otherwise selects a road.
@@ -359,8 +502,8 @@
     });
     workspace.addEventListener("pointermove", event => {
       const sheet = sheets.selected;
-      if (!drawing || event.buttons || !sheet?.inchesPerPixel) return;
-      const point = drawingPoint(sheet, event.clientX, event.clientY, drawing.start?.id ? [drawing.start.id] : []);
+      if (!drawing || event.buttons || !sheet?.inchesPerPixel || !active()) return;
+      const point = drawingPoint(sheet, event.clientX, event.clientY);
       if (drawing.start) drawing.cursor = point;
       render();
     });
@@ -370,19 +513,21 @@
       if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > 4) return;
       if (!drawing) return selectRoad(roadAt(sheet, sheets.toImage(event.clientX, event.clientY)));
       layerFor(sheet);
-      const point = drawingPoint(sheet, event.clientX, event.clientY, drawing.start?.id ? [drawing.start.id] : []);
+      const point = drawingPoint(sheet, event.clientX, event.clientY);
       if (!drawing.start) {
         drawing.start = point;
         drawing.cursor = point;
         return render();
       }
-      if (Math.hypot(point.x - drawing.start.x, point.y - drawing.start.y) * sheet.view.scale < 4) return;
-      const road = {
-        id: nextId(sheet.roads), lanes: defaults.lanes, laneWidth: defaults.laneWidth,
-        nodes: [nodeFor(sheet, drawing.start), nodeFor(sheet, point)], handles: [null, null],
-      };
+      const start = drawing.start;
+      if (Math.hypot(point.x - start.x, point.y - start.y) * sheet.view.scale < 4) return;
+      const road = { id: nextId(sheet.roads), lanes: defaults.lanes, laneWidth: defaults.laneWidth, ends: [] };
+      road.ends = [start, point].map(p => ({ joint: newJoint(sheet, p, road.id).id, sign: 1, length: null }));
       sheet.roads.push(road);
-      adoptPairCurve(sheet, road);
+      // A new road lines its matching lane up with the lane it was drawn from or to.
+      [start, point].forEach((p, e) => {
+        if (p.target) connect(sheet, road, e, Math.min(p.target.lane, road.lanes - 1), p.target);
+      });
       drawing = null;
       snapTarget = null;
       selectedRoad = road;
@@ -391,106 +536,130 @@
     // Quick clicks while drawing must not trigger the double-click refit.
     workspace.addEventListener("dblclick", event => { if (drawing) event.preventDefault(); }, true);
 
-    // Node and curve handles: drag, arrow-key nudges, and double-clicks.
-    function bindHandle(button, { start = () => {}, move, end = () => {} }) {
+    // Lane nodes: dragging moves the road's whole end (and everything joined to it);
+    // dropping onto another lane's node joins them.
+    function nudgeKeys(button, move) {
+      button.addEventListener("keydown", event => {
+        const moves = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+        if (!moves[event.key] || !sheets.selected) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const step = (event.shiftKey ? 10 : 1) / sheets.selected.view.scale;
+        if (move(moves[event.key][0] * step, moves[event.key][1] * step) !== false) changed();
+      });
+    }
+    function nodeTarget(button) {
+      const sheet = sheets.selected;
+      const road = sheet && roadOf(sheet, Number(button.dataset.road));
+      return road && { sheet, road, e: Number(button.dataset.end), lane: Number(button.dataset.lane) };
+    }
+    function bindNode(button) {
       button.addEventListener("pointerdown", event => {
-        if (!selectedRoad) return;
+        const node = nodeTarget(button);
+        if (!node || drawing) return;
         event.stopPropagation();
         button.setPointerCapture(event.pointerId);
-        start(event);
+        selectedRoad = node.road;
+        // Option/Alt-drag gives this road's end its own joint, pulling it free.
+        if (event.altKey) detach(node.sheet, node.road, node.e);
+        const solved = solve(node.sheet);
+        drag = { ...node, from: lanePoint(node.sheet, node.road, node.e, node.lane, solved), pointer: sheets.toImage(event.clientX, event.clientY) };
+        render();
       });
       button.addEventListener("pointermove", event => {
-        if (!button.hasPointerCapture(event.pointerId) || !selectedRoad) return;
-        move(sheets.toImage(event.clientX, event.clientY));
+        if (!drag || !button.hasPointerCapture(event.pointerId)) return;
+        const { sheet, road, e, lane } = drag;
+        const pointer = sheets.toImage(event.clientX, event.clientY);
+        const wanted = { x: drag.from.x + pointer.x - drag.pointer.x, y: drag.from.y + pointer.y - drag.pointer.y };
+        const solved = solve(sheet);
+        snapTarget = snapLane(sheet, solved, wanted, e, road);
+        const goal = snapTarget ?? wanted;
+        const current = lanePoint(sheet, road, e, lane, solved);
+        const joint = jointOf(sheet, road.ends[e].joint);
+        joint.x += goal.x - current.x;
+        joint.y += goal.y - current.y;
         render();
       });
       const finish = event => {
-        if (!button.hasPointerCapture(event.pointerId) || !selectedRoad) return;
+        if (!drag || !button.hasPointerCapture(event.pointerId)) return;
         button.releasePointerCapture(event.pointerId);
-        end();
+        if (snapTarget && event.type === "pointerup") connect(drag.sheet, drag.road, drag.e, drag.lane, snapTarget);
+        drag = null;
+        snapTarget = null;
         changed();
       };
       button.addEventListener("pointerup", finish);
       button.addEventListener("pointercancel", finish);
-      button.addEventListener("keydown", event => {
-        const moves = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-        if (!moves[event.key] || !selectedRoad) return;
-        event.preventDefault();
-        event.stopPropagation();
-        const step = (event.shiftKey ? 10 : 1) / sheets.selected.view.scale;
-        move(null, moves[event.key][0] * step, moves[event.key][1] * step);
+      nudgeKeys(button, (dx, dy) => {
+        const node = nodeTarget(button);
+        if (!node) return false;
+        selectedRoad = node.road;
+        const joint = jointOf(node.sheet, node.road.ends[node.e].joint);
+        joint.x += dx;
+        joint.y += dy;
+      });
+      // Double-clicking a node shows or hides the curve handle at that end.
+      button.addEventListener("dblclick", () => {
+        const node = nodeTarget(button);
+        if (!node) return;
+        const key = `${node.road.id}:${node.e}`;
+        if (openCurves.delete(key)) return render();
+        openCurves.add(key);
+        const solved = solve(node.sheet);
+        const joint = jointOf(node.sheet, node.road.ends[node.e].joint);
+        const handle = handlePoint(node.sheet, node.road, node.e, solved);
+        joint.dir ??= travelAt(node.road, node.e, solved);
+        node.road.ends[node.e].length ??= Math.hypot(handle.at.x - handle.from.x, handle.at.y - handle.from.y);
         changed();
       });
     }
-    nodeButtons.forEach((button, i) => {
-      bindHandle(button, {
-        // Option/Alt-drag gives this road's end its own node, pulling it free.
-        start(event) {
-          const sheet = sheets.selected;
-          const id = selectedRoad.nodes[i];
-          if (!event.altKey || roadsAt(sheet, id).length < 2) return;
-          const node = nodeOf(sheet, id);
-          selectedRoad.nodes[i] = nodeFor(sheet, { x: node.x, y: node.y });
-        },
-        move(to, dx, dy) {
-          const sheet = sheets.selected;
-          const node = nodeOf(sheet, selectedRoad.nodes[i]);
-          if (to) {
-            // Never snap onto a node that would make a connected road zero-length.
-            const linked = roadsAt(sheet, node.id).flatMap(road => road.nodes);
-            snapTarget = snapNode(sheet, to, linked);
-            node.x = snapTarget?.x ?? to.x;
-            node.y = snapTarget?.y ?? to.y;
-          } else {
-            node.x += dx;
-            node.y += dy;
-          }
-        },
-        // Dropping onto another node connects: every road here moves to that node.
-        end() {
-          const sheet = sheets.selected;
-          const target = snapTarget;
-          snapTarget = null;
-          if (!target) return;
-          const from = selectedRoad.nodes[i];
-          sheet.roads.forEach(road => { road.nodes = road.nodes.map(id => (id === from ? target.id : id)); });
-          dropUnusedNodes(sheet);
-          adoptPairCurve(sheet, selectedRoad);
-        },
+
+    // Curve handles turn the joint, so every road joined there stays lined up.
+    function moveHandle(e, to) {
+      const sheet = sheets.selected;
+      const road = selectedRoad;
+      const { from } = handlePoint(sheet, road, e, solve(sheet));
+      const away = { x: to.x - from.x, y: to.y - from.y };
+      const length = Math.hypot(away.x, away.y);
+      if (length < 1) return;
+      const travel = unit(e ? { x: -away.x, y: -away.y } : away);
+      const end = road.ends[e];
+      jointOf(sheet, end.joint).dir = { x: travel.x * end.sign, y: travel.y * end.sign };
+      end.length = length;
+      const pair = pairOf(sheet, road);
+      if (pair) pair.ends[1 - e].length = length;
+    }
+    controlButtons.forEach((button, e) => {
+      button.addEventListener("pointerdown", event => {
+        if (!selectedRoad) return;
+        event.stopPropagation();
+        button.setPointerCapture(event.pointerId);
       });
-      // Double-clicking a node shows or hides its Bézier handle.
+      button.addEventListener("pointermove", event => {
+        if (!button.hasPointerCapture(event.pointerId) || !selectedRoad) return;
+        moveHandle(e, sheets.toImage(event.clientX, event.clientY));
+        render();
+      });
+      button.addEventListener("pointerup", event => {
+        if (!button.hasPointerCapture(event.pointerId)) return;
+        button.releasePointerCapture(event.pointerId);
+        changed();
+      });
+      nudgeKeys(button, (dx, dy) => {
+        if (!selectedRoad) return false;
+        const { at } = handlePoint(sheets.selected, selectedRoad, e, solve(sheets.selected));
+        moveHandle(e, { x: at.x + dx, y: at.y + dy });
+      });
+      // Double-clicking a handle returns that end to its default pull; a free end
+      // goes straight again.
       button.addEventListener("dblclick", () => {
         const sheet = sheets.selected;
         if (!selectedRoad) return;
-        const key = `${selectedRoad.id}:${i}`;
-        if (openCurves.delete(key)) return render();
-        openCurves.add(key);
-        if (!selectedRoad.handles[i]) {
-          const node = nodeOf(sheet, selectedRoad.nodes[i]);
-          const other = nodeOf(sheet, selectedRoad.nodes[1 - i]);
-          selectedRoad.handles[i] = { x: (other.x - node.x) / 3, y: (other.y - node.y) / 3 };
-          shareHandle(sheet, selectedRoad, i);
-        }
-        changed();
-      });
-    });
-    controlButtons.forEach((button, i) => {
-      bindHandle(button, {
-        move(to, dx, dy) {
-          const sheet = sheets.selected;
-          const handle = selectedRoad.handles[i];
-          const node = nodeOf(sheet, selectedRoad.nodes[i]);
-          handle.x = to ? to.x - node.x : handle.x + dx;
-          handle.y = to ? to.y - node.y : handle.y + dy;
-          shareHandle(sheet, selectedRoad, i);
-        },
-      });
-      // Double-clicking a handle straightens that end again.
-      button.addEventListener("dblclick", () => {
-        if (!selectedRoad) return;
-        selectedRoad.handles[i] = null;
-        shareHandle(sheets.selected, selectedRoad, i);
-        openCurves.delete(`${selectedRoad.id}:${i}`);
+        const end = selectedRoad.ends[e];
+        const joint = jointOf(sheet, end.joint);
+        end.length = null;
+        if (attachments(sheet, joint).length === 1) joint.dir = null;
+        openCurves.delete(`${selectedRoad.id}:${e}`);
         changed();
       });
     });
@@ -514,7 +683,7 @@
       }
       render();
     }).observe(editor, { attributes: true, attributeFilter: ["hidden"] });
-    document.addEventListener("sheetview", drawOverlay);
+    document.addEventListener("sheetview", () => { if (active()) drawOverlay(); });
     document.addEventListener("sheetchange", () => {
       if (!sheets.selected?.roads?.includes(selectedRoad)) selectedRoad = null;
       drawing = null;
