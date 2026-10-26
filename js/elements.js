@@ -9,6 +9,11 @@
   // opposite direction sits beside the other road, left edge to left edge, making
   // a two-way road with a double yellow centerline.
   //
+  // Lane connectors work like the Lane Connector in Cities: Skylines (TM:PE): pick a
+  // lane's end, then click lane starts to connect or disconnect them. Each
+  // connection is a paved Bézier lane between the two roads, free to bend, and the
+  // roads themselves don't move.
+  //
   // Markings follow FDOT Standard Plans Index 711-001 (FY 2025-26). Dimensions are
   // to the centerline of markings.
   const LINE_INCHES = 6;              // edge lines, lane lines, and centerlines
@@ -35,6 +40,7 @@
     const workspace = document.getElementById("workspace");
     const editor = document.getElementById("elementsEditor");
     const addButton = document.getElementById("addRoad");
+    const connectButton = document.getElementById("connectLanes");
     const deleteButton = document.getElementById("deleteRoad");
     const hint = document.getElementById("elementsHint");
     const lanesInput = document.getElementById("roadLanes");
@@ -52,18 +58,27 @@
     let drawing = null;
     let drag = null;
     let snapTarget = null;
+    let connecting = false;
+    let source = null;
+    let selectedConnector = null;
 
     const overlay = document.createElement("div");
     overlay.className = "roadOverlay";
     overlay.hidden = true;
-    overlay.innerHTML = `<svg aria-hidden="true"><line class="roadControlLine"/><line class="roadControlLine"/><circle class="roadSnap" r="15"/></svg>
+    overlay.innerHTML = `<svg aria-hidden="true"><g class="connectorLines"></g><line class="roadControlLine"/><line class="roadControlLine"/>
+        <line class="roadControlLine connectorHandleLine"/><line class="roadControlLine connectorHandleLine"/><circle class="roadSnap" r="15"/></svg>
       <span class="roadNode preview" aria-hidden="true"></span>
       <button type="button" class="roadControl" aria-label="Start curve handle" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>
-      <button type="button" class="roadControl" aria-label="End curve handle" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>`;
-    const controlLines = [...overlay.querySelectorAll("line")];
+      <button type="button" class="roadControl" aria-label="End curve handle" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>
+      <button type="button" class="roadControl connectorControl" aria-label="Connection start handle" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>
+      <button type="button" class="roadControl connectorControl" aria-label="Connection end handle" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>`;
+    const controlLines = [...overlay.querySelectorAll("line:not(.connectorHandleLine)")];
+    const connectorHandleLines = [...overlay.querySelectorAll(".connectorHandleLine")];
+    const connectorLines = overlay.querySelector(".connectorLines");
+    const connectorButtons = [...overlay.querySelectorAll(".connectorControl")];
     const snapRing = overlay.querySelector(".roadSnap");
     const startMarker = overlay.querySelector(".roadNode.preview");
-    const controlButtons = [...overlay.querySelectorAll(".roadControl")];
+    const controlButtons = [...overlay.querySelectorAll(".roadControl:not(.connectorControl)")];
     sheets.addOverlay(overlay);
 
     const active = () => !editor.hidden;
@@ -82,6 +97,9 @@
       .map((end, e) => ({ road, e, end }))).filter(({ end }) => end.joint === joint.id);
     // Sideways position of a lane's center (or the left edge), right of travel.
     const laneLateral = (sheet, road, lane) => (Math.min(lane, road.lanes - 1) + 0.5 - road.lanes / 2) * feetToPixels(sheet, road.laneWidth);
+    // Each lane gets its own color in Connect Lanes, as in TM:PE.
+    const laneColor = (road, lane) => `hsl(${(road * 137 + lane * 53) % 360} 85% 58%)`;
+    const sameLane = (a, b) => a && b && a.road === b.road && a.lane === b.lane;
     const pairOf = (sheet, road) => sheet.roads.find(other => other !== road
       && other.ends[0].joint === road.ends[1].joint && other.ends[1].joint === road.ends[0].joint);
 
@@ -92,6 +110,7 @@
       if (!sheet.roadLayer) {
         sheet.roads = (sheet.roads ?? []).filter(road => road.ends);
         sheet.joints ??= [];
+        sheet.connectors ??= [];
         sheet.roadLayer = document.createElementNS(SVG, "svg");
         sheet.roadLayer.classList.add("roadLayer");
         sheet.roadLayer.setAttribute("viewBox", `0 0 ${sheet.width} ${sheet.height}`);
@@ -105,7 +124,11 @@
     // links place the rest sideways so their linked lanes coincide.
     function solve(sheet) {
       layerFor(sheet);
-      const solved = Object.assign(new Map(), { auto: new Set(), shapes: new Map() });
+      const solved = Object.assign(new Map(), { auto: new Set(), shapes: new Map(), connected: new Set() });
+      for (const { from, to } of sheet.connectors) {
+        solved.connected.add(`${from.road}:1:${from.lane}`);
+        solved.connected.add(`${to.road}:0:${to.lane}`);
+      }
       const separation = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES);
       for (const joint of sheet.joints) {
         const here = attachments(sheet, joint);
@@ -162,8 +185,12 @@
       const [l0, l1] = road.ends.map((end, e) => ((e ? b : a).travel ? end.length ?? chord / 3 : 0));
       const c0 = { x: a.x + (a.travel?.x ?? 0) * l0, y: a.y + (a.travel?.y ?? 0) * l0 };
       const c1 = { x: b.x - (b.travel?.x ?? 0) * l1, y: b.y - (b.travel?.y ?? 0) * l1 };
-      // Enough samples for smooth curves and tapers (about one per 12 px).
-      const segments = Math.min(400, Math.max(CURVE_SEGMENTS / 4, Math.ceil((chord + l0 + l1) / 12)));
+      return bezier(a, c0, c1, b);
+    }
+    // Samples a cubic Bézier: enough for smooth curves and tapers (about one per 12 px).
+    function bezier(a, c0, c1, b) {
+      const reach = Math.hypot(c0.x - a.x, c0.y - a.y) + Math.hypot(c1.x - c0.x, c1.y - c0.y) + Math.hypot(b.x - c1.x, b.y - c1.y);
+      const segments = Math.min(400, Math.max(CURVE_SEGMENTS / 4, Math.ceil(reach / 12)));
       const points = [];
       for (let i = 0; i <= segments; i++) {
         const t = i / segments;
@@ -231,7 +258,8 @@
           const key = `${e}:${lane}`;
           const setting = road.tapers?.[key];
           const mode = setting?.mode ?? "auto";
-          if (mode === "taper" || (mode === "auto" && solved.auto.has(`${road.id}:${key}`))) {
+          const id = `${road.id}:${key}`;
+          if (mode === "taper" || (mode === "auto" && solved.auto.has(id) && !solved.connected.has(id))) {
             tapers.set(key, feetToPixels(sheet, setting?.length ?? DEFAULT_TAPER_FEET));
           }
         }
@@ -257,6 +285,45 @@
       const { line, bounds } = shapeOf(sheet, road, solved);
       const i = e ? line.length - 1 : 0;
       return offset([line[e ? i - 1 : 0], line[e ? i : 1]], (bounds[i][lane] + bounds[i][lane + 1]) / 2)[e];
+    }
+    // A connection leaves its lane's end and enters the target lane's start along
+    // each lane's direction, unless its handles have been bent.
+    function connectorShape(sheet, connector, solved) {
+      const fromRoad = roadOf(sheet, connector.from.road);
+      const toRoad = roadOf(sheet, connector.to.road);
+      if (!fromRoad || !toRoad || connector.from.lane >= fromRoad.lanes || connector.to.lane >= toRoad.lanes) return null;
+      const a = lanePoint(sheet, fromRoad, 1, connector.from.lane, solved);
+      const b = lanePoint(sheet, toRoad, 0, connector.to.lane, solved);
+      const pull = Math.hypot(b.x - a.x, b.y - a.y) / 2.5;
+      const out = travelAt(fromRoad, 1, solved);
+      const into = travelAt(toRoad, 0, solved);
+      const h0 = connector.handles[0] ?? { x: out.x * pull, y: out.y * pull };
+      const h1 = connector.handles[1] ?? { x: -into.x * pull, y: -into.y * pull };
+      const c0 = { x: a.x + h0.x, y: a.y + h0.y };
+      const c1 = { x: b.x + h1.x, y: b.y + h1.y };
+      return {
+        a, b, c0, c1, points: bezier(a, c0, c1, b),
+        widths: [feetToPixels(sheet, fromRoad.laneWidth), feetToPixels(sheet, toRoad.laneWidth)],
+        color: laneColor(fromRoad.id, connector.from.lane),
+      };
+    }
+    function drawConnector(sheet, shape, layers) {
+      const margin = inchesToPixels(sheet, PAVEMENT_MARGIN_INCHES);
+      const last = shape.points.length - 1;
+      const half = i => (shape.widths[0] + (shape.widths[1] - shape.widths[0]) * i / last) / 2 + margin;
+      const band = document.createElementNS(SVG, "path");
+      band.setAttribute("class", "roadBand connectorBand");
+      band.setAttribute("d", `${pathData([...offset(shape.points, i => -half(i)), ...offset(shape.points, half).reverse()])}Z`);
+      layers.pavement.append(band);
+    }
+    function prune(sheet) {
+      sheet.connectors = sheet.connectors.filter(({ from, to }) => {
+        const fromRoad = roadOf(sheet, from.road);
+        const toRoad = roadOf(sheet, to.road);
+        return fromRoad && toRoad && fromRoad !== toRoad && from.lane < fromRoad.lanes && to.lane < toRoad.lanes;
+      });
+      if (!sheet.connectors.some(connector => connector.id === selectedConnector)) selectedConnector = null;
+      if (source && !(roadOf(sheet, source.road)?.lanes > source.lane)) source = null;
     }
     const pathData = points => `M${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join("L")}`;
 
@@ -286,7 +353,7 @@
       layers.markings.append(group);
       if (className === "selected") {
         const ring = band.cloneNode();
-        ring.setAttribute("class", "roadSelection");
+        ring.setAttribute("class", "roadOutline");
         layers.selection.append(ring);
       }
     }
@@ -303,6 +370,10 @@
           return [name, group];
         }));
         if (sheet.inchesPerPixel) {
+          sheet.connectors.forEach(connector => {
+            const shape = connectorShape(sheet, connector, solved);
+            if (shape) drawConnector(sheet, shape, layers);
+          });
           sheet.roads.forEach(road => drawRoad(sheet, road, shapeOf(sheet, road, solved), layers, road === selectedRoad ? "selected" : ""));
           if (drawing?.start && drawing.cursor) {
             drawRoad(sheet, defaults, buildShape(sheet, defaults, [drawing.start, drawing.cursor], new Map()), layers, "preview");
@@ -314,6 +385,7 @@
       updatePanel(solved);
     }
     function changed() {
+      if (sheets.selected?.connectors) prune(sheets.selected);
       render();
       save();
     }
@@ -343,6 +415,8 @@
       const sheet = sheets.selected;
       overlay.hidden = !sheet || !active() || !sheet.inchesPerPixel;
       overlay.classList.toggle("drawing", Boolean(drawing));
+      overlay.classList.toggle("connecting", connecting);
+      overlay.classList.toggle("picking", connecting && Boolean(source));
       const seen = new Set();
       if (!overlay.hidden) {
         for (const road of sheet.roads) {
@@ -354,6 +428,14 @@
               button.classList.toggle("selected", road === selectedRoad);
               button.classList.toggle("laneSelected", road === selectedRoad && selectedLane?.e === e && selectedLane.lane === lane);
               button.setAttribute("aria-label", `Road ${road.id}, lane ${lane + 1} ${e ? "end" : "start"}`);
+              const here = { road: road.id, lane };
+              const linked = Boolean(source) && sheet.connectors.some(c => sameLane(c.from, source) && sameLane(c.to, here));
+              button.style.setProperty("--lane-color", laneColor(road.id, lane));
+              button.classList.toggle("active", connecting && e === 1 && sameLane(source, here));
+              button.classList.toggle("candidate", connecting && e === 0 && Boolean(source) && source.road !== road.id);
+              button.classList.toggle("connected", connecting && e === 0 && linked);
+              if (connecting && e === 0) button.setAttribute("aria-pressed", String(linked));
+              else button.removeAttribute("aria-pressed");
               place(button, nodePoint(sheet, road, e, lane, solved));
             }
           }
@@ -374,7 +456,7 @@
         snapRing.setAttribute("cy", at.y);
       }
       controlButtons.forEach((button, e) => {
-        const handle = selectedRoad && !drawing && openCurves.has(`${selectedRoad.id}:${e}`) ? handlePoint(sheet, selectedRoad, e, solved) : null;
+        const handle = selectedRoad && !drawing && !connecting && openCurves.has(`${selectedRoad.id}:${e}`) ? handlePoint(sheet, selectedRoad, e, solved) : null;
         button.hidden = !handle;
         controlLines[e].setAttribute("visibility", handle ? "visible" : "hidden");
         if (!handle) return;
@@ -385,6 +467,38 @@
         controlLines[e].setAttribute("x2", to.x);
         controlLines[e].setAttribute("y2", to.y);
       });
+      // Connect Lanes draws every connection in its source lane's color.
+      const lines = [];
+      let chosen = null;
+      if (connecting) {
+        for (const connector of sheet.connectors) {
+          const shape = connectorShape(sheet, connector, solved);
+          if (!shape) continue;
+          const d = pathData(shape.points.map(point => sheets.toScreen(point)));
+          const line = document.createElementNS(SVG, "path");
+          line.setAttribute("d", d);
+          line.setAttribute("stroke", shape.color);
+          line.setAttribute("class", `connectorLine${connector.id === selectedConnector ? " selected" : ""}${source && !sameLane(connector.from, source) ? " faded" : ""}`);
+          const hit = document.createElementNS(SVG, "path");
+          hit.setAttribute("d", d);
+          hit.setAttribute("class", "connectorHit");
+          hit.dataset.connector = connector.id;
+          lines.push(line, hit);
+          if (connector.id === selectedConnector) chosen = shape;
+        }
+      }
+      connectorLines.replaceChildren(...lines);
+      connectorButtons.forEach((button, i) => {
+        button.hidden = !chosen;
+        connectorHandleLines[i].setAttribute("visibility", chosen ? "visible" : "hidden");
+        if (!chosen) return;
+        const from = sheets.toScreen(i ? chosen.b : chosen.a);
+        const to = place(button, i ? chosen.c1 : chosen.c0);
+        connectorHandleLines[i].setAttribute("x1", from.x);
+        connectorHandleLines[i].setAttribute("y1", from.y);
+        connectorHandleLines[i].setAttribute("x2", to.x);
+        connectorHandleLines[i].setAttribute("y2", to.y);
+      });
     }
 
     function updatePanel(solved) {
@@ -392,12 +506,16 @@
       const ready = Boolean(sheet?.inchesPerPixel);
       addButton.disabled = !ready;
       addButton.setAttribute("aria-pressed", String(Boolean(drawing)));
-      deleteButton.disabled = !selectedRoad;
+      connectButton.disabled = !ready;
+      connectButton.setAttribute("aria-pressed", String(connecting));
+      deleteButton.disabled = connecting
+        ? !(selectedConnector || (source && sheet.connectors.some(c => sameLane(c.from, source))))
+        : !selectedRoad;
       const values = selectedRoad ?? defaults;
       if (document.activeElement !== lanesInput) lanesInput.value = values.lanes;
       if (document.activeElement !== widthInput) widthInput.value = values.laneWidth;
       const lane = selectedRoad && selectedLane?.lane < selectedRoad.lanes ? selectedLane : null;
-      laneFields.hidden = !lane || !solved;
+      laneFields.hidden = !lane || !solved || connecting;
       if (!laneFields.hidden) {
         const key = `${lane.e}:${lane.lane}`;
         const setting = selectedRoad.tapers?.[key];
@@ -412,6 +530,9 @@
       workspace.classList.toggle("elementsActive", active());
       if (!sheet) hint.textContent = "Upload a sheet first.";
       else if (!ready) hint.textContent = "Set this sheet's scale first (Sheets › Set Scale) so lanes draw true size.";
+      else if (connecting && selectedConnector) hint.textContent = "Drag the handles to bend this connection; double-click a handle to reset it. Delete removes it.";
+      else if (connecting && source) hint.textContent = "Click lane starts (rings) to connect or disconnect this lane. Delete clears its connections. Click empty space to pick another lane.";
+      else if (connecting) hint.textContent = "Click a lane's end (filled circle), then click lane starts (rings) to connect them. Click a connection to bend it.";
       else if (drawing && !drawing.start) hint.textContent = "Click the road's start point, or a lane's end node to continue from it.";
       else if (drawing) hint.textContent = "Click the end point, or a lane's start node to join it. Traffic flows from start to end. Esc cancels.";
       else if (lane) hint.textContent = "Lane end selected. Set its taper below, or drag the node to move the road end.";
@@ -425,6 +546,9 @@
       render();
     }
     function startDrawing() {
+      connecting = false;
+      source = null;
+      selectedConnector = null;
       drawing = { start: null, cursor: null };
       selectedRoad = null;
       selectedLane = null;
@@ -558,7 +682,86 @@
     }
 
     addButton.addEventListener("click", () => (drawing ? stopDrawing() : startDrawing()));
-    deleteButton.addEventListener("click", deleteRoad);
+    connectButton.addEventListener("click", () => {
+      connecting = !connecting;
+      drawing = null;
+      snapTarget = null;
+      source = null;
+      selectedConnector = null;
+      selectedLane = null;
+      render();
+    });
+    deleteButton.addEventListener("click", deleteSelection);
+    function deleteSelection() {
+      const sheet = sheets.selected;
+      if (!connecting) return deleteRoad();
+      if (!sheet) return;
+      sheet.connectors = sheet.connectors.filter(connector => (selectedConnector
+        ? connector.id !== selectedConnector : !sameLane(connector.from, source)));
+      selectedConnector = null;
+      changed();
+    }
+    // Connect Lanes: a lane end picks the source; lane starts toggle connections.
+    function connectClick(node) {
+      const sheet = node.sheet;
+      const here = { road: node.road.id, lane: node.lane };
+      selectedConnector = null;
+      if (node.e === 1) {
+        source = sameLane(source, here) ? null : here;
+        return render();
+      }
+      if (!source || source.road === here.road) return render();
+      const existing = sheet.connectors.findIndex(c => sameLane(c.from, source) && sameLane(c.to, here));
+      if (existing >= 0) sheet.connectors.splice(existing, 1);
+      else sheet.connectors.push({ id: nextId(sheet.connectors), from: { ...source }, to: here, handles: [null, null] });
+      changed();
+    }
+    connectorLines.addEventListener("pointerdown", event => {
+      const hit = event.target.closest(".connectorHit");
+      if (!hit) return;
+      event.stopPropagation();
+      selectedConnector = Number(hit.dataset.connector);
+      source = null;
+      render();
+    });
+    function moveConnectorHandle(i, to) {
+      const sheet = sheets.selected;
+      const connector = sheet.connectors.find(c => c.id === selectedConnector);
+      const shape = connector && connectorShape(sheet, connector, solve(sheet));
+      if (!shape) return false;
+      const from = i ? shape.b : shape.a;
+      connector.handles[i] = { x: to.x - from.x, y: to.y - from.y };
+    }
+    connectorButtons.forEach((button, i) => {
+      button.addEventListener("pointerdown", event => {
+        event.stopPropagation();
+        button.setPointerCapture(event.pointerId);
+      });
+      button.addEventListener("pointermove", event => {
+        if (!button.hasPointerCapture(event.pointerId)) return;
+        if (moveConnectorHandle(i, sheets.toImage(event.clientX, event.clientY)) !== false) render();
+      });
+      button.addEventListener("pointerup", event => {
+        if (!button.hasPointerCapture(event.pointerId)) return;
+        button.releasePointerCapture(event.pointerId);
+        changed();
+      });
+      nudgeKeys(button, (dx, dy) => {
+        const sheet = sheets.selected;
+        const connector = sheet.connectors.find(c => c.id === selectedConnector);
+        const shape = connector && connectorShape(sheet, connector, solve(sheet));
+        if (!shape) return false;
+        const at = i ? shape.c1 : shape.c0;
+        return moveConnectorHandle(i, { x: at.x + dx, y: at.y + dy });
+      });
+      // Double-clicking a connection handle returns it to the lane's direction.
+      button.addEventListener("dblclick", () => {
+        const connector = sheets.selected?.connectors.find(c => c.id === selectedConnector);
+        if (!connector) return;
+        connector.handles[i] = null;
+        changed();
+      });
+    });
     function deleteRoad() {
       const sheet = sheets.selected;
       if (!sheet?.roads || !selectedRoad) return;
@@ -630,6 +833,11 @@
       const sheet = sheets.selected;
       if (!active() || !sheet?.inchesPerPixel || !press || event.target.closest(".roadNode, .roadControl")) return;
       if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > 4) return;
+      if (connecting) {
+        source = null;
+        selectedConnector = null;
+        return render();
+      }
       if (!drawing) return selectRoad(roadAt(sheet, sheets.toImage(event.clientX, event.clientY)));
       layerFor(sheet);
       const point = drawingPoint(sheet, event.clientX, event.clientY);
@@ -677,6 +885,7 @@
         const node = nodeTarget(button);
         if (!node || drawing) return;
         event.stopPropagation();
+        if (connecting) return;
         button.setPointerCapture(event.pointerId);
         selectedRoad = node.road;
         selectedLane = { e: node.e, lane: node.lane };
@@ -712,16 +921,20 @@
       button.addEventListener("pointercancel", finish);
       nudgeKeys(button, (dx, dy) => {
         const node = nodeTarget(button);
-        if (!node) return false;
+        if (!node || connecting) return false;
         selectedRoad = node.road;
         const joint = jointOf(node.sheet, node.road.ends[node.e].joint);
         joint.x += dx;
         joint.y += dy;
       });
+      button.addEventListener("click", () => {
+        const node = nodeTarget(button);
+        if (node && connecting) connectClick(node);
+      });
       // Double-clicking a node shows or hides the curve handle at that end.
       button.addEventListener("dblclick", () => {
         const node = nodeTarget(button);
-        if (!node) return;
+        if (!node || connecting) return;
         const key = `${node.road.id}:${node.e}`;
         if (openCurves.delete(key)) return render();
         openCurves.add(key);
@@ -787,12 +1000,19 @@
     window.addEventListener("keydown", event => {
       if (!active() || document.querySelector("dialog[open]")) return;
       const typing = event.target.closest?.("input, select, textarea");
-      if (event.key === "Escape" && (drawing || selectedRoad)) {
+      if (event.key === "Escape" && connecting) {
+        event.stopPropagation();
+        if (source || selectedConnector) {
+          source = null;
+          selectedConnector = null;
+        } else connecting = false;
+        render();
+      } else if (event.key === "Escape" && (drawing || selectedRoad)) {
         event.stopPropagation();
         drawing ? stopDrawing() : selectRoad(null);
-      } else if ((event.key === "Delete" || event.key === "Backspace") && selectedRoad && !typing) {
+      } else if ((event.key === "Delete" || event.key === "Backspace") && !typing && !deleteButton.disabled) {
         event.preventDefault();
-        deleteRoad();
+        deleteSelection();
       }
     }, true);
 
@@ -800,6 +1020,9 @@
       if (!active()) {
         drawing = null;
         snapTarget = null;
+        connecting = false;
+        source = null;
+        selectedConnector = null;
       }
       render();
     }).observe(editor, { attributes: true, attributeFilter: ["hidden"] });
@@ -811,6 +1034,8 @@
       }
       drawing = null;
       snapTarget = null;
+      source = null;
+      selectedConnector = null;
       render();
     });
     render();

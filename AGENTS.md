@@ -67,6 +67,21 @@ MUTCD-compliant pavement markings onto them.
   None, with a length in feet (default 300 ft, capped at the road's length).
   Taper markings are the default lane and edge lines for now; FDOT taper
   markings come later.
+- **Lane connections follow Cities: Skylines' Lane Connector (TM:PE)**, the
+  design inspiration for lane editing, with more freedom over curves. Connect
+  Lanes (Elements panel) shows TM:PE-style colored lane markers: lane ends are
+  filled circles (sources), lane starts are rings (targets). Click a lane end,
+  then click lane starts on other roads to toggle connections; candidates
+  pulse. Each connection is drawn in its source lane's color and is a real,
+  paved Bézier lane between the two lane ends, leaving and entering along each
+  lane's direction; the roads don't move. Click a connection to bend it with
+  two free handles (double-click a handle to reset). Delete removes the
+  selected connection, or all of the picked lane's connections. Escape clears
+  the pick, then leaves Connect Lanes. A connected lane end never gets an
+  automatic taper. Connections are unmarked for now.
+- Two ways to join: dragging a lane node onto another lane's node joins the
+  roads rigidly (ends line up and move together); Connect Lanes links lanes
+  across a gap such as an intersection.
 - Lane nodes are drawn slightly inside their road's end so joined roads' nodes
   don't cover each other; snapping accepts either the drawn node or the true
   lane end.
@@ -87,7 +102,7 @@ MUTCD-compliant pavement markings onto them.
   node or handle; Delete removes the selected road; Escape cancels drawing or
   deselects. Roads belong to the sheet they were drawn on.
 - Persistence: sheets (original files), their order, selection, scale, view,
-  roads, and joints are saved to IndexedDB (`StripeMaker` database) and restored
+  roads, joints, and lane connections are saved to IndexedDB (`StripeMaker` database) and restored
   on reload. Files are written once; small records save shortly after changes.
 
 - Sheets: users upload aerial imagery of the roads they are redesigning. Accept
