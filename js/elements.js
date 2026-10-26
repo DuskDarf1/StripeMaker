@@ -23,6 +23,10 @@
   const MAX_LANE_WIDTH = 20;
   const CURVE_SEGMENTS = 96;
   const SNAP_PIXELS = 14;
+  const NODE_INSET_PIXELS = 13;       // nodes sit just inside their road's end
+  const DEFAULT_TAPER_FEET = 300;
+  const MIN_TAPER_FEET = 10;
+  const MAX_TAPER_FEET = 2000;
   const LEFT_EDGE = -0.5;             // lane "index" of a road's left edge
   const SVG = "http://www.w3.org/2000/svg";
 
@@ -35,10 +39,16 @@
     const hint = document.getElementById("elementsHint");
     const lanesInput = document.getElementById("roadLanes");
     const widthInput = document.getElementById("roadLaneWidth");
+    const laneFields = document.getElementById("laneFields");
+    const laneTitle = document.getElementById("laneTitle");
+    const taperSelect = document.getElementById("laneTaper");
+    const taperLength = document.getElementById("laneTaperLength");
+    const taperState = document.getElementById("laneTaperState");
     const defaults = { lanes: 1, laneWidth: 12 };
     const openCurves = new Set();
     const nodeButtons = new Map();
     let selectedRoad = null;
+    let selectedLane = null;
     let drawing = null;
     let drag = null;
     let snapTarget = null;
@@ -95,7 +105,7 @@
     // links place the rest sideways so their linked lanes coincide.
     function solve(sheet) {
       layerFor(sheet);
-      const solved = new Map();
+      const solved = Object.assign(new Map(), { auto: new Set(), shapes: new Map() });
       const separation = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES);
       for (const joint of sheet.joints) {
         const here = attachments(sheet, joint);
@@ -118,6 +128,19 @@
             }
           }
         }
+        // Lanes that don't continue across a joint taper automatically: ending
+        // lanes drop, starting lanes are added.
+        const lateral = (item, lane) => (offsets.get(item.road.id) ?? 0) + item.end.sign * laneLateral(sheet, item.road, lane);
+        for (const item of here) {
+          const across = here.filter(other => other.e !== item.e && other.end.sign === item.end.sign);
+          if (!across.length) continue;
+          for (let lane = 0; lane < item.road.lanes; lane++) {
+            const at = lateral(item, lane);
+            const continues = across.some(other => Array.from({ length: other.road.lanes }, (_, j) => j).some(j =>
+              Math.abs(lateral(other, j) - at) < feetToPixels(sheet, Math.min(item.road.laneWidth, other.road.laneWidth)) / 2));
+            if (!continues) solved.auto.add(`${item.road.id}:${item.e}:${lane}`);
+          }
+        }
         const normal = joint.dir ? rightOf(joint.dir) : { x: 0, y: 0 };
         for (const { road, e, end } of here) {
           const offset = offsets.get(road.id) ?? 0;
@@ -135,14 +158,15 @@
     function centerline(road, solved) {
       const a = solved.get(`${road.id}:0`);
       const b = solved.get(`${road.id}:1`);
-      if (!a.travel && !b.travel) return [{ x: a.x, y: a.y }, { x: b.x, y: b.y }];
       const chord = Math.hypot(b.x - a.x, b.y - a.y);
-      const [l0, l1] = road.ends.map(end => end.length ?? chord / 3);
-      const c0 = a.travel ? { x: a.x + a.travel.x * l0, y: a.y + a.travel.y * l0 } : a;
-      const c1 = b.travel ? { x: b.x - b.travel.x * l1, y: b.y - b.travel.y * l1 } : b;
+      const [l0, l1] = road.ends.map((end, e) => ((e ? b : a).travel ? end.length ?? chord / 3 : 0));
+      const c0 = { x: a.x + (a.travel?.x ?? 0) * l0, y: a.y + (a.travel?.y ?? 0) * l0 };
+      const c1 = { x: b.x - (b.travel?.x ?? 0) * l1, y: b.y - (b.travel?.y ?? 0) * l1 };
+      // Enough samples for smooth curves and tapers (about one per 12 px).
+      const segments = Math.min(400, Math.max(CURVE_SEGMENTS / 4, Math.ceil((chord + l0 + l1) / 12)));
       const points = [];
-      for (let i = 0; i <= CURVE_SEGMENTS; i++) {
-        const t = i / CURVE_SEGMENTS;
+      for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
         const u = 1 - t;
         const w = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
         points.push({
@@ -155,10 +179,11 @@
     // Positive distances offset to the right of travel (start → end).
     function offset(points, distance) {
       return points.map((point, i) => {
+        const d = typeof distance === "function" ? distance(i) : distance;
         const prev = points[Math.max(0, i - 1)];
         const next = points[Math.min(points.length - 1, i + 1)];
         const normal = rightOf(unit({ x: next.x - prev.x, y: next.y - prev.y }));
-        return { x: point.x + normal.x * distance, y: point.y + normal.y * distance };
+        return { x: point.x + normal.x * d, y: point.y + normal.y * d };
       });
     }
     const endOf = (points, e) => points[e ? points.length - 1 : 0];
@@ -167,8 +192,71 @@
       const [a, b] = e ? line.slice(-2) : line.slice(0, 2);
       return unit({ x: b.x - a.x, y: b.y - a.y });
     }
+    // Lane boundaries along the road. A tapering lane's width runs from zero at its
+    // tapered end to full over the taper length; the first untapered lane holds its
+    // place and the others pack against it.
+    function buildShape(sheet, road, line, tapers) {
+      const along = [0];
+      for (let i = 1; i < line.length; i++) along.push(along[i - 1] + Math.hypot(line[i].x - line[i - 1].x, line[i].y - line[i - 1].y));
+      const total = along[along.length - 1];
+      const laneWidth = feetToPixels(sheet, road.laneWidth);
+      const tapered = lane => tapers.has(`0:${lane}`) || tapers.has(`1:${lane}`);
+      let anchor = 0;
+      while (anchor < road.lanes - 1 && tapered(anchor)) anchor++;
+      const anchorLeft = laneLateral(sheet, road, anchor) - laneWidth / 2;
+      const bounds = along.map(s => {
+        const widths = Array.from({ length: road.lanes }, (_, lane) => {
+          const start = tapers.get(`0:${lane}`);
+          const end = tapers.get(`1:${lane}`);
+          let fraction = 1;
+          if (start) fraction = Math.min(fraction, s / Math.min(start, total));
+          if (end) fraction = Math.min(fraction, (total - s) / Math.min(end, total));
+          return laneWidth * Math.max(0, Math.min(1, fraction || 0));
+        });
+        const b = [];
+        b[anchor] = anchorLeft + (laneWidth - widths[anchor]) / 2;
+        b[anchor + 1] = b[anchor] + widths[anchor];
+        for (let k = anchor + 1; k < road.lanes; k++) b[k + 1] = b[k] + widths[k];
+        for (let k = anchor - 1; k >= 0; k--) b[k] = b[k + 1] - widths[k];
+        return b;
+      });
+      return { line, bounds, tapers };
+    }
+    // Taper settings per lane end: Auto (only where a lane doesn't continue across
+    // a joint), Taper, or None.
+    function tapersOf(sheet, road, solved) {
+      const tapers = new Map();
+      for (const e of [0, 1]) {
+        for (let lane = 0; lane < road.lanes; lane++) {
+          const key = `${e}:${lane}`;
+          const setting = road.tapers?.[key];
+          const mode = setting?.mode ?? "auto";
+          if (mode === "taper" || (mode === "auto" && solved.auto.has(`${road.id}:${key}`))) {
+            tapers.set(key, feetToPixels(sheet, setting?.length ?? DEFAULT_TAPER_FEET));
+          }
+        }
+      }
+      return tapers;
+    }
+    function shapeOf(sheet, road, solved) {
+      if (!solved.shapes.has(road)) solved.shapes.set(road, buildShape(sheet, road, centerline(road, solved), tapersOf(sheet, road, solved)));
+      return solved.shapes.get(road);
+    }
+    // Where a lane node is drawn: just inside the road, so the end nodes of one road
+    // and the start nodes of the next don't cover each other at a joint.
+    function nodePoint(sheet, road, e, lane, solved) {
+      const { line } = shapeOf(sheet, road, solved);
+      const at = lanePoint(sheet, road, e, lane, solved);
+      const inward = unit(e ? { x: line[line.length - 2].x - line[line.length - 1].x, y: line[line.length - 2].y - line[line.length - 1].y }
+        : { x: line[1].x - line[0].x, y: line[1].y - line[0].y });
+      const inset = NODE_INSET_PIXELS / sheet.view.scale;
+      return { x: at.x + inward.x * inset, y: at.y + inward.y * inset };
+    }
+    const boundary = (shape, k, extra = 0) => offset(shape.line, i => shape.bounds[i][k] + extra);
     function lanePoint(sheet, road, e, lane, solved) {
-      return endOf(offset(centerline(road, solved), laneLateral(sheet, road, lane)), e);
+      const { line, bounds } = shapeOf(sheet, road, solved);
+      const i = e ? line.length - 1 : 0;
+      return offset([line[e ? i - 1 : 0], line[e ? i : 1]], (bounds[i][lane] + bounds[i][lane + 1]) / 2)[e];
     }
     const pathData = points => `M${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join("L")}`;
 
@@ -182,21 +270,19 @@
       return path;
     }
     // Yellow left edge, white right edge, and white skip lines between lanes.
-    function drawRoad(sheet, road, line, layers, className = "") {
-      const laneWidth = feetToPixels(sheet, road.laneWidth);
-      const half = road.lanes * laneWidth / 2;
+    function drawRoad(sheet, road, shape, layers, className = "") {
       const margin = inchesToPixels(sheet, PAVEMENT_MARGIN_INCHES);
       const band = document.createElementNS(SVG, "path");
       band.setAttribute("class", `roadBand ${className}`);
-      band.setAttribute("d", `${pathData([...offset(line, -half - margin), ...offset(line, half + margin).reverse()])}Z`);
+      band.setAttribute("d", `${pathData([...boundary(shape, 0, -margin), ...boundary(shape, road.lanes, margin).reverse()])}Z`);
       layers.pavement.append(band);
       const lineWidth = inchesToPixels(sheet, LINE_INCHES);
       const skip = `${feetToPixels(sheet, SKIP_STRIPE_FEET)} ${feetToPixels(sheet, SKIP_GAP_FEET)}`;
       const group = document.createElementNS(SVG, "g");
       if (className) group.setAttribute("class", className);
-      for (let i = 1; i < road.lanes; i++) group.append(strokePath(offset(line, i * laneWidth - half), WHITE, lineWidth, skip));
-      group.append(strokePath(offset(line, -half), YELLOW, lineWidth));
-      group.append(strokePath(offset(line, half), WHITE, lineWidth));
+      for (let k = 1; k < road.lanes; k++) group.append(strokePath(boundary(shape, k), WHITE, lineWidth, skip));
+      group.append(strokePath(boundary(shape, 0), YELLOW, lineWidth));
+      group.append(strokePath(boundary(shape, road.lanes), WHITE, lineWidth));
       layers.markings.append(group);
       if (className === "selected") {
         const ring = band.cloneNode();
@@ -217,13 +303,15 @@
           return [name, group];
         }));
         if (sheet.inchesPerPixel) {
-          sheet.roads.forEach(road => drawRoad(sheet, road, centerline(road, solved), layers, road === selectedRoad ? "selected" : ""));
-          if (drawing?.start && drawing.cursor) drawRoad(sheet, defaults, [drawing.start, drawing.cursor], layers, "preview");
+          sheet.roads.forEach(road => drawRoad(sheet, road, shapeOf(sheet, road, solved), layers, road === selectedRoad ? "selected" : ""));
+          if (drawing?.start && drawing.cursor) {
+            drawRoad(sheet, defaults, buildShape(sheet, defaults, [drawing.start, drawing.cursor], new Map()), layers, "preview");
+          }
         }
         layer.replaceChildren(layers.pavement, layers.markings, layers.selection);
       }
       drawOverlay(solved);
-      updatePanel();
+      updatePanel(solved);
     }
     function changed() {
       render();
@@ -258,16 +346,15 @@
       const seen = new Set();
       if (!overlay.hidden) {
         for (const road of sheet.roads) {
-          const line = centerline(road, solved);
           for (let lane = 0; lane < road.lanes; lane++) {
-            const laneLine = offset(line, laneLateral(sheet, road, lane));
             for (const e of [0, 1]) {
               const key = `${road.id}:${e}:${lane}`;
               const button = nodeButton(key);
               seen.add(key);
               button.classList.toggle("selected", road === selectedRoad);
+              button.classList.toggle("laneSelected", road === selectedRoad && selectedLane?.e === e && selectedLane.lane === lane);
               button.setAttribute("aria-label", `Road ${road.id}, lane ${lane + 1} ${e ? "end" : "start"}`);
-              place(button, endOf(laneLine, e));
+              place(button, nodePoint(sheet, road, e, lane, solved));
             }
           }
         }
@@ -300,7 +387,7 @@
       });
     }
 
-    function updatePanel() {
+    function updatePanel(solved) {
       const sheet = sheets.selected;
       const ready = Boolean(sheet?.inchesPerPixel);
       addButton.disabled = !ready;
@@ -309,23 +396,38 @@
       const values = selectedRoad ?? defaults;
       if (document.activeElement !== lanesInput) lanesInput.value = values.lanes;
       if (document.activeElement !== widthInput) widthInput.value = values.laneWidth;
+      const lane = selectedRoad && selectedLane?.lane < selectedRoad.lanes ? selectedLane : null;
+      laneFields.hidden = !lane || !solved;
+      if (!laneFields.hidden) {
+        const key = `${lane.e}:${lane.lane}`;
+        const setting = selectedRoad.tapers?.[key];
+        laneTitle.textContent = `Lane ${lane.lane + 1} ${lane.e ? "end" : "start"}`;
+        if (document.activeElement !== taperSelect) taperSelect.value = setting?.mode ?? "auto";
+        if (document.activeElement !== taperLength) taperLength.value = setting?.length ?? DEFAULT_TAPER_FEET;
+        const tapering = shapeOf(sheet, selectedRoad, solved).tapers.has(key);
+        taperState.textContent = !tapering ? "No taper here."
+          : lane.e ? "This lane narrows to nothing at its end (lane drop)." : "This lane widens from nothing at its start (lane add).";
+      }
       workspace.classList.toggle("drawing", Boolean(drawing));
       workspace.classList.toggle("elementsActive", active());
       if (!sheet) hint.textContent = "Upload a sheet first.";
       else if (!ready) hint.textContent = "Set this sheet's scale first (Sheets › Set Scale) so lanes draw true size.";
       else if (drawing && !drawing.start) hint.textContent = "Click the road's start point, or a lane's end node to continue from it.";
       else if (drawing) hint.textContent = "Click the end point, or a lane's start node to join it. Traffic flows from start to end. Esc cancels.";
-      else if (selectedRoad) hint.textContent = "Drag a lane's end node onto another lane's start node to join them. Join opposite roads for a two-way road. Option-drag pulls an end free; double-click a node to curve.";
+      else if (lane) hint.textContent = "Lane end selected. Set its taper below, or drag the node to move the road end.";
+      else if (selectedRoad) hint.textContent = "Click a lane node to set its taper. Drag a lane's end node onto another lane's start node to join them. Join opposite roads for a two-way road. Option-drag pulls an end free; double-click a node to curve.";
       else hint.textContent = "Add a one-way road, or click a road to edit it.";
     }
 
     function selectRoad(road) {
       selectedRoad = road;
+      selectedLane = null;
       render();
     }
     function startDrawing() {
       drawing = { start: null, cursor: null };
       selectedRoad = null;
+      selectedLane = null;
       render();
     }
     function stopDrawing() {
@@ -344,8 +446,10 @@
         const f = 1 - e;
         if (road && road.ends.some(end => end.joint === other.ends[f].joint)) continue;
         for (let lane = 0; lane < other.lanes; lane++) {
+          // Either the lane's true end or its drawn node counts.
           const at = lanePoint(sheet, other, f, lane, solved);
-          const distance = Math.hypot(at.x - point.x, at.y - point.y);
+          const shown = nodePoint(sheet, other, f, lane, solved);
+          const distance = Math.min(Math.hypot(at.x - point.x, at.y - point.y), Math.hypot(shown.x - point.x, shown.y - point.y));
           if (distance <= bestDistance) {
             best = { road: other, e: f, lane, x: at.x, y: at.y };
             bestDistance = distance;
@@ -367,9 +471,8 @@
       const solved = solve(sheet);
       const slop = 6 / sheet.view.scale;
       for (const road of [...sheet.roads].reverse()) {
-        const line = centerline(road, solved);
-        const half = road.lanes * feetToPixels(sheet, road.laneWidth) / 2 + slop;
-        if (insidePolygon(point, [...offset(line, -half), ...offset(line, half).reverse()])) return road;
+        const shape = shapeOf(sheet, road, solved);
+        if (insidePolygon(point, [...boundary(shape, 0, -slop), ...boundary(shape, road.lanes, slop).reverse()])) return road;
       }
       return null;
     }
@@ -469,8 +572,24 @@
         regroup(sheet, joint, before);
       }
       selectedRoad = null;
+      selectedLane = null;
       changed();
     }
+    function setTaper(changes) {
+      if (!selectedRoad || !selectedLane) return;
+      const key = `${selectedLane.e}:${selectedLane.lane}`;
+      selectedRoad.tapers ??= {};
+      selectedRoad.tapers[key] = { mode: "auto", length: DEFAULT_TAPER_FEET, ...selectedRoad.tapers[key], ...changes };
+      changed();
+    }
+    taperSelect.addEventListener("change", () => setTaper({ mode: taperSelect.value }));
+    taperLength.addEventListener("input", () => {
+      const feet = Number(taperLength.value);
+      if (feet >= MIN_TAPER_FEET && feet <= MAX_TAPER_FEET) setTaper({ length: feet });
+    });
+    taperLength.addEventListener("change", () => {
+      taperLength.value = selectedRoad?.tapers?.[`${selectedLane?.e}:${selectedLane?.lane}`]?.length ?? DEFAULT_TAPER_FEET;
+    });
     function bindNumber(input, key, min, max, round) {
       input.addEventListener("input", () => {
         const value = round(Number(input.value));
@@ -560,6 +679,7 @@
         event.stopPropagation();
         button.setPointerCapture(event.pointerId);
         selectedRoad = node.road;
+        selectedLane = { e: node.e, lane: node.lane };
         // Option/Alt-drag gives this road's end its own joint, pulling it free.
         if (event.altKey) detach(node.sheet, node.road, node.e);
         const solved = solve(node.sheet);
@@ -685,7 +805,10 @@
     }).observe(editor, { attributes: true, attributeFilter: ["hidden"] });
     document.addEventListener("sheetview", () => { if (active()) drawOverlay(); });
     document.addEventListener("sheetchange", () => {
-      if (!sheets.selected?.roads?.includes(selectedRoad)) selectedRoad = null;
+      if (!sheets.selected?.roads?.includes(selectedRoad)) {
+        selectedRoad = null;
+        selectedLane = null;
+      }
       drawing = null;
       snapTarget = null;
       render();

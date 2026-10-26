@@ -59,6 +59,17 @@ MUTCD-compliant pavement markings onto them.
   joint, keeping joined roads lined up.
 - Roads are 100% opaque asphalt. Lane nodes are small yellow steering wheels,
   shown for every lane of every road while the Elements tab is open.
+- Tapers belong to one lane at one road end. At an end, the lane narrows from
+  full width to zero over the taper length (lane drop); at a start, it widens
+  from zero (lane add). The first untapered lane holds its place and the rest
+  pack against it. Each lane end's taper is Auto (tapers only when the lane
+  doesn't continue across a joint into a road going the same way), Taper, or
+  None, with a length in feet (default 300 ft, capped at the road's length).
+  Taper markings are the default lane and edge lines for now; FDOT taper
+  markings come later.
+- Lane nodes are drawn slightly inside their road's end so joined roads' nodes
+  don't cover each other; snapping accepts either the drawn node or the true
+  lane end.
 - Not yet designed: per-road marking edits.
 
 ## Current scope
@@ -66,7 +77,9 @@ MUTCD-compliant pavement markings onto them.
 - Elements (editor panel): Add Road, then click a start and end point to draw a
   one-lane, one-way road. Lanes (1–8) and lane width (default 12 ft, 8–20 ft)
   apply to the selected road, or to the next road when none is selected. Lanes
-  are separated by FDOT white skip lane lines, with FDOT edge lines. Clicking
+  are separated by FDOT white skip lane lines, with FDOT edge lines. Clicking a
+  lane node selects that lane end and shows its Taper setting and length.
+  Clicking
   a lane node while drawing joins the new road to it. Click a road to select
   it; drag a lane node to move that road end. Double-click a lane node to show
   that end's Bézier handle and drag it to curve the road; double-click a
