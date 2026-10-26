@@ -66,9 +66,11 @@ MUTCD-compliant pavement markings onto them.
 - Elements (editor panel): Add Road, then click a start and end point to draw a
   one-lane, one-way road. Lanes (1–8) and lane width (default 12 ft, 8–20 ft)
   apply to the selected road, or to the next road when none is selected. Lanes
-  are separated by FDOT white skip lane lines, with FDOT edge lines. Click a road to select it; drag its yellow end nodes to move them.
-  Double-click a node to show its Bézier handle and drag it to curve the road;
-  double-click a handle to straighten that end. Arrow keys nudge a focused
+  are separated by FDOT white skip lane lines, with FDOT edge lines. Clicking
+  a lane node while drawing joins the new road to it. Click a road to select
+  it; drag a lane node to move that road end. Double-click a lane node to show
+  that end's Bézier handle and drag it to curve the road; double-click a
+  handle to return that end to its default pull. Arrow keys nudge a focused
   node or handle; Delete removes the selected road; Escape cancels drawing or
   deselects. Roads belong to the sheet they were drawn on.
 - Persistence: sheets (original files), their order, selection, scale, view,
