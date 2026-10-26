@@ -212,6 +212,7 @@ button.scaleHandle:focus-visible, button.roadNode:focus-visible { outline: 2px s
 .roadNode.selected { width: 26px; height: 26px; }
 .roadNode.laneSelected { width: 30px; height: 30px; filter: drop-shadow(0 0 3px #ffdf00); }
 #laneFields h3 { margin: 0 0 0.25rem; }
+.fieldHint { margin: -0.25rem 0 0.35rem 8.9rem; font-size: 0.65rem; opacity: 0.8; }
 .roadNode.preview { opacity: 0.85; pointer-events: none; }
 .roadOverlay.drawing .roadNode { pointer-events: none; }
 .roadOverlay { position: absolute; inset: 0; pointer-events: none; z-index: 5; }

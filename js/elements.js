@@ -7,7 +7,8 @@
   // road end connected there. Lane-to-lane links fix each road's sideways position
   // on the joint, so joined ends line up and move together. A road joined in the
   // opposite direction sits beside the other road, left edge to left edge, making
-  // a two-way road with a double yellow centerline.
+  // a two-way road with a double yellow centerline (or a median between them). A
+  // two-way road's joints sit on its centerline, so lane changes grow outward.
   //
   // Lane connectors work like the Lane Connector in Cities: Skylines (TM:PE): pick a
   // lane's end, then click lane starts to connect or disconnect them. Each
@@ -26,6 +27,7 @@
   const MAX_LANES = 8;
   const MIN_LANE_WIDTH = 8;
   const MAX_LANE_WIDTH = 20;
+  const MAX_MEDIAN_FEET = 200;
   const CURVE_SEGMENTS = 96;
   const SNAP_PIXELS = 14;
   const NODE_INSET_PIXELS = 13;       // nodes sit just inside their road's end
@@ -45,12 +47,16 @@
     const hint = document.getElementById("elementsHint");
     const lanesInput = document.getElementById("roadLanes");
     const widthInput = document.getElementById("roadLaneWidth");
+    const oppositeInput = document.getElementById("roadOpposite");
+    const medianRow = document.getElementById("medianRow");
+    const medianInput = document.getElementById("roadMedian");
+    const splitRow = document.getElementById("splitRow");
     const laneFields = document.getElementById("laneFields");
     const laneTitle = document.getElementById("laneTitle");
     const taperSelect = document.getElementById("laneTaper");
     const taperLength = document.getElementById("laneTaperLength");
     const taperState = document.getElementById("laneTaperState");
-    const defaults = { lanes: 1, laneWidth: 12 };
+    const defaults = { lanes: 1, laneWidth: 12, opposite: 0, median: 0 };
     const openCurves = new Set();
     const nodeButtons = new Map();
     let selectedRoad = null;
@@ -100,8 +106,10 @@
     // Each lane gets its own color in Connect Lanes, as in TM:PE.
     const laneColor = (road, lane) => `hsl(${(road * 137 + lane * 53) % 360} 85% 58%)`;
     const sameLane = (a, b) => a && b && a.road === b.road && a.lane === b.lane;
-    const pairOf = (sheet, road) => sheet.roads.find(other => other !== road
+    const pairOf = (sheet, road) => road && sheet.roads.find(other => other !== road
       && other.ends[0].joint === road.ends[1].joint && other.ends[1].joint === road.ends[0].joint);
+    const pairLinks = (sheet, road, pair) => road.ends.flatMap(end => jointOf(sheet, end.joint).links)
+      .filter(link => link.pair && [link.a, link.b].includes(road.id) && [link.a, link.b].includes(pair.id));
 
     function save() {
       if (sheets.selected) sheets.save(sheets.selected);
@@ -144,12 +152,21 @@
               const b = byRoad.get(to);
               if (!a || !b || !offsets.has(from) || offsets.has(to)) continue;
               const reference = link.pair
-                ? offsets.get(from) + a.end.sign * (laneLateral(sheet, a.road, LEFT_EDGE) - separation)
+                ? offsets.get(from) + a.end.sign * (laneLateral(sheet, a.road, LEFT_EDGE) - separation - feetToPixels(sheet, link.median ?? 0))
                 : offsets.get(from) + a.end.sign * laneLateral(sheet, a.road, fromLane);
               offsets.set(to, reference - b.end.sign * laneLateral(sheet, b.road, link.pair ? LEFT_EDGE : toLane));
               grew = true;
             }
           }
+        }
+        // A two-way road's joint sits on its centerline: midway between the two
+        // yellow lines (across the median, if any).
+        const pairLink = joint.links.find(link => link.pair && offsets.has(link.a) && offsets.has(link.b));
+        if (pairLink) {
+          const half = byRoad.get(pairLink.a);
+          const gap = separation + feetToPixels(sheet, pairLink.median ?? 0);
+          const center = offsets.get(pairLink.a) + half.end.sign * (laneLateral(sheet, half.road, LEFT_EDGE) - gap / 2);
+          for (const [id, value] of offsets) offsets.set(id, value - center);
         }
         // Lanes that don't continue across a joint taper automatically: ending
         // lanes drop, starting lanes are added.
@@ -374,15 +391,24 @@
             const shape = connectorShape(sheet, connector, solved);
             if (shape) drawConnector(sheet, shape, layers);
           });
-          sheet.roads.forEach(road => drawRoad(sheet, road, shapeOf(sheet, road, solved), layers, road === selectedRoad ? "selected" : ""));
-          if (drawing?.start && drawing.cursor) {
-            drawRoad(sheet, defaults, buildShape(sheet, defaults, [drawing.start, drawing.cursor], new Map()), layers, "preview");
-          }
+          const partner = pairOf(sheet, selectedRoad);
+          sheet.roads.forEach(road => drawRoad(sheet, road, shapeOf(sheet, road, solved), layers, road === selectedRoad || road === partner ? "selected" : ""));
+          if (drawing?.start && drawing.cursor) drawPreview(sheet, layers);
         }
         layer.replaceChildren(layers.pavement, layers.markings, layers.selection);
       }
       drawOverlay(solved);
       updatePanel(solved);
+    }
+    // A two-way preview puts the clicked line on the centerline, like the result.
+    function drawPreview(sheet, layers) {
+      const line = [drawing.start, drawing.cursor];
+      if (!defaults.opposite) return drawRoad(sheet, defaults, buildShape(sheet, defaults, line, new Map()), layers, "preview");
+      const half = (inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES) + feetToPixels(sheet, defaults.median)) / 2;
+      const width = lanes => lanes * feetToPixels(sheet, defaults.laneWidth) / 2;
+      const opposite = { ...defaults, lanes: defaults.opposite };
+      drawRoad(sheet, defaults, buildShape(sheet, defaults, offset(line, half + width(defaults.lanes)), new Map()), layers, "preview");
+      drawRoad(sheet, opposite, buildShape(sheet, opposite, offset([...line].reverse(), half + width(opposite.lanes)), new Map()), layers, "preview");
     }
     function changed() {
       if (sheets.selected?.connectors) prune(sheets.selected);
@@ -425,7 +451,7 @@
               const key = `${road.id}:${e}:${lane}`;
               const button = nodeButton(key);
               seen.add(key);
-              button.classList.toggle("selected", road === selectedRoad);
+              button.classList.toggle("selected", road === selectedRoad || road === pairOf(sheet, selectedRoad));
               button.classList.toggle("laneSelected", road === selectedRoad && selectedLane?.e === e && selectedLane.lane === lane);
               button.setAttribute("aria-label", `Road ${road.id}, lane ${lane + 1} ${e ? "end" : "start"}`);
               const here = { road: road.id, lane };
@@ -512,8 +538,15 @@
         ? !(selectedConnector || (source && sheet.connectors.some(c => sameLane(c.from, source))))
         : !selectedRoad;
       const values = selectedRoad ?? defaults;
+      const partner = sheet && pairOf(sheet, selectedRoad);
       if (document.activeElement !== lanesInput) lanesInput.value = values.lanes;
       if (document.activeElement !== widthInput) widthInput.value = values.laneWidth;
+      if (document.activeElement !== oppositeInput) oppositeInput.value = selectedRoad ? partner?.lanes ?? 0 : defaults.opposite;
+      medianRow.hidden = selectedRoad ? !partner : !defaults.opposite;
+      if (document.activeElement !== medianInput) {
+        medianInput.value = partner ? pairLinks(sheet, selectedRoad, partner)[0]?.median ?? 0 : defaults.median;
+      }
+      splitRow.hidden = !partner || connecting;
       const lane = selectedRoad && selectedLane?.lane < selectedRoad.lanes ? selectedLane : null;
       laneFields.hidden = !lane || !solved || connecting;
       if (!laneFields.hidden) {
@@ -533,11 +566,15 @@
       else if (connecting && selectedConnector) hint.textContent = "Drag the handles to bend this connection; double-click a handle to reset it. Delete removes it.";
       else if (connecting && source) hint.textContent = "Click lane starts (rings) to connect or disconnect this lane. Delete clears its connections. Click empty space to pick another lane.";
       else if (connecting) hint.textContent = "Click a lane's end (filled circle), then click lane starts (rings) to connect them. Click a connection to bend it.";
-      else if (drawing && !drawing.start) hint.textContent = "Click the road's start point, or a lane's end node to continue from it.";
-      else if (drawing) hint.textContent = "Click the end point, or a lane's start node to join it. Traffic flows from start to end. Esc cancels.";
+      else if (drawing && !drawing.start) hint.textContent = defaults.opposite
+        ? "Click the start of the two-way road's centerline." : "Click the road's start point, or a lane's end node to continue from it.";
+      else if (drawing) hint.textContent = defaults.opposite
+        ? "Click the end of the centerline. Lanes travel start to end; opposite lanes return. Esc cancels."
+        : "Click the end point, or a lane's start node to join it. Traffic flows from start to end. Esc cancels.";
       else if (lane) hint.textContent = "Lane end selected. Set its taper below, or drag the node to move the road end.";
-      else if (selectedRoad) hint.textContent = "Click a lane node to set its taper. Drag a lane's end node onto another lane's start node to join them. Join opposite roads for a two-way road. Option-drag pulls an end free; double-click a node to curve.";
-      else hint.textContent = "Add a one-way road, or click a road to edit it.";
+      else if (partner) hint.textContent = "Two-way road. Set Opposite lanes to 0 to make it one-way, or split it into one-way roads to move each side on its own. Click a lane node to set its taper.";
+      else if (selectedRoad) hint.textContent = "Raise Opposite lanes to make this road two-way. Click a lane node to set its taper. Drag a lane's end node onto another lane's start node to join them. Join opposite roads for a two-way road. Option-drag pulls an end free; double-click a node to curve.";
+      else hint.textContent = "Add a road (set Opposite lanes for two-way), or click a road to edit it.";
     }
 
     function selectRoad(road) {
@@ -622,6 +659,21 @@
       }
       host.links.push(...moving.links, { a: target.road.id, ai: target.lane, b: road.id, bi: lane, pair });
       sheet.joints.splice(sheet.joints.indexOf(moving), 1);
+      reanchor(sheet, solved, [host]);
+    }
+    // Moves each joint so its root road ends up where it was before a change.
+    function reanchor(sheet, before, joints) {
+      const after = solve(sheet);
+      for (const joint of joints) {
+        const here = attachments(sheet, joint);
+        const item = here.find(i => i.road.id === joint.root && before.has(`${i.road.id}:${i.e}`))
+          ?? here.find(i => before.has(`${i.road.id}:${i.e}`));
+        if (!item) continue;
+        const was = before.get(`${item.road.id}:${item.e}`);
+        const now = after.get(`${item.road.id}:${item.e}`);
+        joint.x += was.x - now.x;
+        joint.y += was.y - now.y;
+      }
     }
     // After links or roads leave a joint, each still-linked group keeps its own
     // joint, left where it was.
@@ -631,6 +683,7 @@
         sheet.joints.splice(sheet.joints.indexOf(joint), 1);
         return;
       }
+      const results = [joint];
       const remaining = new Map(here.map(item => [item.road.id, item]));
       let first = true;
       while (remaining.size) {
@@ -652,6 +705,7 @@
         const rootItem = here.find(item => item.road.id === rootId);
         const at = before.get(`${rootId}:${rootItem.e}`);
         const target = first ? joint : newJoint(sheet, at, rootId, joint.dir && { ...joint.dir });
+        if (!first) results.push(target);
         Object.assign(target, { x: at.x, y: at.y, root: rootId });
         if (!first) {
           here.filter(item => group.has(item.road.id)).forEach(item => { item.end.joint = target.id; });
@@ -660,6 +714,15 @@
         }
         first = false;
       }
+      // An end left on its own with no curve set goes back to pulling straight.
+      for (const result of results) {
+        const alone = attachments(sheet, result);
+        if (alone.length === 1 && alone[0].end.length == null) {
+          result.dir = null;
+          alone[0].end.sign = 1;
+        }
+      }
+      reanchor(sheet, before, results);
     }
     function detach(sheet, road, e) {
       const joint = jointOf(sheet, road.ends[e].joint);
@@ -762,22 +825,86 @@
         changed();
       });
     });
+    // Deleting a two-way road deletes both sides.
     function deleteRoad() {
       const sheet = sheets.selected;
       if (!sheet?.roads || !selectedRoad) return;
-      const before = solve(sheet);
-      const road = selectedRoad;
-      sheet.roads.splice(sheet.roads.indexOf(road), 1);
-      for (const end of road.ends) {
-        const joint = jointOf(sheet, end.joint);
-        if (!joint) continue;
-        joint.links = joint.links.filter(link => link.a !== road.id && link.b !== road.id);
-        regroup(sheet, joint, before);
-      }
+      removeRoads(sheet, [selectedRoad, pairOf(sheet, selectedRoad)].filter(Boolean));
       selectedRoad = null;
       selectedLane = null;
       changed();
     }
+    function removeRoads(sheet, roads) {
+      const before = solve(sheet);
+      const ids = roads.map(road => road.id);
+      sheet.roads = sheet.roads.filter(road => !ids.includes(road.id));
+      const joints = new Set(roads.flatMap(road => road.ends.map(end => jointOf(sheet, end.joint))).filter(Boolean));
+      for (const joint of joints) {
+        joint.links = joint.links.filter(link => !ids.includes(link.a) && !ids.includes(link.b));
+        regroup(sheet, joint, before);
+      }
+    }
+    // Adds the opposite side of a two-way road on the shared joints. With `keep`,
+    // the existing road stays put; otherwise only joints shared with other roads
+    // hold still, so a newly drawn road's clicked line becomes its centerline.
+    function addOpposite(sheet, road, lanes, median, keep) {
+      const before = solve(sheet);
+      const joints = road.ends.map(end => jointOf(sheet, end.joint));
+      const shared = joints.filter(joint => attachments(sheet, joint).length > 1);
+      const opposite = {
+        id: nextId(sheet.roads), lanes, laneWidth: road.laneWidth,
+        ends: [1, 0].map(e => ({ joint: road.ends[e].joint, sign: -road.ends[e].sign, length: road.ends[e].length })),
+      };
+      joints.forEach((joint, e) => {
+        if (!joint.dir) {
+          const travel = travelAt(road, e, before);
+          joint.dir = { x: travel.x * road.ends[e].sign, y: travel.y * road.ends[e].sign };
+        }
+        joint.links.push({ a: road.id, ai: 0, b: opposite.id, bi: 0, pair: true, median });
+      });
+      sheet.roads.push(opposite);
+      reanchor(sheet, before, keep ? joints : shared);
+      return opposite;
+    }
+    // Separates a two-way road into two one-way roads, left in place.
+    function splitRoad() {
+      const sheet = sheets.selected;
+      const partner = pairOf(sheet, selectedRoad);
+      if (!partner) return;
+      const before = solve(sheet);
+      for (const end of partner.ends) {
+        const joint = jointOf(sheet, end.joint);
+        joint.links = joint.links.filter(link => !(link.pair && [link.a, link.b].includes(partner.id) && [link.a, link.b].includes(selectedRoad.id)));
+        regroup(sheet, joint, before);
+      }
+      changed();
+    }
+    document.getElementById("splitRoad").addEventListener("click", splitRoad);
+    oppositeInput.addEventListener("input", () => {
+      const lanes = Math.round(Number(oppositeInput.value));
+      if (!(lanes >= 0 && lanes <= MAX_LANES)) return;
+      defaults.opposite = lanes;
+      const sheet = sheets.selected;
+      if (!selectedRoad || !sheet) return render();
+      const partner = pairOf(sheet, selectedRoad);
+      if (partner && !lanes) removeRoads(sheet, [partner]);
+      else if (partner) partner.lanes = lanes;
+      else if (lanes) addOpposite(sheet, selectedRoad, lanes, defaults.median, true);
+      changed();
+    });
+    oppositeInput.addEventListener("change", () => {
+      oppositeInput.value = selectedRoad ? pairOf(sheets.selected, selectedRoad)?.lanes ?? 0 : defaults.opposite;
+    });
+    medianInput.addEventListener("input", () => {
+      const feet = Number(medianInput.value);
+      if (!(feet >= 0 && feet <= MAX_MEDIAN_FEET)) return;
+      defaults.median = feet;
+      const sheet = sheets.selected;
+      const partner = sheet && pairOf(sheet, selectedRoad);
+      if (!partner) return render();
+      pairLinks(sheet, selectedRoad, partner).forEach(link => { link.median = feet; });
+      changed();
+    });
     function setTaper(changes) {
       if (!selectedRoad || !selectedLane) return;
       const key = `${selectedLane.e}:${selectedLane.lane}`;
@@ -800,6 +927,9 @@
         defaults[key] = value;
         if (selectedRoad) {
           selectedRoad[key] = value;
+          // Both sides of a two-way road share a lane width.
+          const partner = key === "laneWidth" && pairOf(sheets.selected, selectedRoad);
+          if (partner) partner.laneWidth = value;
           changed();
         } else render();
       });
@@ -855,6 +985,7 @@
       [start, point].forEach((p, e) => {
         if (p.target) connect(sheet, road, e, Math.min(p.target.lane, road.lanes - 1), p.target);
       });
+      if (defaults.opposite) addOpposite(sheet, road, defaults.opposite, defaults.median, false);
       drawing = null;
       snapTarget = null;
       selectedRoad = road;

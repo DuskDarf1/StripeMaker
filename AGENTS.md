@@ -52,9 +52,19 @@ MUTCD-compliant pavement markings onto them.
   road's sideways position, so joined ends line up (the joining road turns to
   match) and then move together. Joints can hold several roads for splits,
   merges, lane adds, and lane drops.
-- Two-way roads are two one-way roads side by side: joining a road whose travel
-  is opposite places it left edge to left edge, forming the double yellow. Each
-  side keeps its own lane count.
+- Two-way roads are two one-way roads side by side, left edge to left edge,
+  forming the double yellow (or a median between them). They're edited as one
+  road: **Opposite lanes** (0 = one-way) draws both sides in one click-click
+  with the clicked line as the centerline, adds the other side to a selected
+  one-way road in place, or removes it at 0. **Median (ft)** separates the two
+  sides while they still move together (0 = double yellow). **Split into
+  One-Way Roads** unpairs them in place so each side moves on its own.
+  Selecting either side outlines both; lane width and Delete apply to both
+  sides; Lanes applies to the clicked side. A two-way road's joints sit on its
+  centerline, so changing lanes grows outward and the centerline stays put.
+  Dragging a road's lane node onto an opposite road's node also pairs them.
+- Structural changes (split, detach, delete) keep every remaining road where it
+  was; a road end left alone without a set curve goes back to pulling straight.
 - Option/Alt-drag pulls a road end off its joint. Curve handles turn the whole
   joint, keeping joined roads lined up.
 - Roads are 100% opaque asphalt. Lane nodes are small yellow steering wheels,
