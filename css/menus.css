@@ -126,7 +126,7 @@ hr { border: 0; border-top: 1px solid rgba(var(--baseColor), 0.45); margin: 0.75
 .scaleOverlay svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .scaleLineShadow { stroke: #252628; stroke-width: 4px; }
 .scaleLine { stroke: #ffdf00; stroke-width: 2px; }
-button.scaleHandle, button.roadNode {
+button.scaleHandle {
   position: absolute;
   width: 24px;
   height: 24px;
@@ -140,7 +140,7 @@ button.scaleHandle, button.roadNode {
   touch-action: none;
   pointer-events: auto;
 }
-button.scaleHandle::after, button.roadNode::after {
+button.scaleHandle::after {
   content: "";
   position: absolute;
   top: 50%;
@@ -188,14 +188,32 @@ button.scaleHandle:focus-visible, button.roadNode:focus-visible { outline: 2px s
 /* Elements: roads live in sheet pixels so markings are true size; outlines and
    handles stay a constant screen size. */
 .roadLayer { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-.roadBand { fill: rgba(37, 38, 40, 0.25); stroke: rgba(255, 255, 255, 0.7); stroke-width: calc(1px / var(--zoom, 1)); }
-#workspace.elementsActive .roadBand.selected { stroke: #ffdf00; stroke-width: calc(2px / var(--zoom, 1)); }
-.roadBand.preview { stroke: #ffdf00; stroke-dasharray: calc(6px / var(--zoom, 1)); }
-.laneLine { fill: none; stroke: #fff; }
+.roadBand { fill: #3a3b3d; stroke: #3a3b3d; stroke-width: calc(1px / var(--zoom, 1)); }
+.roadBand.preview, .roadMarkings .preview { opacity: 0.75; }
+.roadMarking { fill: none; }
+.roadSelection { fill: none; stroke: none; }
+#workspace.elementsActive .roadSelection { stroke: #ffdf00; stroke-width: calc(2px / var(--zoom, 1)); }
+.roadSnap { fill: none; stroke: #ffdf00; stroke-width: 2px; filter: drop-shadow(0 0 1px #252628); }
+/* Nodes are little steering wheels. */
+button.roadNode {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23665900' stroke-width='4.5' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M3.5 11h6M14.5 11h6M12 14.5v6'/%3E%3C/g%3E%3Cg fill='none' stroke='%23ffdf00' stroke-width='2.5' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M3.5 11h6M14.5 11h6M12 14.5v6'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='3.2' fill='%23ffdf00' stroke='%23665900' stroke-width='1'/%3E%3C/svg%3E") center / contain no-repeat;
+  border: 0;
+  border-radius: 50%;
+  cursor: move;
+  touch-action: none;
+  pointer-events: auto;
+}
+button.roadNode.preview { opacity: 0.85; }
 .roadOverlay { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .roadOverlay svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .roadControlLine { stroke: #ffdf00; stroke-width: 1.5px; filter: drop-shadow(0 0 1px #252628); }
 button.roadNode.preview { pointer-events: none; }
+button.roadNode:hover, button.roadNode:active { transform: translate(-50%, -50%) rotate(-25deg); transition: transform 0.15s; }
 button.roadControl {
   position: absolute;
   width: 14px;

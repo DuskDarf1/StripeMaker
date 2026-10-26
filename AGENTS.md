@@ -33,28 +33,42 @@ MUTCD-compliant pavement markings onto them.
   Design Manual, and cite the source in code next to the constant.
 - Lane lines: 6 in white skip line, 10 ft stripe / 30 ft gap (FDOT 711-001; pay
   item 710-11-131).
+- Edge lines: 6 in solid; yellow on the left edge, white on the right edge, for
+  one-way and two-way roads alike. A two-way road's centerline is a double
+  yellow: two 6 in solid lines with a 4 in gap (711-001 "Double Solid Lines").
+- Dimensions are to the centerline of markings (711-001). Pavement extends 8 in
+  past the edge of traveled way.
 - Markings are drawn true size in sheet pixels using the sheet's inches per
   pixel, so a road can only be drawn on a sheet that has a scale.
 
 ## Road model
 
-- Roads are one-way: a line of nodes with traffic flowing from start to end.
-  All of a road's lanes move together with its nodes.
-- Planned: nodes join to other roads' nodes. Dragging different roads' nodes
-  together creates lane movements, and joining opposing one-way roads makes
-  two-way facilities. Markings will be editable per road.
+- Roads are one-way: a line between two nodes with traffic flowing from start
+  to end. All of a road's lanes move together with its nodes.
+- Nodes are shared per sheet. Dragging a road's node onto another node (or
+  clicking an existing node while drawing) connects them; moving a shared node
+  moves every road on it. Option/Alt-drag pulls the selected road's end free.
+- Two roads joining the same two nodes in opposite directions form a two-way
+  road: each half sits to the right of the shared line, with its own lane count,
+  and they share one curve. Roads continuing through a node keep a smooth
+  tangent when a curve handle is dragged.
+- Roads are 100% opaque asphalt. Nodes are drawn as small yellow steering wheels.
+- Not yet designed: how lanes line up across a joint between roads (e.g. a
+  two-way half continuing into a one-way road), and per-road marking edits.
 
 ## Current scope
 
 - Elements (editor panel): Add Road, then click a start and end point to draw a
   one-lane, one-way road. Lanes (1–8) and lane width (default 12 ft, 8–20 ft)
   apply to the selected road, or to the next road when none is selected. Lanes
-  are separated by FDOT white skip lane lines only; edge lines are not drawn
-  yet. Click a road to select it; drag its yellow end nodes to move them.
+  are separated by FDOT white skip lane lines, with FDOT edge lines. Click a road to select it; drag its yellow end nodes to move them.
   Double-click a node to show its Bézier handle and drag it to curve the road;
   double-click a handle to straighten that end. Arrow keys nudge a focused
   node or handle; Delete removes the selected road; Escape cancels drawing or
   deselects. Roads belong to the sheet they were drawn on.
+- Persistence: sheets (original files), their order, selection, scale, view,
+  roads, and nodes are saved to IndexedDB (`StripeMaker` database) and restored
+  on reload. Files are written once; small records save shortly after changes.
 
 - Sheets: users upload aerial imagery of the roads they are redesigning. Accept
   GeoTIFF (`.tif`/`.tiff`, the standard ortho download), JPEG, and PNG; several

@@ -6,6 +6,7 @@
   // GeoTIFF ProjLinearUnitsGeoKey codes: metre, international foot, US survey foot.
   const INCHES_PER_UNIT = { 9001: 1 / 0.0254, 9002: 12, 9003: 1200 / 3937 / 0.0254 };
   const MAX_ZOOM = 16;
+  const SAVE_DELAY = 400;
 
   document.addEventListener("DOMContentLoaded", () => {
     const workspace = document.getElementById("workspace");
@@ -89,6 +90,7 @@
       const { scale, x, y } = sheet.view;
       sheet.content.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
       sheet.content.style.setProperty("--zoom", scale);
+      scheduleSave(sheet);
       if (sheet === selected) {
         drawScaleLine();
         document.dispatchEvent(new CustomEvent("sheetview"));
@@ -162,8 +164,120 @@
       stage.replaceChildren(...(sheet ? [sheet.content, overlay, ...overlays] : []));
       workspace.classList.toggle("hasSheet", Boolean(sheet));
       if (sheet && !sheet.view) fitSheet(sheet);
+      else if (sheet) applyView(sheet);
       updateSelection();
+      scheduleSave();
       document.dispatchEvent(new CustomEvent("sheetchange"));
+    }
+
+    // Sheets persist across reloads in IndexedDB. Original files are written once;
+    // scale, view, and roads are small records saved shortly after each change.
+    let database = null;
+    const pendingSaves = new Set();
+    let saveTimer = 0;
+    let restoring = true;
+    function openDatabase() {
+      database ??= new Promise((resolve, reject) => {
+        const request = indexedDB.open("StripeMaker", 1);
+        request.onupgradeneeded = () => {
+          for (const store of ["files", "sheets", "meta"]) request.result.createObjectStore(store);
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return database;
+    }
+    async function transact(mode, work) {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const transaction = db.transaction(["files", "sheets", "meta"], mode);
+        const result = work(transaction);
+        transaction.oncomplete = () => resolve(result);
+        transaction.onerror = transaction.onabort = () => reject(transaction.error);
+      });
+    }
+    const record = sheet => ({
+      name: sheet.name, inchesPerPixel: sheet.inchesPerPixel, view: sheet.view,
+      roads: sheet.roads ?? [], nodes: sheet.nodes ?? [],
+    });
+    function saveFailed(error) {
+      status.textContent = `Couldn't save sheets for next time: ${error?.message || "storage unavailable"}.`;
+    }
+    function scheduleSave(sheet) {
+      if (sheet) pendingSaves.add(sheet);
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(flushSaves, SAVE_DELAY);
+    }
+    function flushSaves() {
+      const saving = [...pendingSaves].filter(sheet => sheets.includes(sheet));
+      pendingSaves.clear();
+      transact("readwrite", transaction => {
+        const store = transaction.objectStore("sheets");
+        saving.forEach(sheet => store.put(record(sheet), sheet.id));
+        // Until restore finishes, the list is partial; keep the saved order intact.
+        if (!restoring) transaction.objectStore("meta").put({ order: sheets.map(sheet => sheet.id), selected: selected?.id ?? null }, "app");
+      }).catch(saveFailed);
+    }
+    function saveFile(sheet) {
+      transact("readwrite", transaction => transaction.objectStore("files").put(sheet.file, sheet.id)).catch(saveFailed);
+      scheduleSave(sheet);
+    }
+    function forget(sheet) {
+      transact("readwrite", transaction => {
+        transaction.objectStore("files").delete(sheet.id);
+        transaction.objectStore("sheets").delete(sheet.id);
+      }).catch(saveFailed);
+      scheduleSave();
+    }
+    async function restore() {
+      let saved;
+      try {
+        saved = await transact("readonly", transaction => {
+          const found = {};
+          const meta = transaction.objectStore("meta").get("app");
+          meta.onsuccess = () => { found.meta = meta.result; };
+          for (const name of ["files", "sheets"]) {
+            const keys = transaction.objectStore(name).getAllKeys();
+            const values = transaction.objectStore(name).getAll();
+            values.onsuccess = () => { found[name] = new Map(keys.result.map((key, i) => [key, values.result[i]])); };
+          }
+          return found;
+        });
+      } catch (error) {
+        restoring = false;
+        saveFailed(error);
+        return;
+      }
+      const order = saved.meta?.order ?? [...saved.sheets.keys()];
+      for (const id of order) {
+        const file = saved.files.get(id);
+        const data = saved.sheets.get(id);
+        if (!file || !data) continue;
+        status.textContent = `Restoring ${data.name}…`;
+        try {
+          const decoded = await decode(file);
+          const view = data.view?.fitted ? null : data.view;
+          const sheet = { ...decoded, ...data, id, file, view, content: decoded.content };
+          nextId = Math.max(nextId, id + 1);
+          sheets.push(sheet);
+          renderList();
+          if (id === saved.meta?.selected || !selected) select(sheet);
+        } catch (error) {
+          status.textContent = `Couldn't restore ${data.name}: ${error?.message || "unknown error"}.`;
+          continue;
+        }
+        status.textContent = "";
+      }
+      restoring = false;
+      scheduleSave();
+    }
+
+    async function decode(file) {
+      const decoded = /\.tiff?$/i.test(file.name) ? await decodeTiff(file) : await decodeImage(file);
+      decoded.content.className = "sheetImage";
+      decoded.content.style.width = `${decoded.width}px`;
+      decoded.content.style.height = `${decoded.height}px`;
+      return decoded;
     }
 
     async function addFiles(files) {
@@ -175,14 +289,12 @@
         status.textContent = `Loading ${file.name}…`;
         uploadButton.disabled = true;
         try {
-          const decoded = /\.tiff?$/i.test(file.name) ? await decodeTiff(file) : await decodeImage(file);
-          decoded.content.className = "sheetImage";
-          decoded.content.style.width = `${decoded.width}px`;
-          decoded.content.style.height = `${decoded.height}px`;
-          const sheet = { id: nextId++, name: file.name.replace(/\.[^.]+$/, ""), ...decoded };
+          const decoded = await decode(file);
+          const sheet = { id: nextId++, name: file.name.replace(/\.[^.]+$/, ""), file, ...decoded };
           sheets.push(sheet);
           renderList();
           select(sheet);
+          saveFile(sheet);
           status.textContent = "";
         } catch (error) {
           status.textContent = `Couldn't read ${file.name}: ${error?.message || "unknown error"}.`;
@@ -203,6 +315,7 @@
       if (index < 0) return;
       const [removed] = sheets.splice(index, 1);
       if (removed.url) URL.revokeObjectURL(removed.url);
+      forget(removed);
       select(sheets[Math.min(index, sheets.length - 1)] ?? null);
       renderList();
     });
@@ -221,6 +334,7 @@
       const [sheet] = sheets.splice(from, 1);
       sheets.splice(insertAt > from ? insertAt - 1 : insertAt, 0, sheet);
       renderList();
+      scheduleSave();
     }
     function dropIndex(clientY) {
       const buttons = listButtons();
@@ -414,6 +528,7 @@
       const inches = Number(scaleInches.value);
       if (!selected || pixels < 1 || !(inches > 0)) return;
       selected.inchesPerPixel = inches / pixels;
+      scheduleSave(selected);
       endScale();
       renderList();
       document.dispatchEvent(new CustomEvent("sheetchange"));
@@ -514,6 +629,7 @@
     const overlays = [];
     (window.StripeMaker ??= {}).sheets = {
       get selected() { return selected; },
+      save: scheduleSave,
       addOverlay(element) {
         overlays.push(element);
         if (selected) stage.append(element);
@@ -526,5 +642,6 @@
         return { x: selected.view.x + point.x * selected.view.scale, y: selected.view.y + point.y * selected.view.scale };
       },
     };
+    restore();
   });
 })();
