@@ -89,7 +89,10 @@
       const { scale, x, y } = sheet.view;
       sheet.content.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
       sheet.content.style.setProperty("--zoom", scale);
-      if (sheet === selected) drawScaleLine();
+      if (sheet === selected) {
+        drawScaleLine();
+        document.dispatchEvent(new CustomEvent("sheetview"));
+      }
     }
     function zoomAt(sheet, factor, clientX, clientY) {
       const box = stage.getBoundingClientRect();
@@ -156,10 +159,11 @@
     function select(sheet) {
       if (sheet !== selected) endScale();
       selected = sheet;
-      stage.replaceChildren(...(sheet ? [sheet.content, overlay] : []));
+      stage.replaceChildren(...(sheet ? [sheet.content, overlay, ...overlays] : []));
       workspace.classList.toggle("hasSheet", Boolean(sheet));
       if (sheet && !sheet.view) fitSheet(sheet);
       updateSelection();
+      document.dispatchEvent(new CustomEvent("sheetchange"));
     }
 
     async function addFiles(files) {
@@ -412,6 +416,7 @@
       selected.inchesPerPixel = inches / pixels;
       endScale();
       renderList();
+      document.dispatchEvent(new CustomEvent("sheetchange"));
     });
     document.getElementById("configBar").addEventListener("click", event => {
       if (event.target.closest("[data-editor]")) endScale();
@@ -500,8 +505,26 @@
     workspace.addEventListener("pointerup", endPointer);
     workspace.addEventListener("pointercancel", endPointer);
     workspace.addEventListener("dblclick", event => {
-      if (selected && !event.target.closest(".scaleHandle")) fitSheet(selected);
+      if (selected && !event.defaultPrevented && !event.target.closest(".scaleHandle, .roadNode, .roadControl")) fitSheet(selected);
     });
     window.addEventListener("resize", () => { if (selected?.view.fitted) fitSheet(selected); });
+
+    // Other tools draw on the selected sheet through this API and the sheetview
+    // (pan/zoom) and sheetchange (selection or scale) events.
+    const overlays = [];
+    (window.StripeMaker ??= {}).sheets = {
+      get selected() { return selected; },
+      addOverlay(element) {
+        overlays.push(element);
+        if (selected) stage.append(element);
+      },
+      toImage(clientX, clientY) {
+        const box = stage.getBoundingClientRect();
+        return { x: (clientX - box.left - selected.view.x) / selected.view.scale, y: (clientY - box.top - selected.view.y) / selected.view.scale };
+      },
+      toScreen(point) {
+        return { x: selected.view.x + point.x * selected.view.scale, y: selected.view.y + point.y * selected.view.scale };
+      },
+    };
   });
 })();

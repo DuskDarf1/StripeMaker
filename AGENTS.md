@@ -16,8 +16,8 @@ MUTCD-compliant pavement markings onto them.
   up-opening popover menus. Do not introduce a new design system, decorative
   cards, or custom UI controls.
 - Bottom toolbar, in order: Sheets (an up-opening popover like SignalMaker's
-  Heads tab), Markings, Intersections, Signs, Simulator, Levels, then Copy, Download, Dark/light
-  mode, and Clear all.
+  Heads tab), Elements, Markings, Intersections, Signs, Simulator, Levels, then
+  Copy, Download, Dark/light mode, and Clear all.
 - Follow SignalMaker's automatic theme behavior: use the system theme at startup
   and respond to system changes live. Manual toggles are session overrides;
   resume following the system when it matches the override. Do not persist theme
@@ -25,7 +25,36 @@ MUTCD-compliant pavement markings onto them.
 - Keep narrow-screen behavior usable and retain accessible control names and
   visible keyboard focus.
 
+## Pavement marking standard
+
+- **Pavement markings follow FDOT** (Florida Department of Transportation), not
+  generic MUTCD defaults. Take every marking dimension, pattern, and color from
+  the current FDOT Standard Plans (Index 711-001, Pavement Markings) and the FDOT
+  Design Manual, and cite the source in code next to the constant.
+- Lane lines: 6 in white skip line, 10 ft stripe / 30 ft gap (FDOT 711-001; pay
+  item 710-11-131).
+- Markings are drawn true size in sheet pixels using the sheet's inches per
+  pixel, so a road can only be drawn on a sheet that has a scale.
+
+## Road model
+
+- Roads are one-way: a line of nodes with traffic flowing from start to end.
+  All of a road's lanes move together with its nodes.
+- Planned: nodes join to other roads' nodes. Dragging different roads' nodes
+  together creates lane movements, and joining opposing one-way roads makes
+  two-way facilities. Markings will be editable per road.
+
 ## Current scope
+
+- Elements (editor panel): Add Road, then click a start and end point to draw a
+  one-lane, one-way road. Lanes (1–8) and lane width (default 12 ft, 8–20 ft)
+  apply to the selected road, or to the next road when none is selected. Lanes
+  are separated by FDOT white skip lane lines only; edge lines are not drawn
+  yet. Click a road to select it; drag its yellow end nodes to move them.
+  Double-click a node to show its Bézier handle and drag it to curve the road;
+  double-click a handle to straighten that end. Arrow keys nudge a focused
+  node or handle; Delete removes the selected road; Escape cancels drawing or
+  deselects. Roads belong to the sheet they were drawn on.
 
 - Sheets: users upload aerial imagery of the roads they are redesigning. Accept
   GeoTIFF (`.tif`/`.tiff`, the standard ortho download), JPEG, and PNG; several

@@ -81,7 +81,7 @@
       prefersDarkScheme.addListener(syncThemeWithSystem);
     }
 
-    window.StripeMaker = { showEditor };
+    Object.assign(window.StripeMaker ??= {}, { showEditor });
 
     // Copy, Download, and Clear all are placeholders until their features are requested.
   });

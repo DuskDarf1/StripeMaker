@@ -8,6 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='86' font-size='86' text-anchor='middle'%3E%F0%9F%9B%A3%EF%B8%8F%3C/text%3E%3C/svg%3E" />
   <script src="js/vendor/geotiff.js"></script>
   <script src="js/sheets.js"></script>
+  <script src="js/elements.js"></script>
   <script src="js/main.js"></script>
   <link href="css/page.css" rel="stylesheet" />
   <link href="css/form.css" rel="stylesheet" />
@@ -20,6 +21,30 @@
   </main>
 
   <div class="modals">
+    <section id="elementsEditor" class="editor" aria-labelledby="elementsTitle" hidden>
+      <div class="editorBar">
+        <h2 id="elementsTitle" class="editorTitle" tabindex="-1">
+          <span class="material-symbols-outlined" aria-hidden="true">road</span>
+          Elements
+        </h2>
+      </div>
+      <div class="editorContent">
+        <div class="headActions">
+          <button type="button" id="addRoad" aria-pressed="false">Add Road</button>
+          <button type="button" id="deleteRoad" disabled>Delete</button>
+        </div>
+        <p id="elementsHint" class="elementsHint" aria-live="polite"></p>
+        <div class="fieldRow">
+          <label for="roadLanes">Lanes</label>
+          <input id="roadLanes" type="number" min="1" max="8" step="1" value="1" />
+        </div>
+        <div class="fieldRow">
+          <label for="roadLaneWidth">Lane width (ft)</label>
+          <input id="roadLaneWidth" type="number" min="8" max="20" step="0.5" value="12" />
+        </div>
+      </div>
+    </section>
+
     <section id="markingsEditor" class="editor" aria-labelledby="markingsTitle" hidden>
       <div class="editorBar">
         <h2 id="markingsTitle" class="editorTitle" tabindex="-1">
@@ -118,6 +143,11 @@
       <span class="material-symbols-outlined" aria-hidden="true">layers</span>
       <span class="configLabel">Sheets</span>
       <span class="material-symbols-outlined dropdownIcon" aria-hidden="true">expand_more</span>
+    </button>
+    <button type="button" class="configOption" data-editor="elementsEditor"
+      aria-label="Elements" aria-controls="elementsEditor" aria-expanded="false" title="Elements">
+      <span class="material-symbols-outlined" aria-hidden="true">road</span>
+      <span class="configLabel">Elements</span>
     </button>
     <button type="button" class="configOption" data-editor="markingsEditor"
       aria-label="Markings" aria-controls="markingsEditor" aria-expanded="false" title="Markings">
