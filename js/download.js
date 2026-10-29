@@ -10,7 +10,10 @@
   const PDF_PIXELS_PER_INCH = 150;     // PDF page size: the image printed at 150 ppi
   const PDF_MAX_POINTS = 14400;        // PDF pages are at most 200 in on a side
   const PDF_JPEG_QUALITY = 0.92;
-  const ROAD_STYLES = `.roadBand{fill:#3a3b3d;stroke:#3a3b3d;stroke-width:0.6px}
+  const TITLE_SLANT = 0.21;            // about 12°, like slanted plan-sheet lettering
+  const ASPHALT = "#3a3b3d";
+  const BAND_EDGE = 0.6;               // pavement outline width, sheet pixels
+  const ROAD_STYLES = `.roadBand{fill:${ASPHALT};stroke:${ASPHALT};stroke-width:${BAND_EDGE}px}
     .roadMarking{fill:none}.roadOutline,.preview{display:none}`;
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -91,6 +94,20 @@
       return image.decode().then(() => image).finally(() => URL.revokeObjectURL(url));
     }
 
+    // The sheet itself: GeoTIFF tiles or a single image.
+    function drawSheet(context, sheet, scale, top) {
+      context.imageSmoothingQuality = "high";
+      for (const part of sheet.content.querySelectorAll("canvas, img")) {
+        const x = parseFloat(part.style.left) || 0;
+        const y = parseFloat(part.style.top) || 0;
+        const w = part.width || part.naturalWidth;
+        const h = part.height || part.naturalHeight;
+        context.drawImage(part, x * scale, top + y * scale, w * scale, h * scale);
+      }
+    }
+    const titleSize = header => Math.round(header * 0.5);
+    const ruleSize = header => Math.max(1, Math.round(header / 30));
+
     async function render(sheet) {
       const scale = width / sheet.width;
       const header = headerHeight(width);
@@ -100,48 +117,157 @@
       const context = canvas.getContext("2d");
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, canvas.width, canvas.height);
-      // The sheet: GeoTIFF tiles or a single image.
-      context.imageSmoothingQuality = "high";
-      for (const part of sheet.content.querySelectorAll("canvas, img")) {
-        const x = parseFloat(part.style.left) || 0;
-        const y = parseFloat(part.style.top) || 0;
-        const w = part.width || part.naturalWidth;
-        const h = part.height || part.naturalHeight;
-        context.drawImage(part, x * scale, header + y * scale, w * scale, h * scale);
-      }
+      drawSheet(context, sheet, scale, header);
       const roads = await roadsImage(sheet);
       if (roads) context.drawImage(roads, 0, header, width, canvas.height - header);
       // Title header: osifont lettering, slanted like plan-sheet text, over a rule.
       await document.fonts.load(`italic ${header}px osifont`);
-      const fontSize = Math.round(header * 0.5);
       context.fillStyle = "#000000";
-      context.font = `italic ${fontSize}px osifont, sans-serif`;
+      context.font = `italic ${titleSize(header)}px osifont, sans-serif`;
       context.textBaseline = "middle";
       context.fillText(sheet.name.toUpperCase(), header * 0.4, header / 2, width - header * 0.8);
-      context.fillRect(0, header - Math.max(1, Math.round(header / 30)), width, Math.max(1, Math.round(header / 30)));
+      context.fillRect(0, header - ruleSize(header), width, ruleSize(header));
       return canvas;
     }
 
     const toBlob = (canvas, type, quality) => new Promise((resolve, reject) => canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error("The image was too large to save."))), type, quality));
-    // A one-page PDF holding the image as a JPEG, the page sized to print it at
-    // 150 ppi (smaller if that would pass the 200 in page limit).
-    async function pdfBlob(canvas, title) {
-      const jpeg = new Uint8Array(await (await toBlob(canvas, "image/jpeg", PDF_JPEG_QUALITY)).arrayBuffer());
-      const fit = Math.min(72 / PDF_PIXELS_PER_INCH, PDF_MAX_POINTS / canvas.width, PDF_MAX_POINTS / canvas.height);
-      const pageWidth = (canvas.width * fit).toFixed(2);
-      const pageHeight = (canvas.height * fit).toFixed(2);
-      const drawing = `q ${pageWidth} 0 0 ${pageHeight} 0 0 cm /Im0 Do Q`;
+    async function deflate(bytes) {
+      const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate"));
+      return new Uint8Array(await new Response(stream).arrayBuffer());
+    }
+    const n = value => (Math.round(value * 100) / 100).toString();
+    const rgb = hex => {
+      const value = parseInt(hex.replace("#", "").replace(/^(.)(.)(.)$/, "$1$1$2$2$3$3"), 16);
+      return [value >> 16, (value >> 8) & 255, value & 255].map(c => n(c / 255)).join(" ");
+    };
+    // SVG path data as drawn by the road layer (M, L, and Z only) to PDF path ops.
+    const pathOps = d => d.match(/[MLZ]|-?\d*\.?\d+(?:e-?\d+)?/gi).reduce((ops, token, i, tokens) => {
+      if (token === "Z" || token === "z") ops.push("h");
+      else if (/[ML]/i.test(token)) {
+        for (let j = i + 1; j + 1 < tokens.length && !/[MLZ]/i.test(tokens[j]); j += 2) {
+          ops.push(`${n(+tokens[j])} ${n(+tokens[j + 1])} ${token.toUpperCase() === "M" && j === i + 1 ? "m" : "l"}`);
+        }
+      }
+      return ops;
+    }, []).join("\n");
+    // The road layer as PDF vector drawing, in sheet pixels: pavement, markings,
+    // gore stripes clipped to their gores, and each road's lines clipped away from
+    // the roads joined to it (the SVG mask, as one even-odd clip per hole).
+    function roadOps(svg) {
+      const out = [];
+      const byId = id => svg.querySelector(`[id="${id.replace(/^url\(#|\)$/g, "")}"]`);
+      const walk = node => {
+        if (!(node instanceof SVGElement)) return;
+        const name = node.tagName.toLowerCase();
+        const classes = node.classList;
+        if (["mask", "clippath", "style", "defs"].includes(name)
+          || classes.contains("roadSelection") || classes.contains("roadOutline") || classes.contains("preview")) return;
+        if (name === "g") {
+          out.push("q");
+          const mask = node.getAttribute("mask") && byId(node.getAttribute("mask"));
+          if (mask) {
+            const all = mask.querySelector("rect");
+            const box = ["x", "y", "width", "height"].map(key => n(+all.getAttribute(key))).join(" ");
+            for (const hole of mask.querySelectorAll("path")) out.push(`${box} re\n${pathOps(hole.getAttribute("d"))}\nW* n`);
+          }
+          const clip = node.getAttribute("clip-path") && byId(node.getAttribute("clip-path"));
+          if (clip) for (const shape of clip.querySelectorAll("path")) out.push(`${pathOps(shape.getAttribute("d"))}\nW n`);
+          [...node.children].forEach(walk);
+          out.push("Q");
+          return;
+        }
+        if (name !== "path") return;
+        const band = classes.contains("roadBand");
+        const fill = node.getAttribute("fill") ?? (band ? ASPHALT : null);
+        const stroke = node.getAttribute("stroke") ?? (band ? ASPHALT : null);
+        const ops = [pathOps(node.getAttribute("d"))];
+        if (stroke) {
+          ops.unshift(`${rgb(stroke)} RG ${n(+(node.getAttribute("stroke-width") ?? BAND_EDGE))} w 0 j 4 M`);  // miter joins, SVG's miter limit
+          const dash = node.getAttribute("stroke-dasharray");
+          ops.unshift(dash ? `[${dash.split(/[\s,]+/).map(v => n(+v)).join(" ")}] ${n(+(node.getAttribute("stroke-dashoffset") ?? 0))} d` : "[] 0 d");
+        }
+        if (fill && fill !== "none") ops.unshift(`${rgb(fill)} rg`);
+        ops.push(fill && fill !== "none" ? (stroke ? "B" : "f") : "S");
+        out.push(ops.join("\n"));
+      };
+      [...svg.children].forEach(walk);
+      return out.join("\n");
+    }
+    // WinAnsi codes for the title, since the embedded font uses that encoding.
+    const WIN_ANSI_EXTRA = "€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f\u0090‘’“”•–—˜™š›œ\u009džŸ";
+    const winAnsi = char => {
+      const code = char.charCodeAt(0);
+      if ((code >= 32 && code < 127) || (code >= 160 && code <= 255)) return code;
+      const extra = WIN_ANSI_EXTRA.indexOf(char);
+      return extra >= 0 ? 128 + extra : 63;
+    };
+    // A one-page PDF: the sheet image under vector roads and markings, with the
+    // title in embedded osifont. The page prints the chosen width at 150 ppi
+    // (smaller if that would pass the 200 in page limit).
+    async function pdfBlob(sheet) {
+      const header = headerHeight(width);
+      const imageHeight = Math.round(sheet.height * width / sheet.width);
+      const fit = Math.min(72 / PDF_PIXELS_PER_INCH, PDF_MAX_POINTS / width, PDF_MAX_POINTS / (imageHeight + header));
+      const pageWidth = width * fit;
+      const pageHeight = (imageHeight + header) * fit;
+      const headerPoints = header * fit;
+      // The sheet image alone, at the chosen width.
+      const photo = document.createElement("canvas");
+      photo.width = width;
+      photo.height = imageHeight;
+      const context = photo.getContext("2d");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, imageHeight);
+      drawSheet(context, sheet, width / sheet.width, 0);
+      const jpeg = new Uint8Array(await (await toBlob(photo, "image/jpeg", PDF_JPEG_QUALITY)).arrayBuffer());
+      // Title widths come from the loaded font, in thousandths of an em.
+      await document.fonts.load("italic 100px osifont");
+      const measure = document.createElement("canvas").getContext("2d");
+      measure.font = "1000px osifont";
+      const widths = Array.from({ length: 224 }, (_, i) => {
+        const code = i + 32;
+        const char = code >= 128 && code < 160 ? WIN_ANSI_EXTRA[code - 128] : String.fromCharCode(code);
+        return Math.round(measure.measureText(char).width);
+      });
+      const title = [...sheet.name.toUpperCase()].map(winAnsi);
+      const size = titleSize(header) * fit;
+      const textWidth = title.reduce((sum, code) => sum + widths[code - 32], 0) / 1000 * size;
+      const room = (width - header * 0.8) * fit;
+      const squeeze = textWidth > room ? (room / textWidth) * 100 : 100;
+      const literal = `(${title.map(code => (code === 40 || code === 41 || code === 92 ? `\\${String.fromCharCode(code)}`
+        : code < 127 ? String.fromCharCode(code) : `\\${code.toString(8).padStart(3, "0")}`)).join("")})`;
+      const k = pageWidth / sheet.width;
+      const content = [
+        "1 1 1 rg", `0 0 ${n(pageWidth)} ${n(pageHeight)} re f`,
+        // Sheet pixels, y down, below the header; everything clipped to the sheet.
+        "q", `${n(k)} 0 0 ${n(-k)} 0 ${n(pageHeight - headerPoints)} cm`,
+        `0 0 ${sheet.width} ${sheet.height} re W n`,
+        "q", `${sheet.width} 0 0 ${-sheet.height} 0 ${sheet.height} cm`, "/Im0 Do", "Q",
+        sheet.roadLayer ? roadOps(sheet.roadLayer) : "",
+        "Q",
+        // Header rule and slanted title.
+        "0 0 0 rg", `0 ${n(pageHeight - headerPoints)} ${n(pageWidth)} ${n(ruleSize(header) * fit)} re f`,
+        "BT", `/F1 1 Tf ${n(squeeze)} Tz`,
+        `${n(size)} 0 ${n(size * TITLE_SLANT)} ${n(size)} ${n(header * 0.4 * fit)} ${n(pageHeight - headerPoints / 2 - size * 0.35)} Tm`,
+        `${literal} Tj`, "ET",
+      ].join("\n");
+      const encoder = new TextEncoder();
+      const contentBytes = await deflate(encoder.encode(content));
+      const fontFile = new Uint8Array(await (await fetch("fonts/osifont.ttf")).arrayBuffer());
+      const fontBytes = await deflate(fontFile);
       // The title as a UTF-16BE text string, so any characters survive.
-      const text = `<FEFF${title.split("").map(c => c.charCodeAt(0).toString(16).padStart(4, "0")).join("").toUpperCase()}>`;
+      const info = `<FEFF${sheet.name.split("").map(c => c.charCodeAt(0).toString(16).padStart(4, "0")).join("").toUpperCase()}>`;
       const objects = [
         ["<< /Type /Catalog /Pages 2 0 R >>"],
         ["<< /Type /Pages /Kids [3 0 R] /Count 1 >>"],
-        [`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`],
-        [`<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`, jpeg, "\nendstream"],
-        [`<< /Length ${drawing.length} >>\nstream\n${drawing}\nendstream`],
-        [`<< /Title ${text} /Producer (StripeMaker) >>`],
+        [`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(pageWidth)} ${n(pageHeight)}] /Resources << /XObject << /Im0 4 0 R >> /Font << /F1 7 0 R >> >> /Contents 5 0 R >>`],
+        [`<< /Type /XObject /Subtype /Image /Width ${width} /Height ${imageHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`, jpeg, "\nendstream"],
+        [`<< /Length ${contentBytes.length} /Filter /FlateDecode >>\nstream\n`, contentBytes, "\nendstream"],
+        [`<< /Title ${info} /Producer (StripeMaker) >>`],
+        [`<< /Type /Font /Subtype /TrueType /BaseFont /Osifont /FirstChar 32 /LastChar 255 /Widths [${widths.join(" ")}] /Encoding /WinAnsiEncoding /FontDescriptor 8 0 R >>`],
+        ["<< /Type /FontDescriptor /FontName /Osifont /Flags 32 /FontBBox [-200 -250 1200 1000] /ItalicAngle 0 /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 /FontFile2 9 0 R >>"],
+        [`<< /Length ${fontBytes.length} /Length1 ${fontFile.length} /Filter /FlateDecode >>\nstream\n`, fontBytes, "\nendstream"],
       ];
-      const encoder = new TextEncoder();
       const parts = [encoder.encode("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n")];
       let length = parts[0].length;
       const offsets = [];
@@ -165,8 +291,7 @@
       status.textContent = "Preparing download…";
       update();
       try {
-        const canvas = await render(sheet);
-        const blob = format === "pdf" ? await pdfBlob(canvas, sheet.name) : await toBlob(canvas, "image/png");
+        const blob = format === "pdf" ? await pdfBlob(sheet) : await toBlob(await render(sheet), "image/png");
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = `${sheet.name}.${format}`;

@@ -208,10 +208,17 @@ MUTCD-compliant pavement markings onto them.
   sheet's own width and the browser's canvas limits; the readout shows the full
   size including the header. The header lettering is osifont (an ISO 3098 CAD
   font, `fonts/osifont.woff`, GPL-3 with font exception, see
-  `fonts/osifont.LICENSE`), slanted like engineering plan-sheet text. The PDF
-  is written directly (no library): one page holding the same image as a JPEG,
-  sized to print at 150 ppi (capped at the 200 in PDF page limit), with the
-  sheet's name as the document title.
+  `fonts/osifont.LICENSE`), slanted like engineering plan-sheet text.
+- **PDFs are vector.** The PDF is written directly (no library): only the sheet
+  image is raster (a JPEG at the chosen width); every road and marking is
+  converted from the road layer's SVG into PDF vector paths (fills, strokes,
+  dash patterns and phase, clip paths, and each road's joined-road mask as
+  successive even-odd clips), and the title is real text in embedded osifont
+  (`fonts/osifont.ttf`, WinAnsi encoding). Draw new markings into the road
+  layer as SVG paths (M/L/Z path data, fill/stroke attributes or the roadBand
+  class, `clip-path`/`mask` on groups) so they export to PDF as vectors too.
+  The page prints the chosen width at 150 ppi (capped at the 200 in PDF page
+  limit); the document title is the sheet's name.
 - Markings, Intersections, Signs, Simulator, Levels, Copy, and Clear all are
   placeholders and do nothing yet. Dark/light mode, Undo, Redo, and Download are
   functional.
