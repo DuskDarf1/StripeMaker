@@ -17,7 +17,8 @@ MUTCD-compliant pavement markings onto them.
   cards, or custom UI controls.
 - Bottom toolbar, in order: Sheets (an up-opening popover like SignalMaker's
   Heads tab), Elements, Markings, Intersections, Signs, Simulator, Levels, then
-  Copy, Download, Dark/light mode, Undo, Redo, and Clear all.
+  Copy, Download (an up-opening popover), Dark/light mode, Undo, Redo, and Clear
+  all.
 - Follow SignalMaker's automatic theme behavior: use the system theme at startup
   and respond to system changes live. Manual toggles are session overrides;
   resume following the system when it matches the override. Do not persist theme
@@ -41,7 +42,9 @@ MUTCD-compliant pavement markings onto them.
 - Gores and painted medians (711-001 sheet 8). "Traffic Channelization at
   Gore" for same-direction splits and merges: 8" white gore lines, 18" white
   chevrons at 45° pointing back at approaching traffic, 20 ft apart. "Markings
-  for Traffic Separation" for opposite directions: 18" yellow diagonals at 45°,
+  for Traffic Separation" for opposite directions: 18" yellow diagonals at 45°
+  (moving away from the tip, each runs from the arriving side toward the
+  departing side),
   spaced Y by posted speed (10 ft at 30 mph or less, 20 ft at 35–40, 30 ft at 45,
   40 ft at 50 or more), edged in 6" double yellow on both sides (each road's
   yellow edge plus a second line 10" inside it, meeting at the tip).
@@ -115,6 +118,14 @@ MUTCD-compliant pavement markings onto them.
   right (left if there's no room), follows the node while panning or zooming,
   and supports arrow keys, Home/End, Escape, and Tab. New common node actions
   belong in this menu rather than new panel tools.
+- **Branching off an edge line:** while drawing, a road's start or end also
+  snaps to any other road's edge line (away from its ends; only the outer edges
+  of a two-way road; not while Opposite lanes is set). The road is cut there
+  into two joined roads (shape kept exactly; a two-way road is cut on both
+  sides) and the new road sits beside it, edge line on edge line, so its lanes
+  split off (start) or merge in (end) with any lane count and no taper unless
+  Auto tapers is on. Links may name a road's "L" or "R" edge instead of a lane
+  to join roads edge to edge. A gore icon appears between the roads.
 - Lane nodes are drawn slightly inside their road's end so joined roads' nodes
   don't cover each other; snapping accepts either the drawn node or the true
   lane end.
@@ -178,14 +189,22 @@ MUTCD-compliant pavement markings onto them.
 - Workspace navigation: trackpad pinch (ctrl+wheel or Safari gestures) zooms
   smoothly, two-finger scroll pans, a mouse wheel zooms, drag pans, touch
   pinch zooms, and double-click refits.
-- Markings, Intersections, Signs, Simulator, Levels, Copy, Download, and Clear
-  all are placeholders and do nothing yet. Dark/light mode, Undo, and Redo are
+- Download (`js/download.js`) saves the selected sheet as a PNG: the sheet
+  image with its roads and markings (no selection outlines or previews), under
+  a white header with the sheet's title in capitals and a rule below it. A width
+  slider (SignalMaker's slider + number pair) sets the output size, up to the
+  sheet's own width and the browser's canvas limits; the readout shows the full
+  size including the header. The header lettering is osifont (an ISO 3098 CAD
+  font, `fonts/osifont.woff`, GPL-3 with font exception, see
+  `fonts/osifont.LICENSE`), slanted like engineering plan-sheet text.
+- Markings, Intersections, Signs, Simulator, Levels, Copy, and Clear all are
+  placeholders and do nothing yet. Dark/light mode, Undo, Redo, and Download are
   functional.
 
 ## Implementation
 
 - Use plain HTML, CSS, and JavaScript. No framework or build step is needed.
   Third-party libraries are vendored in `js/vendor/` with their licenses
-  (geotiff.js 3.0.5, MIT).
+  (geotiff.js 3.0.5, MIT). Fonts are vendored in `fonts/` with their licenses.
 - Only modify StripeMaker. Leave SignalMaker and the SignMaker projects untouched.
 - Preserve the inherited GPL license and attribution when reusing their UI.
