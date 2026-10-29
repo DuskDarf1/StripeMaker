@@ -10,6 +10,7 @@
   <script src="js/history.js"></script>
   <script src="js/sheets.js"></script>
   <script src="js/elements.js"></script>
+  <script src="js/download.js"></script>
   <script src="js/main.js"></script>
   <link href="css/page.css" rel="stylesheet" />
   <link href="css/form.css" rel="stylesheet" />
@@ -173,6 +174,24 @@
 
   <menu id="nodeMenu" class="nodeMenu" role="menu" aria-label="Lane node actions" hidden></menu>
 
+  <section id="downloadMenu" class="headsMenu" aria-labelledby="downloadTitle" hidden>
+    <div class="headPopoverHeader">
+      <h2 id="downloadTitle">Download</h2>
+      <span class="headPopoverHint">PNG</span>
+    </div>
+    <p id="downloadSheetName"></p>
+    <label for="downloadWidth" class="downloadLabel">Width (px)</label>
+    <div class="dimensionInputs">
+      <input id="downloadWidth" type="range" min="500" max="4096" step="1" value="4096" aria-describedby="downloadSize" />
+      <input id="downloadWidthValue" type="number" min="500" max="4096" step="1" value="4096" aria-label="Download width in pixels" />
+    </div>
+    <p id="downloadSize" class="headPopoverHint"></p>
+    <div class="headActions">
+      <button type="button" id="downloadSheet" disabled>Download Sheet</button>
+    </div>
+    <p id="downloadStatus" role="status" aria-live="polite"></p>
+  </section>
+
   <section id="sheetsMenu" class="headsMenu" aria-labelledby="sheetsTitle" hidden>
     <div class="headPopoverHeader">
       <h2 id="sheetsTitle">Sheets</h2>
@@ -234,8 +253,10 @@
     <button type="button" id="copy" class="configOption" aria-label="Copy" title="Copy">
       <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
     </button>
-    <button type="button" id="download" class="configOption" aria-label="Download" title="Download">
+    <button type="button" id="download" class="configOption" data-editor="downloadMenu"
+      aria-label="Download" aria-controls="downloadMenu" aria-expanded="false" title="Download">
       <span class="material-symbols-outlined" aria-hidden="true">download</span>
+      <span class="material-symbols-outlined dropdownIcon" aria-hidden="true">expand_more</span>
     </button>
     <button type="button" id="darkMode" class="configOption" aria-label="Dark mode"
       aria-pressed="false" title="Dark mode">

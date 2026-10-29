@@ -10,7 +10,7 @@
     const toolbar = document.getElementById("configBar");
     const buttons = [...toolbar.querySelectorAll("[data-editor]")];
 
-    const popovers = ['sheetsMenu'].map(id => ({
+    const popovers = ['sheetsMenu', 'downloadMenu'].map(id => ({
       menu: document.getElementById(id), button: buttons.find(button => button.dataset.editor === id),
     }));
     function positionPopovers() {
@@ -83,6 +83,6 @@
 
     Object.assign(window.StripeMaker ??= {}, { showEditor });
 
-    // Copy, Download, and Clear all are placeholders until their features are requested.
+    // Copy and Clear all are placeholders until their features are requested.
   });
 })();

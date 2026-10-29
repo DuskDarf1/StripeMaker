@@ -325,6 +325,18 @@ button.roadControl:focus-visible { outline: 2px solid var(--textColor); outline-
 #elementsEditor .headActions { margin: 0 0 0.5rem; }
 .editorContent button[aria-pressed="true"] { background: var(--selectedColor); }
 
+/* Download popover. The sheet's title header uses osifont, an ISO 3098 CAD
+   lettering font like the lettering on engineering plan sheets and roll plots. */
+@font-face {
+  font-family: "osifont";
+  src: url("../fonts/osifont.woff") format("woff");
+  font-display: swap;
+}
+#downloadSheetName { overflow-wrap: anywhere; }
+.downloadLabel { display: block; margin-top: 0.5rem; }
+#downloadMenu .dimensionInputs { margin: 0.25rem 0; }
+#downloadStatus:empty { display: none; }
+
 /* SignalMaker's action status (Undone. / Redone.) above the toolbar. */
 #actionStatus {
   position: fixed;

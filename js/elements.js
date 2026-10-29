@@ -116,7 +116,11 @@
       .map((end, e) => ({ road, e, end }))).filter(({ end }) => end.joint === joint.id);
     // Sideways position of a lane's center (or the left edge), right of travel.
     const laneLateral = (sheet, road, lane) => (Math.min(lane, road.lanes - 1) + 0.5 - road.lanes / 2) * feetToPixels(sheet, road.laneWidth);
-    const halfWidth = (sheet, road) => road.lanes * feetToPixels(sheet, road.laneWidth) / 2;
+    // A link names a lane by index, or a road's left ("L") or right ("R") edge line,
+    // so roads can be joined edge to edge as well as lane to lane.
+    const linkLateral = (sheet, road, index) => (index === "L" || index === "R"
+      ? (index === "R" ? 1 : -1) * road.lanes * feetToPixels(sheet, road.laneWidth) / 2
+      : laneLateral(sheet, road, index));
     const pairOf = (sheet, road) => road && sheet.roads.find(other => other !== road
       && other.ends[0].joint === road.ends[1].joint && other.ends[1].joint === road.ends[0].joint);
     const pairLinks = (sheet, road, pair) => road.ends.flatMap(end => jointOf(sheet, end.joint).links)
@@ -159,18 +163,10 @@
               const a = byRoad.get(from);
               const b = byRoad.get(to);
               if (!a || !b || !offsets.has(from) || offsets.has(to)) continue;
-              // A road beside another sits edge to edge with it: `beside` is which
-              // side of road a (+1 right, -1 left of travel) road b is on.
-              if (link.beside) {
-                const side = from === link.a ? link.beside : -link.beside;
-                offsets.set(to, offsets.get(from) + a.end.sign * side * (halfWidth(sheet, a.road) + halfWidth(sheet, b.road)));
-                grew = true;
-                continue;
-              }
               const reference = link.pair
                 ? offsets.get(from) + a.end.sign * (laneLateral(sheet, a.road, LEFT_EDGE) - separation - feetToPixels(sheet, link.median ?? 0))
-                : offsets.get(from) + a.end.sign * laneLateral(sheet, a.road, fromLane);
-              offsets.set(to, reference - b.end.sign * laneLateral(sheet, b.road, link.pair ? LEFT_EDGE : toLane));
+                : offsets.get(from) + a.end.sign * linkLateral(sheet, a.road, fromLane);
+              offsets.set(to, reference - b.end.sign * (link.pair ? laneLateral(sheet, b.road, LEFT_EDGE) : linkLateral(sheet, b.road, toLane)));
               grew = true;
             }
           }
@@ -212,13 +208,19 @@
     // A cubic Bézier between the road's end centers, leaving each end along its
     // joint's direction; a free end with no direction pulls straight.
     function centerline(road, solved) {
-      const a = solved.get(`${road.id}:0`);
-      const b = solved.get(`${road.id}:1`);
-      const chord = Math.hypot(b.x - a.x, b.y - a.y);
-      const [l0, l1] = road.ends.map((end, e) => ((e ? b : a).travel ? end.length ?? chord / 3 : 0));
-      const c0 = { x: a.x + (a.travel?.x ?? 0) * l0, y: a.y + (a.travel?.y ?? 0) * l0 };
-      const c1 = { x: b.x - (b.travel?.x ?? 0) * l1, y: b.y - (b.travel?.y ?? 0) * l1 };
+      const { a, c0, c1, b } = controls(solved.get(`${road.id}:0`), solved.get(`${road.id}:1`), road.ends.map(end => end.length));
       return bezier(a, c0, c1, b);
+    }
+    // A Bézier's control points from its end centers (with their travel) and pulls;
+    // an end without a travel direction doesn't pull.
+    function controls(a, b, lengths) {
+      const chord = Math.hypot(b.x - a.x, b.y - a.y);
+      const [l0, l1] = lengths.map((length, e) => ((e ? b : a).travel ? length ?? chord / 3 : 0));
+      return {
+        a, b,
+        c0: { x: a.x + (a.travel?.x ?? 0) * l0, y: a.y + (a.travel?.y ?? 0) * l0 },
+        c1: { x: b.x - (b.travel?.x ?? 0) * l1, y: b.y - (b.travel?.y ?? 0) * l1 },
+      };
     }
     // Samples a cubic Bézier: enough for smooth curves and tapers (about one per 12 px).
     function bezier(a, c0, c1, b) {
@@ -281,18 +283,6 @@
           return laneWidth * Math.max(0, Math.min(1, fraction || 0));
         });
         const b = [];
-        // A road beside another keeps the edge it shares with it, so its lanes
-        // taper away from that road rather than leaving a gap.
-        if (tapers.hinge === "left") {
-          b[0] = laneLateral(sheet, road, 0) - laneWidth / 2 + shift;
-          for (let k = 0; k < road.lanes; k++) b[k + 1] = b[k] + widths[k];
-          return b;
-        }
-        if (tapers.hinge === "right") {
-          b[road.lanes] = laneLateral(sheet, road, road.lanes - 1) + laneWidth / 2 + shift;
-          for (let k = road.lanes - 1; k >= 0; k--) b[k] = b[k + 1] - widths[k];
-          return b;
-        }
         b[anchor] = anchorLeft + (laneWidth - widths[anchor]) / 2;
         b[anchor + 1] = b[anchor] + widths[anchor];
         for (let k = anchor + 1; k < road.lanes; k++) b[k + 1] = b[k] + widths[k];
@@ -317,14 +307,6 @@
           }
         }
       }
-      // Which edge holds still: the one shared with a road this one sits beside.
-      for (const end of road.ends) {
-        for (const link of jointOf(sheet, end.joint)?.links ?? []) {
-          if (!link.beside || (link.a !== road.id && link.b !== road.id)) continue;
-          const side = link.a === road.id ? link.beside : -link.beside;  // where the other road is
-          tapers.hinge = side > 0 ? "right" : "left";
-        }
-      }
       return tapers;
     }
     // Both sides of a two-way road are offsets of one shared centerline curve, so
@@ -338,27 +320,31 @@
       if (partner) {
         const gap = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES) + feetToPixels(sheet, pairLinks(sheet, road, partner)[0]?.median ?? 0);
         const shift = gap / 2 - laneLateral(sheet, road, LEFT_EDGE);
-        shape = buildShape(sheet, road, sharedCenterline(road, partner, solved, shift), tapers, shift);
+        const { a, c0, c1, b } = sharedControls(road, partner, solved, shift);
+        shape = buildShape(sheet, road, bezier(a, c0, c1, b), tapers, shift);
       } else shape = buildShape(sheet, road, centerline(road, solved), tapers);
       solved.shapes.set(road, shape);
       return shape;
     }
     // The two-way centerline, from this side's point of view: its end centers moved
     // left by `shift`, with the same Bézier pull both sides share.
-    function sharedCenterline(road, partner, solved, shift) {
+    function sharedControls(road, partner, solved, shift) {
       const [a, b] = [0, 1].map(e => {
         const at = solved.get(`${road.id}:${e}`);
         const travel = at.travel ?? travelAt(road, e, solved);
         const right = rightOf(travel);
         return { x: at.x - right.x * shift, y: at.y - right.y * shift, travel: at.travel };
       });
-      const chord = Math.hypot(b.x - a.x, b.y - a.y);
       // The lower-id side's pulls drive both sides, so they can't drift apart.
-      const lengths = road.id < partner.id ? road.ends.map(end => end.length) : [partner.ends[1].length, partner.ends[0].length];
-      const [l0, l1] = lengths.map((length, e) => ((e ? b : a).travel ? length ?? chord / 3 : 0));
-      const c0 = { x: a.x + (a.travel?.x ?? 0) * l0, y: a.y + (a.travel?.y ?? 0) * l0 };
-      const c1 = { x: b.x - (b.travel?.x ?? 0) * l1, y: b.y - (b.travel?.y ?? 0) * l1 };
-      return bezier(a, c0, c1, b);
+      return controls(a, b, road.id < partner.id ? road.ends.map(end => end.length) : [partner.ends[1].length, partner.ends[0].length]);
+    }
+    // The curve a road is drawn along: its own centerline, or a two-way road's
+    // shared centerline.
+    function curveOf(sheet, road, solved) {
+      const partner = pairOf(sheet, road);
+      if (!partner) return controls(solved.get(`${road.id}:0`), solved.get(`${road.id}:1`), road.ends.map(end => end.length));
+      const gap = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES) + feetToPixels(sheet, pairLinks(sheet, road, partner)[0]?.median ?? 0);
+      return sharedControls(road, partner, solved, gap / 2 - laneLateral(sheet, road, LEFT_EDGE));
     }
     // Where a lane node is drawn: just inside the road, so the end nodes of one road
     // and the start nodes of the next don't cover each other at a joint.
@@ -557,9 +543,9 @@
           stripes.append(goreLine([{ x: m.x + arms[0].x * reach, y: m.y + arms[0].y * reach }, m,
             { x: m.x + arms[1].x * reach, y: m.y + arms[1].y * reach }], color, stripe, true));
         } else {
-          // Diagonals run from the departing side toward the arriving side as they
+          // Diagonals run from the arriving side toward the departing side as they
           // move away from the gore point, as drawn in 711-001.
-          const side = candidate.awayFirst ? 1 : -1;
+          const side = candidate.awayFirst ? -1 : 1;
           const d = unit({ x: t.x + n.x * side, y: t.y + n.y * side });
           stripes.append(goreLine([{ x: m.x - d.x * reach, y: m.y - d.y * reach }, { x: m.x + d.x * reach, y: m.y + d.y * reach }], color, stripe));
         }
@@ -914,10 +900,10 @@
       else if (!ready) hint.textContent = "Set this sheet's scale first (Sheets › Set Scale) so lanes draw true size.";
       else if (drawing?.end && !drawing.start) hint.textContent = "Click where the new road starts; it ends at the chosen lane's start. Esc cancels.";
       else if (drawing && !drawing.start) hint.textContent = defaults.opposite
-        ? "Click the start of the two-way road's centerline." : "Click the road's start point, or a lane's end node to continue from it.";
+        ? "Click the start of the two-way road's centerline." : "Click the road's start point, a lane's end node to continue from it, or a road's edge line to branch off it.";
       else if (drawing) hint.textContent = defaults.opposite
         ? "Click the end of the centerline. Lanes travel start to end; opposite lanes return. Esc cancels."
-        : "Click the end point, or a lane's start node to join it. Traffic flows from start to end. Esc cancels.";
+        : "Click the end point, a lane's start node to join it, or a road's edge line to merge into it. Traffic flows from start to end. Esc cancels.";
       else if (candidate) hint.textContent = sheet.gores.some(gore => gore.key === selectedGore)
         ? "Drag the gore icon along the gore to change how far the marking reaches. Drag it back to the point to remove it."
         : "Drag the gore icon along the center of the gore to mark it.";
@@ -1010,31 +996,7 @@
       }
       host.links.push(...moving.links, { a: target.road.id, ai: target.lane, b: road.id, bi: lane, pair });
       sheet.joints.splice(sheet.joints.indexOf(moving), 1);
-      if (!pair) besideIfTaken(sheet, host, road, e);
       reanchor(sheet, solved, [host]);
-    }
-    // A road joined to a lane that another road already continues from (or ends
-    // into) goes beside that road instead of on top of it, on the side it heads
-    // toward: a lane added (or dropped) at the joint, untapered unless tapers say so.
-    function besideIfTaken(sheet, host, road, e) {
-      const now = solve(sheet);
-      const right = rightOf(host.dir);
-      const lateral = item => {
-        const at = now.get(`${item.road.id}:${item.e}`);
-        return (at.x - host.x) * right.x + (at.y - host.y) * right.y;
-      };
-      const here = attachments(sheet, host);
-      const mine = here.find(item => item.road === road && item.e === e);
-      const overlap = item => halfWidth(sheet, item.road) + halfWidth(sheet, road) - Math.abs(lateral(item) - lateral(mine));
-      const sibling = here.filter(item => item.road !== road && item.e === e && item.end.sign === mine.end.sign
-        && pairOf(sheet, item.road) !== road && overlap(item) > feetToPixels(sheet, 1))
-        .sort((x, y) => overlap(y) - overlap(x))[0];
-      if (!sibling) return;
-      const far = now.get(`${road.id}:${1 - e}`);
-      const siblingFar = now.get(`${sibling.road.id}:${1 - e}`);
-      const toward = ((far.x - siblingFar.x) * right.x + (far.y - siblingFar.y) * right.y) * mine.end.sign;
-      host.links.pop();
-      host.links.push({ a: sibling.road.id, ai: 0, b: road.id, bi: 0, beside: toward >= 0 ? 1 : -1 });
     }
     // Moves each joint so its root road ends up where it was before a change.
     function reanchor(sheet, before, joints) {
@@ -1261,10 +1223,114 @@
     bindNumber(lanesInput, "lanes", 1, MAX_LANES, Math.round);
     bindNumber(widthInput, "laneWidth", MIN_LANE_WIDTH, MAX_LANE_WIDTH, value => Math.round(value * 2) / 2);
 
-    // While drawing, points snap to lane nodes so the new road joins them.
+    // The nearest point on a road's edge line within `radius`, away from the road's
+    // ends (where lane nodes are). A new road started or ended there branches off
+    // the road as a split or merge.
+    function snapEdge(sheet, solved, point, radius, exclude = null) {
+      let best = null;
+      for (const road of sheet.roads) {
+        if (road === exclude) continue;
+        const shape = shapeOf(sheet, road, solved);
+        const clear = feetToPixels(sheet, road.laneWidth);
+        // A two-way road's left edges are its centerline, so only its outer edges snap.
+        for (const [side, k] of pairOf(sheet, road) ? [["R", road.lanes]] : [["L", 0], ["R", road.lanes]]) {
+          const edge = boundary(shape, k);
+          const total = polylineLength(edge);
+          let walked = 0;
+          for (let i = 0; i < edge.length - 1; i++) {
+            const p = edge[i];
+            const q = edge[i + 1];
+            const length = Math.hypot(q.x - p.x, q.y - p.y);
+            const f = length ? Math.max(0, Math.min(1, ((point.x - p.x) * (q.x - p.x) + (point.y - p.y) * (q.y - p.y)) / (length * length))) : 0;
+            const at = { x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f };
+            const distance = Math.hypot(at.x - point.x, at.y - point.y);
+            const along = walked + length * f;
+            walked += length;
+            if (distance > radius || along < clear || along > total - clear || (best && distance >= best.distance)) continue;
+            best = { road, side, t: (i + f) / (edge.length - 1), x: at.x, y: at.y, distance, edge: true };
+          }
+        }
+      }
+      return best;
+    }
+    // Cuts a road in two at curve parameter `t`, keeping its shape (de Casteljau),
+    // on a new joint where the two parts stay joined lane to lane. A two-way road is
+    // cut on both sides. Returns the joint and the part after the cut.
+    function cutRoad(sheet, road, t) {
+      const solved = solve(sheet);
+      const partner = pairOf(sheet, road);
+      const { a, c0, c1, b } = curveOf(sheet, road, solved);
+      const lerp = (p, q) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
+      const p01 = lerp(a, c0);
+      const p12 = lerp(c0, c1);
+      const p23 = lerp(c1, b);
+      const p012 = lerp(p01, p12);
+      const p123 = lerp(p12, p23);
+      const m = lerp(p012, p123);
+      const distance = (p, q) => Math.hypot(q.x - p.x, q.y - p.y);
+      const pulls = { start: a.travel ? distance(a, p01) : null, before: distance(p012, m), after: distance(m, p123), end: b.travel ? distance(p23, b) : null };
+      const joint = newJoint(sheet, m, road.id, unit(distance(p012, p123) > 1e-6 ? { x: p123.x - p012.x, y: p123.y - p012.y } : { x: b.x - a.x, y: b.y - a.y }));
+      const rename = (at, from, to) => {
+        const far = jointOf(sheet, at);
+        far.links.forEach(link => {
+          if (link.a === from) link.a = to;
+          if (link.b === from) link.b = to;
+        });
+        if (far.root === from) far.root = to;
+        sheet.gores.forEach(gore => { gore.key = gore.key.split("|").map(end => (end === `${from}:1` ? `${to}:1` : end)).sort().join("|"); });
+        openCurves.delete(`${from}:1`);
+      };
+      // The far end's tapers travel with the part after the cut.
+      const split = (from, to) => {
+        to.tapers = Object.fromEntries(Object.entries(from.tapers ?? {}).filter(([key]) => key.startsWith("1:")));
+        from.tapers = Object.fromEntries(Object.entries(from.tapers ?? {}).filter(([key]) => !key.startsWith("1:")));
+      };
+      const piece = (from, ends) => {
+        const made = { id: nextId(sheet.roads), lanes: from.lanes, laneWidth: from.laneWidth, ends };
+        sheet.roads.push(made);
+        return made;
+      };
+      const after = piece(road, [{ joint: joint.id, sign: 1, length: pulls.after }, { ...road.ends[1], length: pulls.end }]);
+      rename(road.ends[1].joint, road.id, after.id);
+      split(road, after);
+      road.ends[0].length = pulls.start;
+      road.ends[1] = { joint: joint.id, sign: 1, length: pulls.before };
+      joint.links.push({ a: road.id, ai: 0, b: after.id, bi: 0 });
+      if (partner) {
+        const median = pairLinks(sheet, road, partner)[0]?.median ?? 0;
+        const back = piece(partner, [{ joint: joint.id, sign: -1, length: pulls.before }, { ...partner.ends[1], length: pulls.start }]);
+        rename(partner.ends[1].joint, partner.id, back.id);
+        split(partner, back);
+        partner.ends[0].length = pulls.end;
+        partner.ends[1] = { joint: joint.id, sign: -1, length: pulls.after };
+        joint.links.push({ a: partner.id, ai: 0, b: back.id, bi: 0 }, { a: road.id, ai: 0, b: back.id, bi: 0, pair: true, median });
+      }
+      return { joint, after };
+    }
+    // Joins end `e` of a new road to the edge line it was drawn onto: the edge's road
+    // is cut there, and the new road sits beside it, edge line on edge line.
+    function attachToEdge(sheet, road, e, point) {
+      const target = snapEdge(sheet, solve(sheet), point, 1 / sheet.view.scale + 0.5, road);
+      if (!target) return;
+      const { joint, after } = cutRoad(sheet, target.road, target.t);
+      const own = jointOf(sheet, road.ends[e].joint);
+      const solved = solve(sheet);
+      const sign = dot(travelAt(road, e, solved), joint.dir) < 0 ? -1 : 1;
+      road.ends[e] = { ...road.ends[e], joint: joint.id, sign };
+      if (!attachments(sheet, own).length) sheet.joints.splice(sheet.joints.indexOf(own), 1);
+      // The new road's edge that faces the cut road: its left edge when it's on the
+      // right going the same way, and so on.
+      const facing = (target.side === "R") === (sign === 1) ? "L" : "R";
+      joint.links.push({ a: after.id, ai: target.side, b: road.id, bi: facing });
+    }
+
+    // While drawing, points snap to lane nodes so the new road joins them, or to a
+    // road's edge line to branch off it (one-way roads only).
     function drawingPoint(sheet, clientX, clientY) {
       const point = sheets.toImage(clientX, clientY);
-      snapTarget = snapLane(sheet, solve(sheet), point, drawing.start ? 1 : 0);
+      const solved = solve(sheet);
+      snapTarget = snapLane(sheet, solved, point, drawing.start ? 1 : 0)
+        ?? (defaults.opposite ? null : snapEdge(sheet, solved, point, SNAP_PIXELS / sheet.view.scale));
       return snapTarget ? { x: snapTarget.x, y: snapTarget.y, target: snapTarget } : point;
     }
 
@@ -1304,7 +1370,8 @@
       sheet.roads.push(road);
       // A new road lines its matching lane up with the lane it was drawn from or to.
       [start, end].forEach((p, e) => {
-        if (p.target) connect(sheet, road, e, Math.min(p.target.lane, road.lanes - 1), p.target);
+        if (p.target?.edge) attachToEdge(sheet, road, e, p);
+        else if (p.target) connect(sheet, road, e, Math.min(p.target.lane, road.lanes - 1), p.target);
       });
       if (defaults.opposite) addOpposite(sheet, road, defaults.opposite, defaults.median, false);
       drawing = null;
