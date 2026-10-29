@@ -198,9 +198,16 @@
         const t = i / segments;
         const u = 1 - t;
         const w = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+        // The exact tangent, so joined curves meet square at their shared joint.
+        const d = [3 * u * u, 6 * u * t, 3 * t * t];
+        const tangent = {
+          x: d[0] * (c0.x - a.x) + d[1] * (c1.x - c0.x) + d[2] * (b.x - c1.x),
+          y: d[0] * (c0.y - a.y) + d[1] * (c1.y - c0.y) + d[2] * (b.y - c1.y),
+        };
         points.push({
           x: w[0] * a.x + w[1] * c0.x + w[2] * c1.x + w[3] * b.x,
           y: w[0] * a.y + w[1] * c0.y + w[2] * c1.y + w[3] * b.y,
+          tangent: Math.hypot(tangent.x, tangent.y) > 1e-6 ? unit(tangent) : null,
         });
       }
       return points;
@@ -211,7 +218,7 @@
         const d = typeof distance === "function" ? distance(i) : distance;
         const prev = points[Math.max(0, i - 1)];
         const next = points[Math.min(points.length - 1, i + 1)];
-        const normal = rightOf(unit({ x: next.x - prev.x, y: next.y - prev.y }));
+        const normal = rightOf(point.tangent ?? unit({ x: next.x - prev.x, y: next.y - prev.y }));
         return { x: point.x + normal.x * d, y: point.y + normal.y * d };
       });
     }
