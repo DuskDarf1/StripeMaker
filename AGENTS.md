@@ -70,7 +70,10 @@ MUTCD-compliant pavement markings onto them.
 - Option/Alt-drag pulls a road end off its joint. Curve handles turn the whole
   joint, keeping joined roads lined up.
 - Roads are 100% opaque asphalt. Lane nodes are small yellow steering wheels,
-  shown for every lane of every road while the Elements tab is open.
+  shown for every lane of every road while the Elements tab is open. Each
+  node has a small yellow flow arrow just inside the road pointing the lane's
+  direction of travel, and a tapered lane end adds a round wedge badge past the
+  arrow, narrowing toward the lane's zero-width end.
 - Tapers belong to one lane at one road end. At an end, the lane narrows from
   full width to zero over the taper length (lane drop); at a start, it widens
   from zero (lane add). The first untapered lane holds its place and the rest

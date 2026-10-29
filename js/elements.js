@@ -29,6 +29,8 @@
   const CURVE_SEGMENTS = 96;
   const SNAP_PIXELS = 14;
   const NODE_INSET_PIXELS = 13;       // nodes sit just inside their road's end
+  const ARROW_PIXELS = 20;            // flow arrows sit this far inside their node
+  const TAPER_BADGE_PIXELS = 36;      // and taper badges just past the arrow
   const DEFAULT_TAPER_FEET = 300;
   const MIN_TAPER_FEET = 10;
   const MAX_TAPER_FEET = 2000;
@@ -301,11 +303,13 @@
     }
     // Where a lane node is drawn: just inside the road, so the end nodes of one road
     // and the start nodes of the next don't cover each other at a joint.
+    // The direction from a road's end into the road.
+    const inwardAt = (line, e) => unit(e ? { x: line[line.length - 2].x - line[line.length - 1].x, y: line[line.length - 2].y - line[line.length - 1].y }
+      : { x: line[1].x - line[0].x, y: line[1].y - line[0].y });
     function nodePoint(sheet, road, e, lane, solved) {
       const { line } = shapeOf(sheet, road, solved);
       const at = lanePoint(sheet, road, e, lane, solved);
-      const inward = unit(e ? { x: line[line.length - 2].x - line[line.length - 1].x, y: line[line.length - 2].y - line[line.length - 1].y }
-        : { x: line[1].x - line[0].x, y: line[1].y - line[0].y });
+      const inward = inwardAt(line, e);
       const inset = NODE_INSET_PIXELS / sheet.view.scale;
       return { x: at.x + inward.x * inset, y: at.y + inward.y * inset };
     }
@@ -403,8 +407,13 @@
       button.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight ArrowUp ArrowDown Shift+F10");
       button.setAttribute("aria-haspopup", "menu");
       bindNode(button);
+      // A flow arrow just inside the node, then a badge when the lane end tapers.
+      button.arrow = Object.assign(document.createElement("span"), { className: "roadArrow" });
+      button.taper = Object.assign(document.createElement("span"), { className: "roadTaper" });
+      button.arrow.setAttribute("aria-hidden", "true");
+      button.taper.setAttribute("aria-hidden", "true");
       nodeButtons.set(key, button);
-      overlay.append(button);
+      overlay.append(button.arrow, button.taper, button);
       return button;
     }
     // Every lane of every road shows a steering-wheel node at each end.
@@ -422,9 +431,22 @@
               seen.add(key);
               button.classList.toggle("selected", road === selectedRoad || road === pairOf(sheet, selectedRoad));
               button.classList.toggle("laneSelected", road === selectedRoad && selectedLane?.e === e && selectedLane.lane === lane);
-              button.setAttribute("aria-label", `Road ${road.id}, lane ${lane + 1} ${e ? "end" : "start"}`);
+              const shape = shapeOf(sheet, road, solved);
+              const tapered = shape.tapers.has(`${e}:${lane}`);
+              button.setAttribute("aria-label", `Road ${road.id}, lane ${lane + 1} ${e ? "end" : "start"}${tapered ? (e ? ", lane drop taper" : ", lane add taper") : ""}`);
               button.setAttribute("aria-expanded", String(button === menuNode?.button));
-              place(button, nodePoint(sheet, road, e, lane, solved));
+              const at = place(button, nodePoint(sheet, road, e, lane, solved));
+              const inward = inwardAt(shape.line, e);
+              const travel = e ? { x: -inward.x, y: -inward.y } : inward;
+              const angle = Math.atan2(travel.y, travel.x);
+              button.arrow.style.left = `${at.x + inward.x * ARROW_PIXELS}px`;
+              button.arrow.style.top = `${at.y + inward.y * ARROW_PIXELS}px`;
+              button.arrow.style.setProperty("--angle", `${angle}rad`);
+              // The wedge sits past the arrow and narrows toward the lane's zero-width end.
+              button.taper.hidden = !tapered;
+              button.taper.style.left = `${at.x + inward.x * TAPER_BADGE_PIXELS}px`;
+              button.taper.style.top = `${at.y + inward.y * TAPER_BADGE_PIXELS}px`;
+              button.taper.style.setProperty("--angle", `${angle + (e ? 0 : Math.PI)}rad`);
             }
           }
         }
@@ -432,6 +454,8 @@
       for (const [key, button] of nodeButtons) {
         if (seen.has(key)) continue;
         button.remove();
+        button.arrow.remove();
+        button.taper.remove();
         nodeButtons.delete(key);
       }
       positionMenu();
