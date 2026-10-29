@@ -32,7 +32,8 @@ MUTCD-compliant pavement markings onto them.
   the current FDOT Standard Plans (Index 711-001, Pavement Markings) and the FDOT
   Design Manual, and cite the source in code next to the constant.
 - Lane lines: 6 in white skip line, 10 ft stripe / 30 ft gap (FDOT 711-001; pay
-  item 710-11-131).
+  item 710-11-131). A lane line that continues across a joint keeps its 10'-30'
+  cycle going from the road before it rather than restarting at the joint.
 - Edge lines: 6 in solid; yellow on the left edge, white on the right edge, for
   one-way and two-way roads alike. A two-way road's centerline is a double
   yellow: two 6 in solid lines with a 4 in gap (711-001 "Double Solid Lines").

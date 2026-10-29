@@ -321,17 +321,47 @@
     }
     const pathData = points => `M${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join("L")}`;
 
-    function strokePath(points, color, width, dash) {
+    function strokePath(points, color, width, dash, phase = 0) {
       const path = document.createElementNS(SVG, "path");
       path.setAttribute("class", "roadMarking");
       path.setAttribute("d", pathData(points));
       path.setAttribute("stroke", color);
       path.setAttribute("stroke-width", width);
       if (dash) path.setAttribute("stroke-dasharray", dash);
+      if (phase) path.setAttribute("stroke-dashoffset", phase.toFixed(2));
       return path;
     }
+    const polylineLength = points => points.reduce((sum, p, i) => (i ? sum + Math.hypot(p.x - points[i - 1].x, p.y - points[i - 1].y) : 0), 0);
+    // Where lane line k picks up the skip pattern: a lane line that continues from
+    // a road joined before it carries on that road's 10'-30' cycle instead of
+    // restarting at the joint.
+    function skipPhase(sheet, road, k, solved, visiting = new Set()) {
+      const key = `${road.id}:${k}`;
+      solved.phases ??= new Map();
+      if (solved.phases.has(key)) return solved.phases.get(key);
+      if (visiting.has(key)) return 0;
+      visiting.add(key);
+      let phase = 0;
+      const joint = jointOf(sheet, road.ends[0].joint);
+      const start = boundary(shapeOf(sheet, road, solved), k)[0];
+      const tolerance = feetToPixels(sheet, road.laneWidth) / 4;
+      for (const { road: before, e, end } of attachments(sheet, joint)) {
+        if (e !== 1 || end.sign !== road.ends[0].sign || before === road) continue;
+        const shape = shapeOf(sheet, before, solved);
+        const j = Array.from({ length: before.lanes - 1 }, (_, i) => i + 1).find(i => {
+          const at = boundary(shape, i).at(-1);
+          return Math.hypot(at.x - start.x, at.y - start.y) < tolerance;
+        });
+        if (j === undefined) continue;
+        const period = feetToPixels(sheet, SKIP_STRIPE_FEET + SKIP_GAP_FEET);
+        phase = (skipPhase(sheet, before, j, solved, visiting) + polylineLength(boundary(shape, j))) % period;
+        break;
+      }
+      solved.phases.set(key, phase);
+      return phase;
+    }
     // Yellow left edge, white right edge, and white skip lines between lanes.
-    function drawRoad(sheet, road, shape, layers, className = "") {
+    function drawRoad(sheet, road, shape, layers, className = "", solved = null) {
       const margin = inchesToPixels(sheet, PAVEMENT_MARGIN_INCHES);
       const band = document.createElementNS(SVG, "path");
       band.setAttribute("class", `roadBand ${className}`);
@@ -341,7 +371,9 @@
       const skip = `${feetToPixels(sheet, SKIP_STRIPE_FEET)} ${feetToPixels(sheet, SKIP_GAP_FEET)}`;
       const group = document.createElementNS(SVG, "g");
       if (className) group.setAttribute("class", className);
-      for (let k = 1; k < road.lanes; k++) group.append(strokePath(boundary(shape, k), WHITE, lineWidth, skip));
+      for (let k = 1; k < road.lanes; k++) {
+        group.append(strokePath(boundary(shape, k), WHITE, lineWidth, skip, solved ? skipPhase(sheet, road, k, solved) : 0));
+      }
       group.append(strokePath(boundary(shape, 0), YELLOW, lineWidth));
       group.append(strokePath(boundary(shape, road.lanes), WHITE, lineWidth));
       layers.markings.append(group);
@@ -365,7 +397,7 @@
         }));
         if (sheet.inchesPerPixel) {
           const partner = pairOf(sheet, selectedRoad);
-          sheet.roads.forEach(road => drawRoad(sheet, road, shapeOf(sheet, road, solved), layers, road === selectedRoad || road === partner ? "selected" : ""));
+          sheet.roads.forEach(road => drawRoad(sheet, road, shapeOf(sheet, road, solved), layers, road === selectedRoad || road === partner ? "selected" : "", solved));
           if ((drawing?.start || drawing?.end) && drawing.cursor) drawPreview(sheet, layers);
         }
         layer.replaceChildren(layers.pavement, layers.markings, layers.selection);
