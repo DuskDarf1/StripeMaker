@@ -488,6 +488,9 @@
       const last = indexAt(candidate.along, length);
       if (last < 1) return;
       const outline = [...candidate.e1.slice(0, last + 1), ...candidate.e2.slice(0, last + 1).reverse()];
+      // Traffic separation is edged in 6" double yellow on both sides: the roads'
+      // yellow edges plus a second line 10" inside each, meeting at the tip.
+      const inner = !candidate.same && separationInner(sheet, candidate, last);
       const band = document.createElementNS(SVG, "path");
       band.setAttribute("class", `roadBand goreBand${gore.key === selectedGore ? " selected" : ""}`);
       band.setAttribute("d", `${pathData(outline)}Z`);
@@ -499,7 +502,10 @@
       }
       const clip = document.createElementNS(SVG, "clipPath");
       clip.id = `gore-${sheet.id}-${gore.key.replace(/[^0-9]/g, "-")}`;
-      clip.append(band.cloneNode());
+      const clipShape = band.cloneNode();
+      clipShape.removeAttribute("class");
+      if (inner) clipShape.setAttribute("d", `${pathData([...inner.e1, ...[...inner.e2].reverse()])}Z`);
+      clip.append(clipShape);
       const stripes = document.createElementNS(SVG, "g");
       stripes.setAttribute("clip-path", `url(#${clip.id})`);
       const color = candidate.same ? WHITE : YELLOW;
@@ -528,11 +534,32 @@
         }
       }
       layers.markings.append(clip, stripes);
+      if (inner) {
+        const lineWidth = inchesToPixels(sheet, LINE_INCHES);
+        layers.markings.append(strokePath(inner.e1, YELLOW, lineWidth), strokePath(inner.e2, YELLOW, lineWidth));
+      }
       // Gores are outlined in 8" white over the roads' edge lines.
       if (candidate.same) {
         const lineWidth = inchesToPixels(sheet, GORE_LINE_INCHES);
         layers.markings.append(strokePath(candidate.e1.slice(0, last + 1), WHITE, lineWidth), strokePath(candidate.e2.slice(0, last + 1), WHITE, lineWidth));
       }
+    }
+    // The inner lines of each side's double yellow, from where the sides are far
+    // enough apart for both (where the inner lines meet) to the marked length.
+    function separationInner(sheet, candidate, last) {
+      const step = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES);
+      const first = candidate.width.findIndex(w => w >= step * 2);
+      if (first < 0 || first >= last) return null;
+      const e1 = [];
+      const e2 = [];
+      for (let i = first; i <= last; i++) {
+        const a = candidate.e1[i];
+        const b = candidate.e2[i];
+        const n = unit({ x: b.x - a.x, y: b.y - a.y });
+        e1.push({ x: a.x + n.x * step, y: a.y + n.y * step });
+        e2.push({ x: b.x - n.x * step, y: b.y - n.y * step });
+      }
+      return { e1, e2 };
     }
     function goreAt(sheet, point) {
       const solved = solve(sheet);
@@ -834,8 +861,8 @@
         const spacing = gore?.spacing ?? goreDefaultSpacing(candidate);
         goreTitle.textContent = candidate.same ? "Gore" : "Traffic Separation";
         goreState.textContent = candidate.same
-          ? "FDOT channelization at gore: 8\" white gore lines and 18\" white chevrons at 45°."
-          : "FDOT traffic separation: 18\" yellow diagonals at 45° between opposing traffic.";
+          ? "Channelization at a gore: 8\" white gore lines and 18\" white chevrons at 45°."
+          : "Traffic separation: 6\" double yellow on each side and 18\" yellow diagonals at 45° between opposing traffic.";
         for (const input of [goreSpacing, goreSpacingValue]) {
           input.disabled = !gore;
           if (document.activeElement !== input) input.value = spacing;
@@ -843,8 +870,8 @@
         if (document.activeElement !== goreLength) goreLength.value = Math.round(gore?.length ?? 0);
         goreLength.max = Math.floor(candidate.along.at(-1) / feetToPixels(sheet, 1));
         goreSpacingHint.textContent = candidate.same
-          ? `FDOT shows chevrons ${GORE_SPACING_FEET} ft apart.`
-          : `FDOT spacing Y by posted speed: 10 ft ≤30 mph, 20 ft 35–40, 30 ft 45, 40 ft ≥50.${separationSpeed(spacing) ? ` ${spacing} ft fits ${separationSpeed(spacing)}.` : ""}`;
+          ? `Standard chevron spacing is ${GORE_SPACING_FEET} ft.`
+          : `Spacing by posted speed: 10 ft ≤30 mph, 20 ft 35–40, 30 ft 45, 40 ft ≥50.${separationSpeed(spacing) ? ` ${spacing} ft fits ${separationSpeed(spacing)}.` : ""}`;
       }
       workspace.classList.toggle("drawing", Boolean(drawing));
       workspace.classList.toggle("elementsActive", active());

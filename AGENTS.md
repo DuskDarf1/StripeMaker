@@ -30,7 +30,8 @@ MUTCD-compliant pavement markings onto them.
 - **Pavement markings follow FDOT** (Florida Department of Transportation), not
   generic MUTCD defaults. Take every marking dimension, pattern, and color from
   the current FDOT Standard Plans (Index 711-001, Pavement Markings) and the FDOT
-  Design Manual, and cite the source in code next to the constant.
+  Design Manual, and cite the source in code next to the constant. Don't say
+  "FDOT" in user-facing strings; describe the marking itself.
 - Lane lines: 6 in white skip line, 10 ft stripe / 30 ft gap (FDOT 711-001; pay
   item 710-11-131). A lane line that continues across a joint keeps its 10'-30'
   cycle going from the road before it rather than restarting at the joint.
@@ -42,8 +43,8 @@ MUTCD-compliant pavement markings onto them.
   chevrons at 45° pointing back at approaching traffic, 20 ft apart. "Markings
   for Traffic Separation" for opposite directions: 18" yellow diagonals at 45°,
   spaced Y by posted speed (10 ft at 30 mph or less, 20 ft at 35–40, 30 ft at 45,
-  40 ft at 50 or more). The island's 6" double yellow approach lines are not
-  drawn yet; the roads' 6" yellow edges outline it.
+  40 ft at 50 or more), edged in 6" double yellow on both sides (each road's
+  yellow edge plus a second line 10" inside it, meeting at the tip).
 - Dimensions are to the centerline of markings (711-001). Pavement extends 8 in
   past the edge of traveled way.
 - Markings are drawn true size in sheet pixels using the sheet's inches per
