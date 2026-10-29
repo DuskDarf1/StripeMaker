@@ -615,8 +615,17 @@
       const mask = document.createElementNS(SVG, "mask");
       mask.id = `lines-${sheet.id}-${road.id}`;
       mask.setAttribute("maskUnits", "userSpaceOnUse");
+      // The mask must cover the whole road, even off the sheet: outside a mask's
+      // region (by default just the sheet plus 10%) nothing is drawn.
+      const own = shapeOf(sheet, road, solved);
+      const points = [...boundary(own, 0), ...boundary(own, road.lanes)];
+      const pad = feetToPixels(sheet, road.laneWidth);
+      const [left, top] = ["x", "y"].map(axis => Math.min(...points.map(point => point[axis])) - pad);
+      const [right, bottom] = ["x", "y"].map(axis => Math.max(...points.map(point => point[axis])) + pad);
+      const region = { x: left, y: top, width: right - left, height: bottom - top };
+      Object.entries(region).forEach(([key, value]) => mask.setAttribute(key, value));
       const all = document.createElementNS(SVG, "rect");
-      Object.entries({ x: -sheet.width, y: -sheet.height, width: sheet.width * 3, height: sheet.height * 3, fill: "#fff" }).forEach(([key, value]) => all.setAttribute(key, value));
+      Object.entries({ ...region, fill: "#fff" }).forEach(([key, value]) => all.setAttribute(key, value));
       mask.append(all);
       for (const other of joined) {
         const shape = shapeOf(sheet, other, solved);
