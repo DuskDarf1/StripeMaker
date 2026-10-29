@@ -74,6 +74,13 @@ MUTCD-compliant pavement markings onto them.
   Both sides are drawn as offsets of one shared centerline curve, so the double
   yellow (or median) stays parallel through curves.
   Dragging a road's lane node onto an opposite road's node also pairs them.
+- A road joined to a lane that another road already continues from (or ends
+  into) goes **beside** that road, edge to edge on the side it heads toward,
+  instead of on top of it: an added lane at a split (or a dropped lane at a
+  merge). It starts full width unless tapered; a beside road's tapers hold the
+  edge it shares with its neighbor, so it widens away from that road. The two
+  roads' facing edges form a gore candidate. Stored as a joint link with
+  `beside: ±1` (the side of road a that road b is on).
 - Structural changes (split, detach, delete) keep every remaining road where it
   was; a road end left alone without a set curve goes back to pulling straight.
 - Option/Alt-drag pulls a road end off its joint. Curve handles turn the whole

@@ -116,6 +116,7 @@
       .map((end, e) => ({ road, e, end }))).filter(({ end }) => end.joint === joint.id);
     // Sideways position of a lane's center (or the left edge), right of travel.
     const laneLateral = (sheet, road, lane) => (Math.min(lane, road.lanes - 1) + 0.5 - road.lanes / 2) * feetToPixels(sheet, road.laneWidth);
+    const halfWidth = (sheet, road) => road.lanes * feetToPixels(sheet, road.laneWidth) / 2;
     const pairOf = (sheet, road) => road && sheet.roads.find(other => other !== road
       && other.ends[0].joint === road.ends[1].joint && other.ends[1].joint === road.ends[0].joint);
     const pairLinks = (sheet, road, pair) => road.ends.flatMap(end => jointOf(sheet, end.joint).links)
@@ -158,6 +159,14 @@
               const a = byRoad.get(from);
               const b = byRoad.get(to);
               if (!a || !b || !offsets.has(from) || offsets.has(to)) continue;
+              // A road beside another sits edge to edge with it: `beside` is which
+              // side of road a (+1 right, -1 left of travel) road b is on.
+              if (link.beside) {
+                const side = from === link.a ? link.beside : -link.beside;
+                offsets.set(to, offsets.get(from) + a.end.sign * side * (halfWidth(sheet, a.road) + halfWidth(sheet, b.road)));
+                grew = true;
+                continue;
+              }
               const reference = link.pair
                 ? offsets.get(from) + a.end.sign * (laneLateral(sheet, a.road, LEFT_EDGE) - separation - feetToPixels(sheet, link.median ?? 0))
                 : offsets.get(from) + a.end.sign * laneLateral(sheet, a.road, fromLane);
@@ -272,6 +281,18 @@
           return laneWidth * Math.max(0, Math.min(1, fraction || 0));
         });
         const b = [];
+        // A road beside another keeps the edge it shares with it, so its lanes
+        // taper away from that road rather than leaving a gap.
+        if (tapers.hinge === "left") {
+          b[0] = laneLateral(sheet, road, 0) - laneWidth / 2 + shift;
+          for (let k = 0; k < road.lanes; k++) b[k + 1] = b[k] + widths[k];
+          return b;
+        }
+        if (tapers.hinge === "right") {
+          b[road.lanes] = laneLateral(sheet, road, road.lanes - 1) + laneWidth / 2 + shift;
+          for (let k = road.lanes - 1; k >= 0; k--) b[k] = b[k + 1] - widths[k];
+          return b;
+        }
         b[anchor] = anchorLeft + (laneWidth - widths[anchor]) / 2;
         b[anchor + 1] = b[anchor] + widths[anchor];
         for (let k = anchor + 1; k < road.lanes; k++) b[k + 1] = b[k] + widths[k];
@@ -294,6 +315,14 @@
           if (mode === "taper" || (mode === "auto" && sheet.autoTapers && solved.auto.has(id))) {
             tapers.set(key, feetToPixels(sheet, setting?.length ?? DEFAULT_TAPER_FEET));
           }
+        }
+      }
+      // Which edge holds still: the one shared with a road this one sits beside.
+      for (const end of road.ends) {
+        for (const link of jointOf(sheet, end.joint)?.links ?? []) {
+          if (!link.beside || (link.a !== road.id && link.b !== road.id)) continue;
+          const side = link.a === road.id ? link.beside : -link.beside;  // where the other road is
+          tapers.hinge = side > 0 ? "right" : "left";
         }
       }
       return tapers;
@@ -981,7 +1010,31 @@
       }
       host.links.push(...moving.links, { a: target.road.id, ai: target.lane, b: road.id, bi: lane, pair });
       sheet.joints.splice(sheet.joints.indexOf(moving), 1);
+      if (!pair) besideIfTaken(sheet, host, road, e);
       reanchor(sheet, solved, [host]);
+    }
+    // A road joined to a lane that another road already continues from (or ends
+    // into) goes beside that road instead of on top of it, on the side it heads
+    // toward: a lane added (or dropped) at the joint, untapered unless tapers say so.
+    function besideIfTaken(sheet, host, road, e) {
+      const now = solve(sheet);
+      const right = rightOf(host.dir);
+      const lateral = item => {
+        const at = now.get(`${item.road.id}:${item.e}`);
+        return (at.x - host.x) * right.x + (at.y - host.y) * right.y;
+      };
+      const here = attachments(sheet, host);
+      const mine = here.find(item => item.road === road && item.e === e);
+      const overlap = item => halfWidth(sheet, item.road) + halfWidth(sheet, road) - Math.abs(lateral(item) - lateral(mine));
+      const sibling = here.filter(item => item.road !== road && item.e === e && item.end.sign === mine.end.sign
+        && pairOf(sheet, item.road) !== road && overlap(item) > feetToPixels(sheet, 1))
+        .sort((x, y) => overlap(y) - overlap(x))[0];
+      if (!sibling) return;
+      const far = now.get(`${road.id}:${1 - e}`);
+      const siblingFar = now.get(`${sibling.road.id}:${1 - e}`);
+      const toward = ((far.x - siblingFar.x) * right.x + (far.y - siblingFar.y) * right.y) * mine.end.sign;
+      host.links.pop();
+      host.links.push({ a: sibling.road.id, ai: 0, b: road.id, bi: 0, beside: toward >= 0 ? 1 : -1 });
     }
     // Moves each joint so its root road ends up where it was before a change.
     function reanchor(sheet, before, joints) {
