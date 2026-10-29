@@ -421,6 +421,8 @@
       }
       group.append(strokePath(boundary(shape, 0), YELLOW, lineWidth));
       group.append(strokePath(boundary(shape, road.lanes), WHITE, lineWidth));
+      const mask = solved && maskJoined(sheet, road, group, solved);
+      if (mask) layers.markings.append(mask);
       layers.markings.append(group);
       if (className === "selected") {
         const ring = band.cloneNode();
@@ -597,6 +599,34 @@
       if (!sheet?.gores?.length || !sheet.inchesPerPixel) return;
       const candidates = goreCandidates(sheet, solve(sheet));
       sheet.gores = sheet.gores.filter(gore => candidates.has(gore.key) && gore.length > 0);
+    }
+
+    // A road's lines aren't painted on the travel lanes of roads joined to it: where
+    // a ramp overlaps the lane it feeds, its edge line stops at the other road's
+    // edge, and that road's edge line stops where the ramp crosses it. The masks
+    // are shrunk by a line width so lines running along a shared edge (two-way
+    // roads, roads side by side, end-to-end joins) stay. Unjoined roads that cross
+    // (an overpass) keep all their lines.
+    function maskJoined(sheet, road, group, solved) {
+      const joints = road.ends.map(end => end.joint);
+      const joined = sheet.roads.filter(other => other !== road && other.ends.some(end => joints.includes(end.joint)));
+      if (!joined.length) return null;
+      const inset = inchesToPixels(sheet, LINE_INCHES);
+      const mask = document.createElementNS(SVG, "mask");
+      mask.id = `lines-${sheet.id}-${road.id}`;
+      mask.setAttribute("maskUnits", "userSpaceOnUse");
+      const all = document.createElementNS(SVG, "rect");
+      Object.entries({ x: -sheet.width, y: -sheet.height, width: sheet.width * 3, height: sheet.height * 3, fill: "#fff" }).forEach(([key, value]) => all.setAttribute(key, value));
+      mask.append(all);
+      for (const other of joined) {
+        const shape = shapeOf(sheet, other, solved);
+        const hole = document.createElementNS(SVG, "path");
+        hole.setAttribute("d", `${pathData([...boundary(shape, 0, inset), ...boundary(shape, other.lanes, -inset).reverse()])}Z`);
+        hole.setAttribute("fill", "#000");
+        mask.append(hole);
+      }
+      group.setAttribute("mask", `url(#${mask.id})`);
+      return mask;
     }
 
     function render() {

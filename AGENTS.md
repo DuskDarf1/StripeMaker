@@ -132,6 +132,11 @@ MUTCD-compliant pavement markings onto them.
   outermost lane, so a ramp feeds straight into (or out of) the edge lane rather
   than adding a lane beside it.
 - Gores are only offered between edges that face each other across the gap.
+- A road's lines are never painted on the travel lanes of a road joined to it
+  (an SVG mask per road, shrunk by a line width so lines along a shared edge
+  stay). Where a ramp overlaps the lane it feeds, its edge line stops at the
+  other road's edge and that road's edge line stops where the ramp crosses it,
+  leaving a clean merge or diverge tip. Unjoined crossing roads keep all lines.
 - Lane nodes are drawn slightly inside their road's end so joined roads' nodes
   don't cover each other; snapping accepts either the drawn node or the true
   lane end.
