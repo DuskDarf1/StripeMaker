@@ -46,6 +46,17 @@
   const MIN_GORE_SPACING_FEET = 10;
   const MAX_GORE_SPACING_FEET = 40;
   const GORE_ICON_PIXELS = 26;        // gore icons rest this far along from the gore point
+  // Medians, FDOT Design Manual 210.3. Grass medians are turf; concrete medians are
+  // raised and curbed (Standard Plans Index 520-001, Type F curb, 6" top drawn at
+  // the median's edge); painted medians carry the 711-001 sheet 8 traffic
+  // separation markings: a 6" yellow line 10" inside the road's yellow edge line
+  // (a double yellow) and 18" yellow diagonals at 45°, spaced Y by posted speed.
+  const MEDIAN_TYPES = { grass: "Grass", concrete: "Concrete", painted: "Painted" };
+  const GRASS = "#5e7f3c";
+  const CONCRETE = "#bdbbb4";
+  const CURB = "#dedcd5";
+  const CURB_INCHES = 6;
+  const MEDIAN_SPACING_FEET = 20;
   const SVG = "http://www.w3.org/2000/svg";
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -74,7 +85,22 @@
     const goreSpacingValue = document.getElementById("goreSpacingValue");
     const goreSpacingHint = document.getElementById("goreSpacingHint");
     const goreLength = document.getElementById("goreLength");
-    const defaults = { lanes: 1, laneWidth: 12, opposite: 0, median: 0 };
+    const addMedianButton = document.getElementById("addMedian");
+    const medianFields = document.getElementById("medianFields");
+    const medianTitle = document.getElementById("medianTitle");
+    const medianType = document.getElementById("medianType");
+    const paintedFields = document.getElementById("paintedFields");
+    const medianColor = document.getElementById("medianColor");
+    const medianLean = document.getElementById("medianLean");
+    const medianSpacing = document.getElementById("medianSpacing");
+    const medianSpacingValue = document.getElementById("medianSpacingValue");
+    const medianSpacingHint = document.getElementById("medianSpacingHint");
+    const medianState = document.getElementById("medianState");
+    const defaults = { lanes: 1, laneWidth: 12, opposite: 0, median: 0, medianType: "grass", medianSpacing: MEDIAN_SPACING_FEET, medianColor: "yellow", medianLean: "right" };
+    const medianPoints = [];
+    let selectedMedian = null;
+    let medianSheet = null;
+    let medianDraw = null;
     const openCurves = new Set();
     const nodeButtons = new Map();
     const goreButtons = new Map();
@@ -89,7 +115,8 @@
     const overlay = document.createElement("div");
     overlay.className = "roadOverlay";
     overlay.hidden = true;
-    overlay.innerHTML = `<svg aria-hidden="true"><line class="roadControlLine"/><line class="roadControlLine"/><circle class="roadSnap" r="15"/></svg>
+    overlay.innerHTML = `<svg aria-hidden="true"><line class="roadControlLine"/><line class="roadControlLine"/>
+      <polyline class="medianPreview"/><line class="medianPreview closing"/><g class="medianPreviewPoints"></g><circle class="roadSnap" r="15"/></svg>
       <span class="roadNode preview" aria-hidden="true"></span>
       <button type="button" class="roadControl" aria-label="Start curve handle" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>
       <button type="button" class="roadControl" aria-label="End curve handle" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"></button>`;
@@ -97,6 +124,8 @@
     const snapRing = overlay.querySelector(".roadSnap");
     const startMarker = overlay.querySelector(".roadNode.preview");
     const controlButtons = [...overlay.querySelectorAll(".roadControl")];
+    const [medianPreview, medianClosing] = overlay.querySelectorAll(".medianPreview");
+    const medianPreviewPoints = overlay.querySelector(".medianPreviewPoints");
     sheets.addOverlay(overlay);
     const nodeMenu = document.getElementById("nodeMenu");
 
@@ -134,6 +163,7 @@
         sheet.roads = (sheet.roads ?? []).filter(road => road.ends);
         sheet.joints ??= [];
         sheet.gores ??= [];
+        sheet.medians ??= [];
         delete sheet.connectors;
         sheet.roadLayer = document.createElementNS(SVG, "svg");
         sheet.roadLayer.classList.add("roadLayer");
@@ -601,6 +631,240 @@
       sheet.gores = sheet.gores.filter(gore => candidates.has(gore.key) && gore.length > 0);
     }
 
+    // Medians are closed outlines clicked point by point. Points snap to the corners
+    // and edges of road pavement, marked gores, and other medians, so medians of
+    // different surfaces can share points and edges.
+    const samePoint = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) < 1e-3;
+    const medianOf = (sheet, id) => sheet?.medians?.find(median => median.id === id);
+    function nearestOn(points, point) {
+      let best = null;
+      for (let i = 0; i < points.length - 1; i++) {
+        const p = points[i];
+        const q = points[i + 1];
+        const dx = q.x - p.x;
+        const dy = q.y - p.y;
+        const squared = dx * dx + dy * dy;
+        const f = squared ? Math.max(0, Math.min(1, ((point.x - p.x) * dx + (point.y - p.y) * dy) / squared)) : 0;
+        const at = { x: p.x + dx * f, y: p.y + dy * f };
+        const distance = Math.hypot(at.x - point.x, at.y - point.y);
+        if (!best || distance < best.distance) best = { ...at, distance, s: i + f };
+      }
+      return best;
+    }
+    // Road pavement edges and marked gore outlines, which medians snap to and follow.
+    function pavementEdges(sheet, solved) {
+      if (solved.pavementEdges) return solved.pavementEdges;
+      const margin = inchesToPixels(sheet, PAVEMENT_MARGIN_INCHES);
+      const corners = [];
+      const edges = [];
+      const byKey = new Map();
+      // Each road edge is tagged with its road and side (L, R, or the S and E end
+      // caps), so median points on it can be anchored there and follow the road.
+      for (const road of sheet.roads) {
+        const shape = shapeOf(sheet, road, solved);
+        const [left, right] = [boundary(shape, 0, -margin), boundary(shape, road.lanes, margin)];
+        const sides = { L: left, R: right, S: [left[0], right[0]], E: [left.at(-1), right.at(-1)] };
+        for (const [side, edge] of Object.entries(sides)) {
+          edge.on = { road: road.id, side };
+          byKey.set(`${road.id}:${side}`, edge);
+          edges.push(edge);
+        }
+        corners.push(...[["L", 0], ["L", 1], ["R", 0], ["R", 1]].map(([side, f]) => ({ ...sides[side][f ? sides[side].length - 1 : 0], on: { road: road.id, side, f } })));
+      }
+      const candidates = goreCandidates(sheet, solved);
+      for (const gore of sheet.gores) {
+        const candidate = candidates.get(gore.key);
+        const last = candidate ? indexAt(candidate.along, feetToPixels(sheet, gore.length)) : 0;
+        if (last < 1) continue;
+        const [e1, e2] = [candidate.e1.slice(0, last + 1), candidate.e2.slice(0, last + 1)];
+        corners.push(e1[0], e1[last], e2[last]);
+        edges.push(e1, e2, [e1[last], e2[last]]);
+      }
+      return (solved.pavementEdges = { corners, edges, byKey });
+    }
+    // Arc-length fraction of position `s` (segment index plus fraction) along a
+    // polyline, and the point at a fraction.
+    function fractionAt(points, s) {
+      const total = polylineLength(points) || 1;
+      const i = Math.min(Math.floor(s), points.length - 2);
+      return (polylineLength(points.slice(0, i + 1)) + Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y) * (s - i)) / total;
+    }
+    function pointAtFraction(points, f) {
+      const [, at] = resample(points, 1, polylineLength(points) * Math.max(0, Math.min(1, f)));
+      return at;
+    }
+    // Median points anchored to a road edge move with the road; an anchor to a
+    // road that's gone is dropped and the point stays where it was.
+    function anchorMedians(sheet, solved) {
+      const { byKey } = pavementEdges(sheet, solved);
+      for (const p of sheet.medians.flatMap(median => median.points)) {
+        if (!p.on) continue;
+        const edge = byKey.get(`${p.on.road}:${p.on.side}`);
+        if (!edge) delete p.on;
+        else Object.assign(p, pointAtFraction(edge, p.on.f));
+      }
+    }
+    // After a road is cut, points anchored to it re-anchor to whichever piece
+    // they lie on.
+    function rehomeMedians(sheet, roads) {
+      const ids = roads.map(road => road.id);
+      const edges = pavementEdges(sheet, solve(sheet)).edges.filter(edge => ids.includes(edge.on?.road));
+      for (const p of (sheet.medians ?? []).flatMap(median => median.points)) {
+        if (!p.on || !ids.includes(p.on.road)) continue;
+        let best = null;
+        for (const edge of edges) {
+          const at = nearestOn(edge, p);
+          if (at && (!best || at.distance < best.at.distance)) best = { edge, at };
+        }
+        if (best) p.on = { ...best.edge.on, f: fractionAt(best.edge, best.at.s) };
+      }
+    }
+    // A median's drawn outline: between two points on the same pavement edge it
+    // follows that edge (a curved road's edge, say) instead of cutting across.
+    function medianOutline(sheet, solved, points) {
+      const { edges } = pavementEdges(sheet, solved);
+      const tolerance = 0.5;
+      const on = points.map(p => edges.map(edge => {
+        const at = nearestOn(edge, p);
+        return at && at.distance <= tolerance ? at.s : null;
+      }));
+      return points.flatMap((p, i) => {
+        const j = (i + 1) % points.length;
+        const k = edges.findIndex((edge, n) => on[i][n] != null && on[j][n] != null && edge.length > 2);
+        if (k < 0) return [p];
+        const [from, to] = [on[i][k], on[j][k]];
+        const between = [];
+        if (from < to) for (let n = Math.floor(from) + 1; n < to; n++) between.push(edges[k][n]);
+        else for (let n = Math.ceil(from) - 1; n > to; n--) between.push(edges[k][n]);
+        return [p, ...between];
+      });
+    }
+    // Corners and edges a median point can snap to; points in `exclude` (the ones
+    // being dragged) and median edges touching them are left out.
+    function medianSnaps(sheet, solved, exclude) {
+      const { corners: pavementCorners, edges: pavement } = pavementEdges(sheet, solved);
+      const corners = [...pavementCorners];
+      const edges = [...pavement];
+      for (const median of sheet.medians) {
+        if (median.points.some(p => exclude.has(p))) {
+          median.points.forEach(p => !exclude.has(p) && corners.push(p));
+          continue;
+        }
+        corners.push(...median.points);
+        const outline = medianOutline(sheet, solved, median.points);
+        edges.push([...outline, outline[0]]);
+      }
+      return { corners, edges };
+    }
+    // Corners win over edges within the snapping distance.
+    function snapMedian(sheet, point, exclude = new Set(), extra = []) {
+      const radius = SNAP_PIXELS / sheet.view.scale;
+      const { corners, edges } = medianSnaps(sheet, solve(sheet), exclude);
+      let best = null;
+      for (const corner of [...corners, ...extra]) {
+        const distance = Math.hypot(corner.x - point.x, corner.y - point.y);
+        if (distance <= radius && (!best || distance < best.distance)) best = { x: corner.x, y: corner.y, on: corner.on, distance };
+      }
+      if (best) return best;
+      for (const edge of edges) {
+        const at = nearestOn(edge, point);
+        if (at && at.distance <= radius && (!best || at.distance < best.distance)) best = { ...at, on: edge.on && { ...edge.on, f: fractionAt(edge, at.s) } };
+      }
+      return best;
+    }
+    // Every median point at the same place, so shared points move together.
+    const sharedPoints = (sheet, point) => sheet.medians.flatMap(median => median.points.filter(p => samePoint(p, point)));
+    // The outline moved `distance` inward, with mitered corners.
+    function insetPolygon(points, distance) {
+      const area = points.reduce((sum, p, i) => {
+        const q = points[(i + 1) % points.length];
+        return sum + p.x * q.y - q.x * p.y;
+      }, 0);
+      const inward = v => (area > 0 ? rightOf(v) : { x: v.y, y: -v.x });
+      return points.map((p, i) => {
+        const prev = points[(i - 1 + points.length) % points.length];
+        const next = points[(i + 1) % points.length];
+        const n1 = inward(unit({ x: p.x - prev.x, y: p.y - prev.y }));
+        const n2 = inward(unit({ x: next.x - p.x, y: next.y - p.y }));
+        const scale = distance / Math.max(0.25, 1 + dot(n1, n2));
+        return { x: p.x + (n1.x + n2.x) * scale, y: p.y + (n1.y + n2.y) * scale };
+      });
+    }
+    function drawMedian(sheet, median, layers, solved) {
+      const corners = median.points.filter((p, i) => !samePoint(p, median.points[(i + 1) % median.points.length]));
+      if (corners.length < 3) return;
+      const points = medianOutline(sheet, solved, corners).filter((p, i, all) => !samePoint(p, all[(i + 1) % all.length]));
+      const outline = `${pathData(points)}Z`;
+      const fill = document.createElementNS(SVG, "path");
+      fill.setAttribute("d", outline);
+      if (median.type === "painted") fill.setAttribute("class", "roadBand medianBand");
+      else fill.setAttribute("fill", median.type === "concrete" ? CONCRETE : GRASS);
+      layers.pavement.append(fill);
+      if (median.id === selectedMedian) {
+        const ring = document.createElementNS(SVG, "path");
+        ring.setAttribute("class", "roadOutline");
+        ring.setAttribute("d", outline);
+        layers.selection.append(ring);
+      }
+      if (median.type === "grass") return;
+      const clipTo = (shape, id) => {
+        const clip = document.createElementNS(SVG, "clipPath");
+        clip.id = `median-${sheet.id}-${median.id}-${id}`;
+        const path = document.createElementNS(SVG, "path");
+        path.setAttribute("d", `${pathData(shape)}Z`);
+        clip.append(path);
+        const group = document.createElementNS(SVG, "g");
+        group.setAttribute("clip-path", `url(#${clip.id})`);
+        layers.markings.append(clip, group);
+        return group;
+      };
+      const color = median.type === "concrete" ? CURB : median.color === "white" ? WHITE : YELLOW;
+      const closed = shape => {
+        const path = strokePath([...shape, shape[0]], color, 0);
+        path.setAttribute("stroke-linejoin", "miter");
+        return path;
+      };
+      if (median.type === "concrete") {
+        // The curb: a stroke twice its width, clipped to the inside of the outline.
+        const curb = closed(points);
+        curb.setAttribute("stroke-width", inchesToPixels(sheet, CURB_INCHES) * 2);
+        clipTo(points, "curb").append(curb);
+        return;
+      }
+      // The inner line sits 10" (center to center) inside the road's edge line,
+      // which is itself 8" inside the pavement edge the median snaps to. White
+      // (same-direction) medians are outlined like gores, in 8" white.
+      const inner = insetPolygon(points, inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES - PAVEMENT_MARGIN_INCHES));
+      // Diagonals at 45° to the median's longest side, `spacing` apart along it,
+      // leaning right (╱) or left (╲) as seen with that side running left to right.
+      let along = { x: 1, y: 0 };
+      let longest = 0;
+      corners.forEach((p, i) => {
+        const q = corners[(i + 1) % corners.length];
+        const length = Math.hypot(q.x - p.x, q.y - p.y);
+        if (length > longest) [longest, along] = [length, unit({ x: q.x - p.x, y: q.y - p.y })];
+      });
+      if (along.x < -1e-6 || (Math.abs(along.x) <= 1e-6 && along.y > 0)) along = { x: -along.x, y: -along.y };
+      const lean = median.lean === "left" ? 1 : -1;
+      const d = unit({ x: along.x + rightOf(along).x * lean, y: along.y + rightOf(along).y * lean });
+      const across = rightOf(d);
+      const step = feetToPixels(sheet, median.spacing ?? MEDIAN_SPACING_FEET) / Math.SQRT2;
+      const [lo, hi] = [Math.min(...points.map(p => dot(p, across))), Math.max(...points.map(p => dot(p, across)))];
+      const [first, last] = [Math.min(...points.map(p => dot(p, d))), Math.max(...points.map(p => dot(p, d)))];
+      const stripes = clipTo(inner, "stripes");
+      const stripe = inchesToPixels(sheet, GORE_STRIPE_INCHES);
+      for (let c = lo + ((hi - lo) % step) / 2; c <= hi; c += step) {
+        stripes.append(strokePath([first, last].map(t => ({ x: across.x * c + d.x * t, y: across.y * c + d.y * t })), color, stripe));
+      }
+      const line = closed(inner);
+      line.setAttribute("stroke-width", inchesToPixels(sheet, median.color === "white" ? GORE_LINE_INCHES : LINE_INCHES));
+      layers.markings.append(line);
+    }
+    function medianAt(sheet, point) {
+      const solved = solve(sheet);
+      return [...sheet.medians].reverse().find(median => median.points.length > 2 && insidePolygon(point, medianOutline(sheet, solved, median.points)))?.id ?? null;
+    }
+
     // A road's lines aren't painted on the travel lanes of roads joined to it: where
     // a ramp overlaps the lane it feeds, its edge line stops at the other road's
     // edge, and that road's edge line stops where the ramp crosses it. The masks
@@ -641,15 +905,20 @@
     function render() {
       const sheet = sheets.selected;
       let solved = null;
+      // Selecting a road or gore deselects the median.
+      if (selectedRoad || selectedGore) selectedMedian = null;
       if (sheet) {
         const layer = layerFor(sheet);
         solved = solve(sheet);
+        anchorMedians(sheet, solved);
         const layers = Object.fromEntries(["pavement", "markings", "selection"].map(name => {
           const group = document.createElementNS(SVG, "g");
           group.setAttribute("class", `road${name[0].toUpperCase()}${name.slice(1)}`);
           return [name, group];
         }));
         if (sheet.inchesPerPixel) {
+          // Medians go under the roads, so road pavement always shows over them.
+          sheet.medians.forEach(median => drawMedian(sheet, median, layers, solved));
           const partner = pairOf(sheet, selectedRoad);
           sheet.roads.forEach(road => drawRoad(sheet, road, shapeOf(sheet, road, solved), layers, road === selectedRoad || road === partner ? "selected" : "", solved));
           const candidates = goreCandidates(sheet, solved);
@@ -712,7 +981,7 @@
     function drawOverlay(solved = sheets.selected && solve(sheets.selected)) {
       const sheet = sheets.selected;
       overlay.hidden = !sheet || !active() || !sheet.inchesPerPixel;
-      overlay.classList.toggle("drawing", Boolean(drawing));
+      overlay.classList.toggle("drawing", Boolean(drawing || medianDraw));
       const seen = new Set();
       if (!overlay.hidden) {
         for (const road of sheet.roads) {
@@ -751,6 +1020,7 @@
         nodeButtons.delete(key);
       }
       drawGoreButtons(sheet, solved);
+      drawMedianOverlay(sheet);
       positionMenu();
       if (overlay.hidden) return;
       const anchor = drawing?.start ?? drawing?.end;
@@ -883,6 +1153,132 @@
       sheet.gores = sheet.gores.filter(gore => gore.key !== selectedGore);
       changed();
     }
+    // While a median is drawn: its points so far and lines to the cursor and back to
+    // the first point. Once selected: a handle on each point; dragging a shared
+    // point moves every median that shares it.
+    function drawMedianOverlay(sheet) {
+      const show = !overlay.hidden && medianDraw;
+      const path = show ? [...medianDraw.points, ...(medianDraw.cursor ? [medianDraw.cursor] : [])].map(p => sheets.toScreen(p)) : [];
+      medianPreview.setAttribute("points", path.map(p => `${p.x},${p.y}`).join(" "));
+      medianClosing.setAttribute("visibility", path.length > 2 ? "visible" : "hidden");
+      if (path.length > 2) {
+        Object.entries({ x1: path.at(-1).x, y1: path.at(-1).y, x2: path[0].x, y2: path[0].y }).forEach(([key, value]) => medianClosing.setAttribute(key, value));
+      }
+      medianPreviewPoints.replaceChildren(...(show ? medianDraw.points : []).map(p => {
+        const at = sheets.toScreen(p);
+        const mark = document.createElementNS(SVG, "circle");
+        Object.entries({ cx: at.x, cy: at.y, r: 4 }).forEach(([key, value]) => mark.setAttribute(key, value));
+        return mark;
+      }));
+      const median = !overlay.hidden && !medianDraw && medianOf(sheet, selectedMedian);
+      const count = median ? median.points.length : 0;
+      while (medianPoints.length > count) medianPoints.pop().remove();
+      while (medianPoints.length < count) medianPoints.push(medianPointButton(medianPoints.length));
+      medianPoints.forEach((button, i) => {
+        place(button, median.points[i]);
+        const shared = sharedPoints(sheet, median.points[i]).length > 1;
+        button.classList.toggle("shared", shared);
+        button.setAttribute("aria-label", `Median point ${i + 1} of ${count}${shared ? ", shared with another median" : ""}`);
+      });
+    }
+    function medianPointButton(index) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "medianPoint";
+      button.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight ArrowUp ArrowDown Delete");
+      const target = () => medianOf(sheets.selected, selectedMedian)?.points[index];
+      let moving = null;
+      button.addEventListener("pointerdown", event => {
+        const point = target();
+        if (event.button !== 0 || !point) return;
+        event.stopPropagation();
+        button.setPointerCapture(event.pointerId);
+        moving = sharedPoints(sheets.selected, point);
+      });
+      button.addEventListener("pointermove", event => {
+        if (!moving || !button.hasPointerCapture(event.pointerId)) return;
+        const pointer = sheets.toImage(event.clientX, event.clientY);
+        snapTarget = snapMedian(sheets.selected, pointer, new Set(moving));
+        const goal = snapTarget ?? pointer;
+        moving.forEach(p => {
+          Object.assign(p, { x: goal.x, y: goal.y, on: goal.on && { ...goal.on } });
+          if (!p.on) delete p.on;
+        });
+        render();
+      });
+      const finish = event => {
+        if (!moving || !button.hasPointerCapture(event.pointerId)) return;
+        button.releasePointerCapture(event.pointerId);
+        moving = null;
+        snapTarget = null;
+        changed();
+      };
+      button.addEventListener("pointerup", finish);
+      button.addEventListener("pointercancel", finish);
+      nudgeKeys(button, (dx, dy) => {
+        const point = target();
+        if (!point) return false;
+        // A nudged point leaves the edge it was anchored to.
+        sharedPoints(sheets.selected, point).forEach(p => {
+          Object.assign(p, { x: p.x + dx, y: p.y + dy });
+          delete p.on;
+        });
+      });
+      button.dataset.index = index;
+      overlay.append(button);
+      return button;
+    }
+    // A median keeps at least three points.
+    function removeMedianPoint(index) {
+      const median = medianOf(sheets.selected, selectedMedian);
+      if (!median || median.points.length <= 3) return;
+      median.points.splice(index, 1);
+      changed();
+      medianPoints[Math.min(index, medianPoints.length - 1)]?.focus();
+    }
+    function selectMedian(id) {
+      selectedMedian = id;
+      medianSheet = sheets.selected;
+      selectedRoad = null;
+      selectedLane = null;
+      selectedGore = null;
+      closeMenu();
+      render();
+    }
+    function startMedian() {
+      drawing = null;
+      snapTarget = null;
+      selectMedian(null);
+      medianDraw = { points: [], cursor: null };
+      render();
+    }
+    // Three or more points close the outline; fewer cancel it.
+    function finishMedian() {
+      const sheet = sheets.selected;
+      const points = medianDraw?.points ?? [];
+      medianDraw = null;
+      snapTarget = null;
+      if (!sheet || points.length < 3) return render();
+      const median = {
+        id: nextId(sheet.medians), type: defaults.medianType, spacing: defaults.medianSpacing,
+        color: defaults.medianColor, lean: defaults.medianLean, points,
+      };
+      sheet.medians.push(median);
+      selectMedian(median.id);
+      changed();
+    }
+    function removeMedian() {
+      const sheet = sheets.selected;
+      sheet.medians = sheet.medians.filter(median => median.id !== selectedMedian);
+      selectedMedian = null;
+      changed();
+    }
+    // The median's own points count too, so clicking the first one closes it.
+    function medianDrawPoint(sheet, clientX, clientY) {
+      const point = sheets.toImage(clientX, clientY);
+      snapTarget = snapMedian(sheet, point, new Set(), medianDraw.points);
+      return snapTarget ? { x: snapTarget.x, y: snapTarget.y, ...(snapTarget.on && { on: { ...snapTarget.on } }) } : point;
+    }
     const separationSpeed = feet => ({ 10: "30 mph or less", 20: "35–40 mph", 30: "45 mph", 40: "50 mph or more" })[feet];
 
     function updatePanel(solved) {
@@ -890,7 +1286,10 @@
       const ready = Boolean(sheet?.inchesPerPixel);
       addButton.disabled = !ready;
       addButton.setAttribute("aria-pressed", String(Boolean(drawing)));
-      deleteButton.disabled = !selectedRoad && !sheet?.gores?.some(gore => gore.key === selectedGore);
+      addMedianButton.disabled = !ready;
+      addMedianButton.setAttribute("aria-pressed", String(Boolean(medianDraw)));
+      const median = medianOf(sheet, selectedMedian);
+      deleteButton.disabled = !selectedRoad && !median && !sheet?.gores?.some(gore => gore.key === selectedGore);
       const values = selectedRoad ?? defaults;
       const partner = sheet && pairOf(sheet, selectedRoad);
       if (document.activeElement !== lanesInput) lanesInput.value = values.lanes;
@@ -936,29 +1335,57 @@
           ? `Standard chevron spacing is ${GORE_SPACING_FEET} ft.`
           : `Spacing by posted speed: 10 ft ≤30 mph, 20 ft 35–40, 30 ft 45, 40 ft ≥50.${separationSpeed(spacing) ? ` ${spacing} ft fits ${separationSpeed(spacing)}.` : ""}`;
       }
-      workspace.classList.toggle("drawing", Boolean(drawing));
+      medianFields.hidden = !median && !medianDraw;
+      if (!medianFields.hidden) {
+        const values = median ?? { type: defaults.medianType, spacing: defaults.medianSpacing, color: defaults.medianColor, lean: defaults.medianLean };
+        medianTitle.textContent = median ? `${MEDIAN_TYPES[values.type]} Median` : "New Median";
+        if (document.activeElement !== medianType) medianType.value = values.type;
+        paintedFields.hidden = values.type !== "painted";
+        if (document.activeElement !== medianColor) medianColor.value = values.color ?? "yellow";
+        if (document.activeElement !== medianLean) medianLean.value = values.lean ?? "right";
+        for (const input of [medianSpacing, medianSpacingValue]) {
+          if (document.activeElement !== input) input.value = values.spacing ?? MEDIAN_SPACING_FEET;
+        }
+        const spacing = values.spacing ?? MEDIAN_SPACING_FEET;
+        medianSpacingHint.textContent = `Spacing by posted speed: 10 ft ≤30 mph, 20 ft 35–40, 30 ft 45, 40 ft ≥50.${separationSpeed(spacing) ? ` ${spacing} ft fits ${separationSpeed(spacing)}.` : ""}`;
+        medianState.textContent = {
+          grass: "Unpaved turf median.",
+          concrete: "Raised concrete median with a 6\" curb along its edge.",
+          painted: values.color === "white"
+            ? "Painted median between same-direction traffic: 8\" white outline and 18\" white diagonals at 45°."
+            : "Painted median between opposing traffic: a second 6\" yellow line 10\" inside each road's yellow edge line, and 18\" yellow diagonals at 45°.",
+        }[values.type];
+      }
+      workspace.classList.toggle("drawing", Boolean(drawing || medianDraw));
       workspace.classList.toggle("elementsActive", active());
       if (!sheet) hint.textContent = "Upload a sheet first.";
       else if (!ready) hint.textContent = "Set this sheet's scale first (Sheets › Set Scale) so lanes draw true size.";
+      else if (medianDraw) hint.textContent = medianDraw.points.length < 3
+        ? "Click the median's corners. Points snap to road and gore corners and edges, and to other medians' points."
+        : "Keep clicking corners. Click the first point, double-click, or press Esc to close the median."
       else if (drawing?.end && !drawing.start) hint.textContent = "Click where the new road starts; it ends at the chosen lane's start. Esc cancels.";
       else if (drawing && !drawing.start) hint.textContent = defaults.opposite
         ? "Click the start of the two-way road's centerline." : "Click the road's start point, a lane's end node to continue from it, or a road's edge line to branch off it.";
       else if (drawing) hint.textContent = defaults.opposite
-        ? "Click the end of the centerline. Lanes travel start to end; opposite lanes return. Esc cancels."
-        : "Click the end point, a lane's start node to join it, or a road's edge line to merge into it. Traffic flows from start to end. Esc cancels.";
+        ? "Click the next node of the centerline; keep clicking to continue, and double-click or press Esc to finish. Lanes travel start to end; opposite lanes return."
+        : drawing.last
+          ? "Click to add the next node, or a lane's start node or edge line to join it. Double-click or press Esc to finish."
+          : "Click the next node, a lane's start node to join it, or a road's edge line to merge into it. Keep clicking to continue the road; double-click or press Esc to finish. Traffic flows from start to end.";
       else if (candidate) hint.textContent = sheet.gores.some(gore => gore.key === selectedGore)
         ? "Drag the gore icon along the gore to change how far the marking reaches. Drag it back to the point to remove it."
         : "Drag the gore icon along the center of the gore to mark it.";
+      else if (median) hint.textContent = "Median selected. Drag its points to reshape it; points shared with another median move both. Delete removes a focused point or the median."
       else if (lane) hint.textContent = "Lane end selected. Set its taper below, drag the node to move the road end, or right-click it for more.";
       else if (partner) hint.textContent = "Two-way road. Right-click a lane node for actions like curving, tapering, or splitting into one-way roads.";
       else if (selectedRoad) hint.textContent = "Drag a lane node to move the road end, onto another road's node to join them, or onto a road's edge line to feed its edge lane. Right-click a node for actions like curving, tapering, or making the road two-way.";
       else hint.textContent = goreButtons.size
-        ? "Add a road, or click a road to edit it. Drag a gore icon along a gore to mark it. Right-click any lane node for actions."
-        : "Add a road (set Opposite lanes for two-way), or click a road to edit it. Right-click any lane node for actions.";
+        ? "Add a road or median, or click one to edit it. Drag a gore icon along a gore to mark it. Right-click any lane node for actions."
+        : "Add a road (set Opposite lanes for two-way) or median, or click one to edit it. Right-click any lane node for actions.";
     }
 
     function selectRoad(road) {
       selectedGore = null;
+      selectedMedian = null;
       selectedRoad = road;
       selectedLane = null;
       render();
@@ -966,11 +1393,15 @@
     // Drawing can begin from a lane's end (`start`) or toward a lane's start (`end`).
     function startDrawing({ start = null, end = null } = {}) {
       drawing = { start, end, cursor: null };
+      medianDraw = null;
+      selectedMedian = null;
       selectedRoad = null;
       selectedLane = null;
       render();
     }
+    // Finishing a chain of road segments selects the last one.
     function stopDrawing() {
+      if (drawing?.last) selectedRoad = roadOf(sheets.selected, drawing.last) ?? null;
       drawing = null;
       snapTarget = null;
       render();
@@ -1124,9 +1555,38 @@
     }
 
     addButton.addEventListener("click", () => (drawing ? stopDrawing() : startDrawing()));
+    addMedianButton.addEventListener("click", () => (medianDraw ? finishMedian() : startMedian()));
+    for (const [input, key, field] of [[medianColor, "medianColor", "color"], [medianLean, "medianLean", "lean"]]) {
+      input.addEventListener("change", () => {
+        const median = medianOf(sheets.selected, selectedMedian);
+        defaults[key] = input.value;
+        if (!median) return render();
+        median[field] = input.value;
+        changed();
+      });
+    }
+    medianType.addEventListener("change", () => {
+      const median = medianOf(sheets.selected, selectedMedian);
+      defaults.medianType = medianType.value;
+      if (!median) return render();
+      median.type = medianType.value;
+      changed();
+    });
+    for (const input of [medianSpacing, medianSpacingValue]) {
+      input.addEventListener("input", () => {
+        const feet = Number(input.value);
+        if (!(feet >= MIN_GORE_SPACING_FEET && feet <= MAX_GORE_SPACING_FEET)) return;
+        defaults.medianSpacing = feet;
+        const median = medianOf(sheets.selected, selectedMedian);
+        if (!median) return render();
+        median.spacing = feet;
+        changed();
+      });
+    }
     deleteButton.addEventListener("click", deleteSelection);
     function deleteSelection() {
       if (selectedGore) removeGore();
+      else if (medianOf(sheets.selected, selectedMedian)) removeMedian();
       else deleteRoad();
     }
     document.getElementById("removeGore").addEventListener("click", removeGore);
@@ -1350,7 +1810,9 @@
         partner.ends[0].length = pulls.end;
         partner.ends[1] = { joint: joint.id, sign: -1, length: pulls.after };
         joint.links.push({ a: partner.id, ai: 0, b: back.id, bi: 0 }, { a: road.id, ai: 0, b: back.id, bi: 0, pair: true, median });
+        rehomeMedians(sheet, [partner, back]);
       }
+      rehomeMedians(sheet, [road, after]);
       return { joint, after };
     }
     // Joins end `e` of a new road to the edge line it was drawn onto: the edge's road
@@ -1404,6 +1866,10 @@
     });
     workspace.addEventListener("pointermove", event => {
       const sheet = sheets.selected;
+      if (medianDraw && !event.buttons && sheet?.inchesPerPixel && active()) {
+        medianDraw.cursor = medianDrawPoint(sheet, event.clientX, event.clientY);
+        return drawOverlay();
+      }
       if (!drawing || event.buttons || !sheet?.inchesPerPixel || !active()) return;
       const point = drawingPoint(sheet, event.clientX, event.clientY);
       if (drawing.start || drawing.end) drawing.cursor = point;
@@ -1411,10 +1877,20 @@
     });
     workspace.addEventListener("click", event => {
       const sheet = sheets.selected;
-      if (!active() || !sheet?.inchesPerPixel || !press || event.target.closest(".roadNode, .roadControl")) return;
+      if (!active() || !sheet?.inchesPerPixel || !press || event.target.closest(".roadNode, .roadControl, .medianPoint")) return;
       if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > 4) return;
+      if (medianDraw) {
+        const point = medianDrawPoint(sheet, event.clientX, event.clientY);
+        const { points } = medianDraw;
+        if (points.length > 2 && samePoint(point, points[0])) return finishMedian();
+        if (!points.some(p => samePoint(p, point))) points.push(point);
+        medianDraw.cursor = point;
+        return render();
+      }
       if (!drawing) {
         const point = sheets.toImage(event.clientX, event.clientY);
+        const median = medianAt(sheet, point);
+        if (median) return selectMedian(median);
         const road = roadAt(sheet, point);
         const gore = !road && goreAt(sheet, point);
         return gore ? selectGore(gore) : selectRoad(road);
@@ -1437,13 +1913,31 @@
         else if (p.target) connect(sheet, road, e, Math.min(p.target.lane, road.lanes - 1), p.target);
       });
       if (defaults.opposite) addOpposite(sheet, road, defaults.opposite, defaults.median, false);
-      drawing = null;
       snapTarget = null;
-      selectedRoad = road;
+      // Like Cities: Skylines, each click adds a node: the road carries on from the
+      // segment just drawn until a double-click or Esc, or until it joins a lane
+      // or edge line. A two-way road carries on from its centerline.
+      if (drawing.start && !end.target) {
+        const solved = solve(sheet);
+        const joint = jointOf(sheet, road.ends[1].joint);
+        const at = defaults.opposite ? { x: joint.x, y: joint.y } : solved.get(`${road.id}:1`);
+        const start = { x: at.x, y: at.y, target: { road, e: 1, lane: 0 } };
+        drawing = { start, end: null, cursor: start, last: road.id };
+        selectedRoad = null;
+      } else {
+        drawing = null;
+        selectedRoad = road;
+      }
       changed();
     });
-    // Quick clicks while drawing must not trigger the double-click refit.
-    workspace.addEventListener("dblclick", event => { if (drawing) event.preventDefault(); }, true);
+    // A double-click finishes the road or median being drawn (its first click has
+    // already placed the last node), and must not trigger the refit.
+    workspace.addEventListener("dblclick", event => {
+      if (!drawing && !medianDraw) return;
+      event.preventDefault();
+      if (drawing) stopDrawing();
+      else finishMedian();
+    }, true);
 
     // Lane nodes: dragging moves the road's whole end (and everything joined to it);
     // dropping onto another lane's node joins them.
@@ -1719,7 +2213,14 @@
         if (event.key !== "Escape") return;
         event.stopPropagation();
         closeMenu(true);
-      } else if (event.key === "Escape" && (drawing || selectedRoad || selectedGore)) {
+      } else if (medianDraw && (event.key === "Escape" || (event.key === "Enter" && !typing))) {
+        event.preventDefault();
+        event.stopPropagation();
+        finishMedian();
+      } else if ((event.key === "Delete" || event.key === "Backspace") && event.target.closest?.(".medianPoint")) {
+        event.preventDefault();
+        removeMedianPoint(medianPoints.indexOf(event.target.closest(".medianPoint")));
+      } else if (event.key === "Escape" && (drawing || selectedRoad || selectedGore || selectedMedian)) {
         event.stopPropagation();
         drawing ? stopDrawing() : selectRoad(null);
       } else if ((event.key === "Delete" || event.key === "Backspace") && !typing && !deleteButton.disabled) {
@@ -1731,6 +2232,7 @@
     new MutationObserver(() => {
       if (!active()) {
         drawing = null;
+        medianDraw = null;
         snapTarget = null;
         closeMenu();
       }
@@ -1741,6 +2243,9 @@
     document.addEventListener("sheethistory", () => {
       const sheet = sheets.selected;
       sheet && (sheet.gores ??= []);
+      sheet && (sheet.medians ??= []);
+      if (!medianOf(sheet, selectedMedian)) selectedMedian = null;
+      medianDraw = null;
       selectedRoad = sheet?.roads && selectedRoad ? roadOf(sheet, selectedRoad.id) ?? null : null;
       if (!(selectedRoad && selectedLane?.lane < selectedRoad.lanes)) selectedLane = null;
       for (const key of openCurves) if (!sheet?.roads?.some(road => key.startsWith(`${road.id}:`))) openCurves.delete(key);
@@ -1755,7 +2260,9 @@
         selectedRoad = null;
         selectedLane = null;
       }
+      if (sheets.selected !== medianSheet) selectedMedian = null;
       drawing = null;
+      medianDraw = null;
       snapTarget = null;
       closeMenu();
       render();

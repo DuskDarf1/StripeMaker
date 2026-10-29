@@ -33,6 +33,7 @@
       <div class="editorContent">
         <div class="headActions">
           <button type="button" id="addRoad" aria-pressed="false">Add Road</button>
+          <button type="button" id="addMedian" aria-pressed="false">Add Median</button>
           <button type="button" id="deleteRoad" disabled>Delete</button>
         </div>
         <p id="elementsHint" class="elementsHint" aria-live="polite"></p>
@@ -97,6 +98,43 @@
           <div class="headActions">
             <button type="button" id="removeGore">Remove Marking</button>
           </div>
+        </div>
+        <div id="medianFields" hidden>
+          <hr />
+          <h3 id="medianTitle">Median</h3>
+          <div class="fieldRow">
+            <label for="medianType">Surface</label>
+            <select id="medianType">
+              <option value="grass">Grass</option>
+              <option value="concrete">Concrete (raised, curbed)</option>
+              <option value="painted">Painted</option>
+            </select>
+          </div>
+          <div id="paintedFields">
+            <div class="fieldRow">
+              <label for="medianColor">Color</label>
+              <select id="medianColor">
+                <option value="yellow">Yellow (opposing traffic)</option>
+                <option value="white">White (same direction)</option>
+              </select>
+            </div>
+            <div class="fieldRow">
+              <label for="medianLean">Stripe direction</label>
+              <select id="medianLean">
+                <option value="right">╱ Lean right</option>
+                <option value="left">╲ Lean left</option>
+              </select>
+            </div>
+            <div class="fieldRow">
+              <label for="medianSpacing">Stripe spacing (ft)</label>
+              <div class="dimensionInputs">
+                <input id="medianSpacing" type="range" min="10" max="40" step="5" value="20" aria-describedby="medianSpacingHint" />
+                <input id="medianSpacingValue" type="number" min="10" max="40" step="5" value="20" aria-label="Stripe spacing in feet" />
+              </div>
+            </div>
+            <p id="medianSpacingHint" class="fieldHint"></p>
+          </div>
+          <p id="medianState" class="elementsHint"></p>
         </div>
       </div>
     </section>

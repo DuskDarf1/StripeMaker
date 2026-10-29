@@ -152,12 +152,31 @@ MUTCD-compliant pavement markings onto them.
   change the length (Shift for larger steps); Delete removes it. Gores are
   stored per sheet as `{ key, length, spacing }` (feet), keyed by their two road
   ends, saved, undoable, and dropped when their roads no longer form a gore.
+- **Medians** (Elements panel **Add Median**): click the median's corners; points
+  snap to road pavement corners and edges, marked gore corners and edges, and
+  other medians' points and edges. Three or more points close it: click the first
+  point, double-click, or press Escape or Enter (fewer points cancel). Points snapped
+  to a road edge are anchored there (`on: { road, side: L|R|S|E, f }`, arc-length
+  fraction) and move with the road; cutting a road re-anchors them to the piece
+  they lie on; a nudged point drops its anchor. Between two points on the same
+  pavement edge the outline follows that edge (curves included). Medians draw
+  under road pavement. Surfaces: Grass (turf), Concrete (raised, 6" curb at its
+  edge), or Painted: Yellow (opposing traffic: second 6" yellow line 10" inside
+  the road's edge line, 18" diagonals) or White (same direction: 8" white
+  outline, 18" diagonals), with stripe direction (╱ or ╲ relative to the
+  median's longest side) and spacing (10–40 ft). Medians can share points; a
+  selected median shows square point handles, and dragging a shared point moves
+  every median that shares it. Delete on a focused point removes it (at least 3
+  remain). Stored per sheet as `{ id, type, color, lean, spacing, points }`,
+  saved and undoable.
 - Not yet designed: per-road marking edits.
 
 ## Current scope
 
-- Elements (editor panel): Add Road, then click a start and end point to draw a
-  one-lane, one-way road. Lanes (1–8) and lane width (default 12 ft, 8–20 ft)
+- Elements (editor panel): Add Road, then click a start point and then each
+  next node (like Cities: Skylines): each click adds a segment joined to the
+  last, and a double-click or Escape finishes (selecting the last segment).
+  Ending on a lane node or edge line also finishes. Lanes (1–8) and lane width (default 12 ft, 8–20 ft)
   apply to the selected road, or to the next road when none is selected. Lanes
   are separated by FDOT white skip lane lines, with FDOT edge lines. Clicking a
   lane node selects that lane end and shows its Taper setting and length.

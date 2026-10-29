@@ -198,7 +198,8 @@
     }
     const record = sheet => ({
       name: sheet.name, inchesPerPixel: sheet.inchesPerPixel, view: sheet.view,
-      roads: sheet.roads ?? [], joints: sheet.joints ?? [], gores: sheet.gores ?? [], autoTapers: Boolean(sheet.autoTapers),
+      roads: sheet.roads ?? [], joints: sheet.joints ?? [], gores: sheet.gores ?? [], medians: sheet.medians ?? [],
+      autoTapers: Boolean(sheet.autoTapers),
     });
     function saveFailed(error) {
       status.textContent = `Couldn't save sheets for next time: ${error?.message || "storage unavailable"}.`;
@@ -624,7 +625,7 @@
     workspace.addEventListener("pointerup", endPointer);
     workspace.addEventListener("pointercancel", endPointer);
     workspace.addEventListener("dblclick", event => {
-      if (selected && !event.defaultPrevented && !event.target.closest(".scaleHandle, .roadNode, .roadControl")) fitSheet(selected);
+      if (selected && !event.defaultPrevented && !event.target.closest(".scaleHandle, .roadNode, .roadControl, .medianPoint")) fitSheet(selected);
     });
     window.addEventListener("resize", () => { if (selected?.view.fitted) fitSheet(selected); });
 
