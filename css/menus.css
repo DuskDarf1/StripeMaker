@@ -282,6 +282,20 @@ button.roadControl:focus-visible { outline: 2px solid var(--textColor); outline-
 #elementsEditor .headActions { margin: 0 0 0.5rem; }
 .editorContent button[aria-pressed="true"] { background: var(--selectedColor); }
 
+/* SignalMaker's action status (Undone. / Redone.) above the toolbar. */
+#actionStatus {
+  position: fixed;
+  bottom: 3.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 1rem);
+  margin: 0;
+  background: var(--hotbarColor);
+  font-size: 0.7rem;
+  z-index: 4;
+}
+#actionStatus:not(:empty) { padding: 0.35rem 0.6rem; }
+
 @media (prefers-reduced-motion: reduce) {
   .headListButton.panelWiggle { animation: none; }
 }

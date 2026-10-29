@@ -270,6 +270,7 @@
       }
       restoring = false;
       scheduleSave();
+      history.rebase();
     }
 
     async function decode(file) {
@@ -295,6 +296,7 @@
           renderList();
           select(sheet);
           saveFile(sheet);
+          history.rebase();
           status.textContent = "";
         } catch (error) {
           status.textContent = `Couldn't read ${file.name}: ${error?.message || "unknown error"}.`;
@@ -318,6 +320,7 @@
       forget(removed);
       select(sheets[Math.min(index, sheets.length - 1)] ?? null);
       renderList();
+      history.rebase();
     });
     document.getElementById("openSheetGuide").addEventListener("click", () => guide.showModal());
     document.getElementById("closeSheetGuide").addEventListener("click", () => guide.close());
@@ -529,6 +532,7 @@
       if (!selected || pixels < 1 || !(inches > 0)) return;
       selected.inchesPerPixel = inches / pixels;
       scheduleSave(selected);
+      history.record();
       endScale();
       renderList();
       document.dispatchEvent(new CustomEvent("sheetchange"));
@@ -629,6 +633,7 @@
     const overlays = [];
     (window.StripeMaker ??= {}).sheets = {
       get selected() { return selected; },
+      get all() { return sheets; },
       save: scheduleSave,
       addOverlay(element) {
         overlays.push(element);
@@ -642,6 +647,24 @@
         return { x: selected.view.x + point.x * selected.view.scale, y: selected.view.y + point.y * selected.view.scale };
       },
     };
+
+    // Undo and redo cover each sheet's scale, roads, and joints.
+    const actionStatus = document.getElementById("actionStatus");
+    let statusTimeout = null;
+    function report(message) {
+      clearTimeout(statusTimeout);
+      actionStatus.textContent = message;
+      statusTimeout = setTimeout(() => { actionStatus.textContent = ""; }, 5000);
+    }
+    const history = window.StripeMaker.history = window.StripeMaker.startHistory({
+      sheets: window.StripeMaker.sheets,
+      report,
+      onRestore(changed) {
+        changed.forEach(scheduleSave);
+        renderList();
+        document.dispatchEvent(new CustomEvent("sheethistory"));
+      },
+    });
     restore();
   });
 })();

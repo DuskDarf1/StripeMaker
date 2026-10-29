@@ -350,9 +350,11 @@
       drawRoad(sheet, defaults, buildShape(sheet, defaults, offset(line, half + width(defaults.lanes)), new Map()), layers, "preview");
       drawRoad(sheet, opposite, buildShape(sheet, opposite, offset([...line].reverse(), half + width(opposite.lanes)), new Map()), layers, "preview");
     }
+    // Every edit is an undo step (typing in a field is one step until it's left).
     function changed() {
       render();
       save();
+      window.StripeMaker.history.record();
     }
 
     function place(element, point) {
@@ -1089,6 +1091,18 @@
       render();
     }).observe(editor, { attributes: true, attributeFilter: ["hidden"] });
     document.addEventListener("sheetview", () => { if (active()) drawOverlay(); });
+    // Undo and redo replace the sheet's roads, so selection follows by id.
+    document.addEventListener("sheethistory", () => {
+      const sheet = sheets.selected;
+      selectedRoad = sheet?.roads && selectedRoad ? roadOf(sheet, selectedRoad.id) ?? null : null;
+      if (!(selectedRoad && selectedLane?.lane < selectedRoad.lanes)) selectedLane = null;
+      for (const key of openCurves) if (!sheet?.roads?.some(road => key.startsWith(`${road.id}:`))) openCurves.delete(key);
+      drawing = null;
+      drag = null;
+      snapTarget = null;
+      closeMenu();
+      render();
+    });
     document.addEventListener("sheetchange", () => {
       if (!sheets.selected?.roads?.includes(selectedRoad)) {
         selectedRoad = null;

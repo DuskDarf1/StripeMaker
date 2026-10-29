@@ -7,6 +7,7 @@
   <title>StripeMaker</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='86' font-size='86' text-anchor='middle'%3E%F0%9F%9B%A3%EF%B8%8F%3C/text%3E%3C/svg%3E" />
   <script src="js/vendor/geotiff.js"></script>
+  <script src="js/history.js"></script>
   <script src="js/sheets.js"></script>
   <script src="js/elements.js"></script>
   <script src="js/main.js"></script>
@@ -216,11 +217,18 @@
       <span class="material-symbols-outlined" aria-hidden="true">dark_mode</span>
     </button>
     <div class="historyBar" role="group" aria-label="Drawing history">
+      <button type="button" id="undoButton" class="historyButton" aria-label="Undo" title="Undo" disabled>
+        <span class="material-symbols-outlined" aria-hidden="true">undo</span>
+      </button>
+      <button type="button" id="redoButton" class="historyButton" aria-label="Redo" title="Redo" disabled>
+        <span class="material-symbols-outlined" aria-hidden="true">redo</span>
+      </button>
       <button type="button" id="clearAll" class="historyButton" aria-label="Clear all" title="Clear all">
         <span class="material-symbols-outlined" aria-hidden="true">delete</span>
       </button>
     </div>
   </nav>
+  <p id="actionStatus" role="status" aria-live="polite"></p>
 
   <dialog id="sheetGuide" aria-labelledby="sheetGuideTitle">
     <h3 id="sheetGuideTitle">How to Get Sheets</h3>

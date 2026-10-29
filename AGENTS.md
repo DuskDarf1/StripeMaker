@@ -17,7 +17,7 @@ MUTCD-compliant pavement markings onto them.
   cards, or custom UI controls.
 - Bottom toolbar, in order: Sheets (an up-opening popover like SignalMaker's
   Heads tab), Elements, Markings, Intersections, Signs, Simulator, Levels, then
-  Copy, Download, Dark/light mode, and Clear all.
+  Copy, Download, Dark/light mode, Undo, Redo, and Clear all.
 - Follow SignalMaker's automatic theme behavior: use the system theme at startup
   and respond to system changes live. Manual toggles are session overrides;
   resume following the system when it matches the override. Do not persist theme
@@ -114,6 +114,15 @@ MUTCD-compliant pavement markings onto them.
   roads, and joints are saved to IndexedDB (`StripeMaker` database) and restored
   on reload. Files are written once; small records save shortly after changes.
 
+- Undo/redo follows SignalMaker's `js/history.js` (`js/history.js` here):
+  Ctrl/Cmd+Z undoes; Ctrl/Cmd+Shift+Z (and Ctrl+Y off the Mac) redoes; toolbar
+  Undo and Redo buttons show their shortcut; "Undone." / "Redone." appear in the
+  action status above the toolbar; up to 100 steps. A step is a snapshot of
+  every sheet's scale, roads, and joints. Each Elements edit and Set Scale apply
+  records one step (call `StripeMaker.history.record()` after an edit); typing
+  in an editor number field is one step until the field is left. Uploading,
+  removing, or reordering sheets, panning, zooming, and selection are not undo
+  steps, and history isn't kept across reloads.
 - Sheets: users upload aerial imagery of the roads they are redesigning. Accept
   GeoTIFF (`.tif`/`.tiff`, the standard ortho download), JPEG, and PNG; several
   sheets may be uploaded. Read GeoTIFF georeferencing to get true inches per
@@ -134,7 +143,8 @@ MUTCD-compliant pavement markings onto them.
   smoothly, two-finger scroll pans, a mouse wheel zooms, drag pans, touch
   pinch zooms, and double-click refits.
 - Markings, Intersections, Signs, Simulator, Levels, Copy, Download, and Clear
-  all are placeholders and do nothing yet. Dark/light mode is functional.
+  all are placeholders and do nothing yet. Dark/light mode, Undo, and Redo are
+  functional.
 
 ## Implementation
 
