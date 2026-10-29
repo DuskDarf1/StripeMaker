@@ -457,16 +457,19 @@
         here.forEach((a, i) => here.slice(i + 1).forEach(b => {
           if (a.road === b.road || pairOf(sheet, a.road) === b.road || sideOf(a) !== sideOf(b)) return;
           // The facing edges are the two edges, one per road, that start closest.
+          // Each edge's side across the joint: only a pair of edges facing each
+          // other across the gap can bound a gore.
           const edges = item => [0, item.road.lanes].map(k => {
             const points = boundary(shapeOf(sheet, item.road, solved), k);
-            return item.e ? points.reverse() : points;
+            return { points: item.e ? points.reverse() : points, side: (k ? 1 : -1) * item.end.sign };
           });
           let best = null;
           for (const e1 of edges(a)) for (const e2 of edges(b)) {
-            const gap = Math.hypot(e1[0].x - e2[0].x, e1[0].y - e2[0].y);
-            if (!best || gap < best.gap) best = { e1, e2, gap };
+            if (e1.side !== -e2.side) continue;
+            const gap = Math.hypot(e1.points[0].x - e2.points[0].x, e1.points[0].y - e2.points[0].y);
+            if (!best || gap < best.gap) best = { e1: e1.points, e2: e2.points, gap };
           }
-          if (best.gap > tolerance) return;
+          if (!best || best.gap > tolerance) return;
           const total = Math.min(polylineLength(best.e1), polylineLength(best.e2));
           const count = Math.min(400, Math.max(20, Math.ceil(total / feetToPixels(sheet, 2))));
           const e1 = resample(best.e1, count, total);
@@ -909,7 +912,7 @@
         : "Drag the gore icon along the center of the gore to mark it.";
       else if (lane) hint.textContent = "Lane end selected. Set its taper below, drag the node to move the road end, or right-click it for more.";
       else if (partner) hint.textContent = "Two-way road. Right-click a lane node for actions like curving, tapering, or splitting into one-way roads.";
-      else if (selectedRoad) hint.textContent = "Drag a lane node to move the road end, or onto another road's node to join them. Right-click a node for actions like curving, tapering, or making the road two-way.";
+      else if (selectedRoad) hint.textContent = "Drag a lane node to move the road end, onto another road's node to join them, or onto a road's edge line to feed its edge lane. Right-click a node for actions like curving, tapering, or making the road two-way.";
       else hint.textContent = goreButtons.size
         ? "Add a road, or click a road to edit it. Drag a gore icon along a gore to mark it. Right-click any lane node for actions."
         : "Add a road (set Opposite lanes for two-way), or click a road to edit it. Right-click any lane node for actions.";
@@ -1226,10 +1229,10 @@
     // The nearest point on a road's edge line within `radius`, away from the road's
     // ends (where lane nodes are). A new road started or ended there branches off
     // the road as a split or merge.
-    function snapEdge(sheet, solved, point, radius, exclude = null) {
+    function snapEdge(sheet, solved, point, radius, exclude = []) {
       let best = null;
       for (const road of sheet.roads) {
-        if (road === exclude) continue;
+        if (exclude.includes(road)) continue;
         const shape = shapeOf(sheet, road, solved);
         const clear = feetToPixels(sheet, road.laneWidth);
         // A two-way road's left edges are its centerline, so only its outer edges snap.
@@ -1247,7 +1250,11 @@
             const along = walked + length * f;
             walked += length;
             if (distance > radius || along < clear || along > total - clear || (best && distance >= best.distance)) continue;
-            best = { road, side, t: (i + f) / (edge.length - 1), x: at.x, y: at.y, distance, edge: true };
+            // The center of the lane along this edge, for lanes fed straight into it.
+            const right = rightOf(unit({ x: q.x - p.x, y: q.y - p.y }));
+            const inward = (side === "R" ? -1 : 1) * feetToPixels(sheet, road.laneWidth) / 2;
+            const center = { x: at.x + right.x * inward, y: at.y + right.y * inward };
+            best = { road, side, t: (i + f) / (edge.length - 1), x: at.x, y: at.y, center, distance, edge: true };
           }
         }
       }
@@ -1310,7 +1317,7 @@
     // Joins end `e` of a new road to the edge line it was drawn onto: the edge's road
     // is cut there, and the new road sits beside it, edge line on edge line.
     function attachToEdge(sheet, road, e, point) {
-      const target = snapEdge(sheet, solve(sheet), point, 1 / sheet.view.scale + 0.5, road);
+      const target = snapEdge(sheet, solve(sheet), point, 1 / sheet.view.scale + 0.5, [road]);
       if (!target) return;
       const { joint, after } = cutRoad(sheet, target.road, target.t);
       const own = jointOf(sheet, road.ends[e].joint);
@@ -1322,6 +1329,23 @@
       // right going the same way, and so on.
       const facing = (target.side === "R") === (sign === 1) ? "L" : "R";
       joint.links.push({ a: after.id, ai: target.side, b: road.id, bi: facing });
+    }
+    // Joins a dragged lane end head-on to the lane along an edge line: the edge's
+    // road is cut there and the dragged lane carries straight into (or out of) its
+    // outermost lane, like a ramp feeding the edge lane. Everything joined at the
+    // dragged end comes along, as with lane-to-lane joins.
+    function feedEdge(sheet, road, e, lane, edgePoint) {
+      const moving = jointOf(sheet, road.ends[e].joint);
+      const target = snapEdge(sheet, solve(sheet), edgePoint, 1 / sheet.view.scale + 0.5, attachments(sheet, moving).map(item => item.road));
+      if (!target) return;
+      const { joint, after } = cutRoad(sheet, target.road, target.t);
+      const solved = solve(sheet);
+      for (const item of attachments(sheet, moving)) {
+        item.end.sign = dot(travelAt(item.road, item.e, solved), joint.dir) < 0 ? -1 : 1;
+        item.end.joint = joint.id;
+      }
+      joint.links.push(...moving.links, { a: after.id, ai: target.side === "R" ? after.lanes - 1 : 0, b: road.id, bi: lane });
+      sheet.joints.splice(sheet.joints.indexOf(moving), 1);
     }
 
     // While drawing, points snap to lane nodes so the new road joins them, or to a
@@ -1422,7 +1446,12 @@
         const pointer = sheets.toImage(event.clientX, event.clientY);
         const wanted = { x: drag.from.x + pointer.x - drag.pointer.x, y: drag.from.y + pointer.y - drag.pointer.y };
         const solved = solve(sheet);
+        // Lane nodes first, then edge lines, which pull the dragged lane onto the
+        // center of the edge lane it will feed.
+        const moving = attachments(sheet, jointOf(sheet, road.ends[e].joint)).map(item => item.road);
         snapTarget = snapLane(sheet, solved, wanted, e, road);
+        const edge = !snapTarget && snapEdge(sheet, solved, wanted, SNAP_PIXELS / sheet.view.scale, [...moving, road]);
+        if (edge) snapTarget = { ...edge, x: edge.center.x, y: edge.center.y, edgePoint: { x: edge.x, y: edge.y } };
         const goal = snapTarget ?? wanted;
         const current = lanePoint(sheet, road, e, lane, solved);
         const joint = jointOf(sheet, road.ends[e].joint);
@@ -1433,7 +1462,8 @@
       const finish = event => {
         if (!drag || !button.hasPointerCapture(event.pointerId)) return;
         button.releasePointerCapture(event.pointerId);
-        if (snapTarget && event.type === "pointerup") connect(drag.sheet, drag.road, drag.e, drag.lane, snapTarget);
+        if (snapTarget?.edge && event.type === "pointerup") feedEdge(drag.sheet, drag.road, drag.e, drag.lane, snapTarget.edgePoint);
+        else if (snapTarget && event.type === "pointerup") connect(drag.sheet, drag.road, drag.e, drag.lane, snapTarget);
         drag = null;
         snapTarget = null;
         changed();

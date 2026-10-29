@@ -177,9 +177,14 @@
   <section id="downloadMenu" class="headsMenu" aria-labelledby="downloadTitle" hidden>
     <div class="headPopoverHeader">
       <h2 id="downloadTitle">Download</h2>
-      <span class="headPopoverHint">PNG</span>
+      <span id="downloadFormatHint" class="headPopoverHint">PNG</span>
     </div>
     <p id="downloadSheetName"></p>
+    <span id="downloadFormatLabel" class="downloadLabel">Format</span>
+    <div class="headChoiceButtons" role="group" aria-labelledby="downloadFormatLabel">
+      <button type="button" data-format="png" aria-pressed="true">PNG</button>
+      <button type="button" data-format="pdf" aria-pressed="false">PDF</button>
+    </div>
     <label for="downloadWidth" class="downloadLabel">Width (px)</label>
     <div class="dimensionInputs">
       <input id="downloadWidth" type="range" min="500" max="4096" step="1" value="4096" aria-describedby="downloadSize" />

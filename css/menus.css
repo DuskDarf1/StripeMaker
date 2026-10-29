@@ -333,6 +333,10 @@ button.roadControl:focus-visible { outline: 2px solid var(--textColor); outline-
   font-display: swap;
 }
 #downloadSheetName { overflow-wrap: anywhere; }
+/* SignalMaker's choice buttons, for PNG or PDF. */
+.headChoiceButtons { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: stretch; gap: 0.12rem; min-width: 0; margin-top: 0.25rem; }
+.headChoiceButtons button { width: 100%; min-width: 0; white-space: nowrap; }
+.headChoiceButtons button[aria-pressed="true"] { background: var(--selectedColor); }
 .downloadLabel { display: block; margin-top: 0.5rem; }
 #downloadMenu .dimensionInputs { margin: 0.25rem 0; }
 #downloadStatus:empty { display: none; }

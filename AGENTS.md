@@ -126,6 +126,12 @@ MUTCD-compliant pavement markings onto them.
   split off (start) or merge in (end) with any lane count and no taper unless
   Auto tapers is on. Links may name a road's "L" or "R" edge instead of a lane
   to join roads edge to edge. A gore icon appears between the roads.
+- **Dragging onto an edge line** is different: a dragged lane node (and
+  everything joined at that end) snaps to the center of the lane along the edge,
+  and dropping it cuts the road there and joins the dragged lane head-on to that
+  outermost lane, so a ramp feeds straight into (or out of) the edge lane rather
+  than adding a lane beside it.
+- Gores are only offered between edges that face each other across the gap.
 - Lane nodes are drawn slightly inside their road's end so joined roads' nodes
   don't cover each other; snapping accepts either the drawn node or the true
   lane end.
@@ -189,14 +195,18 @@ MUTCD-compliant pavement markings onto them.
 - Workspace navigation: trackpad pinch (ctrl+wheel or Safari gestures) zooms
   smoothly, two-finger scroll pans, a mouse wheel zooms, drag pans, touch
   pinch zooms, and double-click refits.
-- Download (`js/download.js`) saves the selected sheet as a PNG: the sheet
+- Download (`js/download.js`) saves the selected sheet as a PNG or PDF (PNG/PDF
+  choice buttons like SignalMaker's): the sheet
   image with its roads and markings (no selection outlines or previews), under
   a white header with the sheet's title in capitals and a rule below it. A width
   slider (SignalMaker's slider + number pair) sets the output size, up to the
   sheet's own width and the browser's canvas limits; the readout shows the full
   size including the header. The header lettering is osifont (an ISO 3098 CAD
   font, `fonts/osifont.woff`, GPL-3 with font exception, see
-  `fonts/osifont.LICENSE`), slanted like engineering plan-sheet text.
+  `fonts/osifont.LICENSE`), slanted like engineering plan-sheet text. The PDF
+  is written directly (no library): one page holding the same image as a JPEG,
+  sized to print at 150 ppi (capped at the 200 in PDF page limit), with the
+  sheet's name as the document title.
 - Markings, Intersections, Signs, Simulator, Levels, Copy, and Clear all are
   placeholders and do nothing yet. Dark/light mode, Undo, Redo, and Download are
   functional.
