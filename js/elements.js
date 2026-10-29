@@ -35,6 +35,17 @@
   const MIN_TAPER_FEET = 10;
   const MAX_TAPER_FEET = 2000;
   const LEFT_EDGE = -0.5;             // lane "index" of a road's left edge
+  // Gores and traffic separation, FDOT 711-001 sheet 8. "Traffic Channelization at
+  // Gore" (same-direction roads): 8" white gore lines, 18" white chevrons at 45°,
+  // 20' apart. "Markings for Traffic Separation" (opposite directions): 18" yellow
+  // diagonals at 45°, Y apart by posted speed.
+  const GORE_LINE_INCHES = 8;
+  const GORE_STRIPE_INCHES = 18;
+  const GORE_SPACING_FEET = 20;
+  const SEPARATION_SPACING = [[30, 10], [40, 20], [45, 30], [Infinity, 40]];  // [up to mph, Y ft]
+  const MIN_GORE_SPACING_FEET = 10;
+  const MAX_GORE_SPACING_FEET = 40;
+  const GORE_ICON_PIXELS = 26;        // gore icons rest this far along from the gore point
   const SVG = "http://www.w3.org/2000/svg";
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -55,15 +66,24 @@
     const taperSelect = document.getElementById("laneTaper");
     const taperLength = document.getElementById("laneTaperLength");
     const taperState = document.getElementById("laneTaperState");
+    const goreFields = document.getElementById("goreFields");
+    const goreTitle = document.getElementById("goreTitle");
+    const goreState = document.getElementById("goreState");
+    const goreSpacing = document.getElementById("goreSpacing");
+    const goreSpacingValue = document.getElementById("goreSpacingValue");
+    const goreSpacingHint = document.getElementById("goreSpacingHint");
+    const goreLength = document.getElementById("goreLength");
     const defaults = { lanes: 1, laneWidth: 12, opposite: 0, median: 0 };
     const openCurves = new Set();
     const nodeButtons = new Map();
+    const goreButtons = new Map();
     let selectedRoad = null;
     let selectedLane = null;
     let drawing = null;
     let drag = null;
     let snapTarget = null;
     let menuNode = null;
+    let selectedGore = null;
 
     const overlay = document.createElement("div");
     overlay.className = "roadOverlay";
@@ -107,6 +127,7 @@
       if (!sheet.roadLayer) {
         sheet.roads = (sheet.roads ?? []).filter(road => road.ends);
         sheet.joints ??= [];
+        sheet.gores ??= [];
         delete sheet.connectors;
         sheet.roadLayer = document.createElementNS(SVG, "svg");
         sheet.roadLayer.classList.add("roadLayer");
@@ -391,6 +412,146 @@
       }
     }
 
+    // Gores: where two road ends leave a joint on the same side and their facing
+    // edges spread apart, the space between them can be marked. Same-direction
+    // roads (a split or merge) get a gore; opposite directions get traffic
+    // separation. Each candidate is keyed by its two road ends.
+    function resample(points, count, total) {
+      const out = [];
+      let i = 0;
+      let walked = 0;
+      const segment = k => Math.hypot(points[k + 1].x - points[k].x, points[k + 1].y - points[k].y);
+      for (let n = 0; n <= count; n++) {
+        const s = total * n / count;
+        while (i < points.length - 2 && walked + segment(i) < s) walked += segment(i++);
+        const f = Math.min(1, Math.max(0, (s - walked) / (segment(i) || 1)));
+        out.push({ x: points[i].x + (points[i + 1].x - points[i].x) * f, y: points[i].y + (points[i + 1].y - points[i].y) * f });
+      }
+      return out;
+    }
+    const sideOf = ({ e, end }) => ((e === 0) === (end.sign === 1) ? 1 : -1);
+    const goreKey = (a, b) => [`${a.road.id}:${a.e}`, `${b.road.id}:${b.e}`].sort().join("|");
+    function goreCandidates(sheet, solved) {
+      if (solved.gores) return solved.gores;
+      solved.gores = new Map();
+      const tolerance = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES) + feetToPixels(sheet, 1);
+      for (const joint of sheet.joints) {
+        const here = attachments(sheet, joint);
+        here.forEach((a, i) => here.slice(i + 1).forEach(b => {
+          if (a.road === b.road || pairOf(sheet, a.road) === b.road || sideOf(a) !== sideOf(b)) return;
+          // The facing edges are the two edges, one per road, that start closest.
+          const edges = item => [0, item.road.lanes].map(k => {
+            const points = boundary(shapeOf(sheet, item.road, solved), k);
+            return item.e ? points.reverse() : points;
+          });
+          let best = null;
+          for (const e1 of edges(a)) for (const e2 of edges(b)) {
+            const gap = Math.hypot(e1[0].x - e2[0].x, e1[0].y - e2[0].y);
+            if (!best || gap < best.gap) best = { e1, e2, gap };
+          }
+          if (best.gap > tolerance) return;
+          const total = Math.min(polylineLength(best.e1), polylineLength(best.e2));
+          const count = Math.min(400, Math.max(20, Math.ceil(total / feetToPixels(sheet, 2))));
+          const e1 = resample(best.e1, count, total);
+          const e2 = resample(best.e2, count, total);
+          const mid = e1.map((p, n) => ({ x: (p.x + e2[n].x) / 2, y: (p.y + e2[n].y) / 2 }));
+          const width = e1.map((p, n) => Math.hypot(e2[n].x - p.x, e2[n].y - p.y));
+          if (Math.max(...width) < feetToPixels(sheet, 4)) return;
+          const along = [0];
+          for (let n = 1; n < mid.length; n++) along.push(along[n - 1] + Math.hypot(mid[n].x - mid[n - 1].x, mid[n].y - mid[n - 1].y));
+          const key = goreKey(a, b);
+          solved.gores.set(key, {
+            key, e1, e2, mid, width, along,
+            same: a.e === b.e,          // both start (split) or both end (merge) here
+            split: a.e === 0 && b.e === 0,
+            awayFirst: a.e === 0,       // e1's road leaves the gore point
+          });
+        }));
+      }
+      return solved.gores;
+    }
+    const indexAt = (along, s) => {
+      const i = along.findIndex(value => value >= s);
+      return i < 0 ? along.length - 1 : i;
+    };
+    const goreTangent = (mid, i) => unit({ x: mid[Math.min(i + 1, mid.length - 1)].x - mid[Math.max(i - 1, 0)].x, y: mid[Math.min(i + 1, mid.length - 1)].y - mid[Math.max(i - 1, 0)].y });
+    const goreDefaultSpacing = candidate => (candidate.same ? GORE_SPACING_FEET : 20);
+    function goreLine(points, color, width, join) {
+      const path = strokePath(points, color, width);
+      if (join) path.setAttribute("stroke-linejoin", "miter");
+      return path;
+    }
+    // Paves the gore from its point to the marked length, then lays chevrons (same
+    // direction) or diagonals (opposite directions) clipped to it.
+    function drawGore(sheet, gore, candidate, layers) {
+      const length = Math.min(feetToPixels(sheet, gore.length), candidate.along.at(-1));
+      const last = indexAt(candidate.along, length);
+      if (last < 1) return;
+      const outline = [...candidate.e1.slice(0, last + 1), ...candidate.e2.slice(0, last + 1).reverse()];
+      const band = document.createElementNS(SVG, "path");
+      band.setAttribute("class", `roadBand goreBand${gore.key === selectedGore ? " selected" : ""}`);
+      band.setAttribute("d", `${pathData(outline)}Z`);
+      layers.pavement.append(band);
+      if (gore.key === selectedGore) {
+        const ring = band.cloneNode();
+        ring.setAttribute("class", "roadOutline");
+        layers.selection.append(ring);
+      }
+      const clip = document.createElementNS(SVG, "clipPath");
+      clip.id = `gore-${sheet.id}-${gore.key.replace(/[^0-9]/g, "-")}`;
+      clip.append(band.cloneNode());
+      const stripes = document.createElementNS(SVG, "g");
+      stripes.setAttribute("clip-path", `url(#${clip.id})`);
+      const color = candidate.same ? WHITE : YELLOW;
+      const stripe = inchesToPixels(sheet, GORE_STRIPE_INCHES);
+      const spacing = feetToPixels(sheet, gore.spacing ?? goreDefaultSpacing(candidate));
+      for (let s = spacing; s < length; s += spacing) {
+        const i = indexAt(candidate.along, s);
+        const w = candidate.width[i];
+        if (w < stripe) continue;
+        const m = candidate.mid[i];
+        const t = goreTangent(candidate.mid, i);
+        const n = unit({ x: candidate.e2[i].x - candidate.e1[i].x, y: candidate.e2[i].y - candidate.e1[i].y });
+        const reach = w * 1.5;
+        if (candidate.same) {
+          // Chevrons point back toward approaching traffic.
+          const f = candidate.split ? t : { x: -t.x, y: -t.y };
+          const arms = [1, -1].map(side => unit({ x: f.x + n.x * side, y: f.y + n.y * side }));
+          stripes.append(goreLine([{ x: m.x + arms[0].x * reach, y: m.y + arms[0].y * reach }, m,
+            { x: m.x + arms[1].x * reach, y: m.y + arms[1].y * reach }], color, stripe, true));
+        } else {
+          // Diagonals run from the departing side toward the arriving side as they
+          // move away from the gore point, as drawn in 711-001.
+          const side = candidate.awayFirst ? 1 : -1;
+          const d = unit({ x: t.x + n.x * side, y: t.y + n.y * side });
+          stripes.append(goreLine([{ x: m.x - d.x * reach, y: m.y - d.y * reach }, { x: m.x + d.x * reach, y: m.y + d.y * reach }], color, stripe));
+        }
+      }
+      layers.markings.append(clip, stripes);
+      // Gores are outlined in 8" white over the roads' edge lines.
+      if (candidate.same) {
+        const lineWidth = inchesToPixels(sheet, GORE_LINE_INCHES);
+        layers.markings.append(strokePath(candidate.e1.slice(0, last + 1), WHITE, lineWidth), strokePath(candidate.e2.slice(0, last + 1), WHITE, lineWidth));
+      }
+    }
+    function goreAt(sheet, point) {
+      const solved = solve(sheet);
+      const candidates = goreCandidates(sheet, solved);
+      for (const gore of sheet.gores) {
+        const candidate = candidates.get(gore.key);
+        if (!candidate) continue;
+        const last = indexAt(candidate.along, feetToPixels(sheet, gore.length));
+        if (last > 0 && insidePolygon(point, [...candidate.e1.slice(0, last + 1), ...candidate.e2.slice(0, last + 1).reverse()])) return gore.key;
+      }
+      return null;
+    }
+    // Drops gore markings whose roads no longer form a gore.
+    function pruneGores(sheet) {
+      if (!sheet?.gores?.length || !sheet.inchesPerPixel) return;
+      const candidates = goreCandidates(sheet, solve(sheet));
+      sheet.gores = sheet.gores.filter(gore => candidates.has(gore.key) && gore.length > 0);
+    }
+
     function render() {
       const sheet = sheets.selected;
       let solved = null;
@@ -405,6 +566,11 @@
         if (sheet.inchesPerPixel) {
           const partner = pairOf(sheet, selectedRoad);
           sheet.roads.forEach(road => drawRoad(sheet, road, shapeOf(sheet, road, solved), layers, road === selectedRoad || road === partner ? "selected" : "", solved));
+          const candidates = goreCandidates(sheet, solved);
+          for (const gore of sheet.gores) {
+            const candidate = candidates.get(gore.key);
+            if (candidate) drawGore(sheet, gore, candidate, layers);
+          }
           if ((drawing?.start || drawing?.end) && drawing.cursor) drawPreview(sheet, layers);
         }
         layer.replaceChildren(layers.pavement, layers.markings, layers.selection);
@@ -424,6 +590,7 @@
     }
     // Every edit is an undo step (typing in a field is one step until it's left).
     function changed() {
+      pruneGores(sheets.selected);
       render();
       save();
       window.StripeMaker.history.record();
@@ -497,6 +664,7 @@
         button.taper.remove();
         nodeButtons.delete(key);
       }
+      drawGoreButtons(sheet, solved);
       positionMenu();
       if (overlay.hidden) return;
       const anchor = drawing?.start ?? drawing?.end;
@@ -522,12 +690,121 @@
       });
     }
 
+    // Every place a gore can go shows a gore icon at its point; dragging it along
+    // the gore's center marks the gore up to the icon.
+    function goreButton(key) {
+      let button = goreButtons.get(key);
+      if (button) return button;
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "goreHandle";
+      button.dataset.gore = key;
+      button.setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight ArrowUp ArrowDown Delete");
+      bindGore(button);
+      goreButtons.set(key, button);
+      overlay.append(button);
+      return button;
+    }
+    function drawGoreButtons(sheet, solved) {
+      const seen = new Set();
+      if (!overlay.hidden) {
+        for (const candidate of goreCandidates(sheet, solved).values()) {
+          const gore = sheet.gores.find(item => item.key === candidate.key);
+          const button = goreButton(candidate.key);
+          seen.add(candidate.key);
+          const rest = GORE_ICON_PIXELS / sheet.view.scale;
+          const at = Math.min(Math.max(gore ? feetToPixels(sheet, gore.length) : 0, rest), candidate.along.at(-1));
+          const i = indexAt(candidate.along, at);
+          const t = goreTangent(candidate.mid, i);
+          place(button, candidate.mid[i]);
+          button.style.setProperty("--angle", `${Math.atan2(t.y, t.x)}rad`);
+          button.classList.toggle("marked", Boolean(gore));
+          button.classList.toggle("selected", candidate.key === selectedGore);
+          const kind = candidate.same ? "Gore" : "Traffic separation";
+          button.setAttribute("aria-label", gore ? `${kind}, marked ${Math.round(gore.length)} ft` : `${kind}, unmarked. Drag along the gore to mark it.`);
+        }
+      }
+      for (const [key, button] of goreButtons) {
+        if (seen.has(key)) continue;
+        button.remove();
+        goreButtons.delete(key);
+      }
+      if (selectedGore && !seen.has(selectedGore) && !overlay.hidden) selectedGore = null;
+    }
+    function setGoreLength(sheet, key, feet) {
+      let gore = sheet.gores.find(item => item.key === key);
+      const candidate = goreCandidates(sheet, solve(sheet)).get(key);
+      if (!candidate) return;
+      feet = Math.max(0, Math.min(feet, candidate.along.at(-1) / feetToPixels(sheet, 1)));
+      if (!gore && feet > 0) sheet.gores.push(gore = { key, length: feet, spacing: goreDefaultSpacing(candidate) });
+      if (gore) gore.length = feet;
+    }
+    function bindGore(button) {
+      let dragging = false;
+      button.addEventListener("pointerdown", event => {
+        if (event.button !== 0 || drawing) return;
+        event.stopPropagation();
+        button.setPointerCapture(event.pointerId);
+        dragging = false;
+        selectGore(button.dataset.gore);
+      });
+      button.addEventListener("pointermove", event => {
+        if (!button.hasPointerCapture(event.pointerId)) return;
+        const sheet = sheets.selected;
+        const candidate = goreCandidates(sheet, solve(sheet)).get(button.dataset.gore);
+        if (!candidate) return;
+        dragging = true;
+        // The marking follows the nearest point along the gore's center.
+        const pointer = sheets.toImage(event.clientX, event.clientY);
+        let nearest = 0;
+        candidate.mid.forEach((p, i) => {
+          const m = candidate.mid[nearest];
+          if (Math.hypot(p.x - pointer.x, p.y - pointer.y) < Math.hypot(m.x - pointer.x, m.y - pointer.y)) nearest = i;
+        });
+        const s = candidate.along[nearest];
+        setGoreLength(sheet, button.dataset.gore, s < GORE_ICON_PIXELS / sheet.view.scale / 2 ? 0 : s / feetToPixels(sheet, 1));
+        render();
+      });
+      const finish = event => {
+        if (!button.hasPointerCapture(event.pointerId)) return;
+        button.releasePointerCapture(event.pointerId);
+        if (dragging) changed();
+      };
+      button.addEventListener("pointerup", finish);
+      button.addEventListener("pointercancel", finish);
+      button.addEventListener("keydown", event => {
+        const moves = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 };
+        if (!moves[event.key]) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const sheet = sheets.selected;
+        const gore = sheet.gores.find(item => item.key === button.dataset.gore);
+        selectedGore = button.dataset.gore;
+        setGoreLength(sheet, button.dataset.gore, (gore?.length ?? 0) + moves[event.key] * (event.shiftKey ? 50 : 5));
+        changed();
+      });
+    }
+    function selectGore(key) {
+      selectedGore = key;
+      selectedRoad = null;
+      selectedLane = null;
+      closeMenu();
+      render();
+    }
+    function removeGore() {
+      const sheet = sheets.selected;
+      if (!sheet || !selectedGore) return;
+      sheet.gores = sheet.gores.filter(gore => gore.key !== selectedGore);
+      changed();
+    }
+    const separationSpeed = feet => ({ 10: "30 mph or less", 20: "35–40 mph", 30: "45 mph", 40: "50 mph or more" })[feet];
+
     function updatePanel(solved) {
       const sheet = sheets.selected;
       const ready = Boolean(sheet?.inchesPerPixel);
       addButton.disabled = !ready;
       addButton.setAttribute("aria-pressed", String(Boolean(drawing)));
-      deleteButton.disabled = !selectedRoad;
+      deleteButton.disabled = !selectedRoad && !sheet?.gores?.some(gore => gore.key === selectedGore);
       const values = selectedRoad ?? defaults;
       const partner = sheet && pairOf(sheet, selectedRoad);
       if (document.activeElement !== lanesInput) lanesInput.value = values.lanes;
@@ -550,6 +827,25 @@
         taperState.textContent = !tapering ? "No taper here."
           : lane.e ? "This lane narrows to nothing at its end (lane drop)." : "This lane widens from nothing at its start (lane add).";
       }
+      const candidate = selectedGore && solved && goreCandidates(sheet, solved).get(selectedGore);
+      goreFields.hidden = !candidate;
+      if (candidate) {
+        const gore = sheet.gores.find(item => item.key === selectedGore);
+        const spacing = gore?.spacing ?? goreDefaultSpacing(candidate);
+        goreTitle.textContent = candidate.same ? "Gore" : "Traffic Separation";
+        goreState.textContent = candidate.same
+          ? "FDOT channelization at gore: 8\" white gore lines and 18\" white chevrons at 45°."
+          : "FDOT traffic separation: 18\" yellow diagonals at 45° between opposing traffic.";
+        for (const input of [goreSpacing, goreSpacingValue]) {
+          input.disabled = !gore;
+          if (document.activeElement !== input) input.value = spacing;
+        }
+        if (document.activeElement !== goreLength) goreLength.value = Math.round(gore?.length ?? 0);
+        goreLength.max = Math.floor(candidate.along.at(-1) / feetToPixels(sheet, 1));
+        goreSpacingHint.textContent = candidate.same
+          ? `FDOT shows chevrons ${GORE_SPACING_FEET} ft apart.`
+          : `FDOT spacing Y by posted speed: 10 ft ≤30 mph, 20 ft 35–40, 30 ft 45, 40 ft ≥50.${separationSpeed(spacing) ? ` ${spacing} ft fits ${separationSpeed(spacing)}.` : ""}`;
+      }
       workspace.classList.toggle("drawing", Boolean(drawing));
       workspace.classList.toggle("elementsActive", active());
       if (!sheet) hint.textContent = "Upload a sheet first.";
@@ -560,13 +856,19 @@
       else if (drawing) hint.textContent = defaults.opposite
         ? "Click the end of the centerline. Lanes travel start to end; opposite lanes return. Esc cancels."
         : "Click the end point, or a lane's start node to join it. Traffic flows from start to end. Esc cancels.";
+      else if (candidate) hint.textContent = sheet.gores.some(gore => gore.key === selectedGore)
+        ? "Drag the gore icon along the gore to change how far the marking reaches. Drag it back to the point to remove it."
+        : "Drag the gore icon along the center of the gore to mark it.";
       else if (lane) hint.textContent = "Lane end selected. Set its taper below, drag the node to move the road end, or right-click it for more.";
       else if (partner) hint.textContent = "Two-way road. Right-click a lane node for actions like curving, tapering, or splitting into one-way roads.";
       else if (selectedRoad) hint.textContent = "Drag a lane node to move the road end, or onto another road's node to join them. Right-click a node for actions like curving, tapering, or making the road two-way.";
-      else hint.textContent = "Add a road (set Opposite lanes for two-way), or click a road to edit it. Right-click any lane node for actions.";
+      else hint.textContent = goreButtons.size
+        ? "Add a road, or click a road to edit it. Drag a gore icon along a gore to mark it. Right-click any lane node for actions."
+        : "Add a road (set Opposite lanes for two-way), or click a road to edit it. Right-click any lane node for actions.";
     }
 
     function selectRoad(road) {
+      selectedGore = null;
       selectedRoad = road;
       selectedLane = null;
       render();
@@ -732,7 +1034,27 @@
     }
 
     addButton.addEventListener("click", () => (drawing ? stopDrawing() : startDrawing()));
-    deleteButton.addEventListener("click", deleteRoad);
+    deleteButton.addEventListener("click", deleteSelection);
+    function deleteSelection() {
+      if (selectedGore) removeGore();
+      else deleteRoad();
+    }
+    document.getElementById("removeGore").addEventListener("click", removeGore);
+    goreLength.addEventListener("input", () => {
+      const feet = Number(goreLength.value);
+      if (!(feet >= 0) || !selectedGore) return;
+      setGoreLength(sheets.selected, selectedGore, feet);
+      changed();
+    });
+    for (const input of [goreSpacing, goreSpacingValue]) {
+      input.addEventListener("input", () => {
+        const feet = Number(input.value);
+        const gore = sheets.selected?.gores.find(item => item.key === selectedGore);
+        if (!gore || !(feet >= MIN_GORE_SPACING_FEET && feet <= MAX_GORE_SPACING_FEET)) return;
+        gore.spacing = feet;
+        changed();
+      });
+    }
     // Deleting a two-way road deletes both sides.
     function deleteRoad() {
       const sheet = sheets.selected;
@@ -871,7 +1193,12 @@
       const sheet = sheets.selected;
       if (!active() || !sheet?.inchesPerPixel || !press || event.target.closest(".roadNode, .roadControl")) return;
       if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > 4) return;
-      if (!drawing) return selectRoad(roadAt(sheet, sheets.toImage(event.clientX, event.clientY)));
+      if (!drawing) {
+        const point = sheets.toImage(event.clientX, event.clientY);
+        const road = roadAt(sheet, point);
+        const gore = !road && goreAt(sheet, point);
+        return gore ? selectGore(gore) : selectRoad(road);
+      }
       layerFor(sheet);
       const point = drawingPoint(sheet, event.clientX, event.clientY);
       if (!drawing.start && !drawing.end) {
@@ -1165,12 +1492,12 @@
         if (event.key !== "Escape") return;
         event.stopPropagation();
         closeMenu(true);
-      } else if (event.key === "Escape" && (drawing || selectedRoad)) {
+      } else if (event.key === "Escape" && (drawing || selectedRoad || selectedGore)) {
         event.stopPropagation();
         drawing ? stopDrawing() : selectRoad(null);
       } else if ((event.key === "Delete" || event.key === "Backspace") && !typing && !deleteButton.disabled) {
         event.preventDefault();
-        deleteRoad();
+        deleteSelection();
       }
     }, true);
 
@@ -1186,6 +1513,7 @@
     // Undo and redo replace the sheet's roads, so selection follows by id.
     document.addEventListener("sheethistory", () => {
       const sheet = sheets.selected;
+      sheet && (sheet.gores ??= []);
       selectedRoad = sheet?.roads && selectedRoad ? roadOf(sheet, selectedRoad.id) ?? null : null;
       if (!(selectedRoad && selectedLane?.lane < selectedRoad.lanes)) selectedLane = null;
       for (const key of openCurves) if (!sheet?.roads?.some(road => key.startsWith(`${road.id}:`))) openCurves.delete(key);

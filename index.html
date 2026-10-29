@@ -72,6 +72,26 @@
           </div>
           <p id="laneTaperState" class="elementsHint" aria-live="polite"></p>
         </div>
+        <div id="goreFields" hidden>
+          <hr />
+          <h3 id="goreTitle">Gore</h3>
+          <p id="goreState" class="elementsHint"></p>
+          <div class="fieldRow">
+            <label for="goreLength">Marked length (ft)</label>
+            <input id="goreLength" type="number" min="0" step="5" value="0" />
+          </div>
+          <div class="fieldRow">
+            <label for="goreSpacing">Stripe spacing (ft)</label>
+            <div class="dimensionInputs">
+              <input id="goreSpacing" type="range" min="10" max="40" step="5" value="20" aria-describedby="goreSpacingHint" />
+              <input id="goreSpacingValue" type="number" min="10" max="40" step="5" value="20" aria-label="Stripe spacing in feet" />
+            </div>
+          </div>
+          <p id="goreSpacingHint" class="fieldHint"></p>
+          <div class="headActions">
+            <button type="button" id="removeGore">Remove Marking</button>
+          </div>
+        </div>
       </div>
     </section>
 

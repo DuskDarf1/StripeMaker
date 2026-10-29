@@ -37,6 +37,13 @@ MUTCD-compliant pavement markings onto them.
 - Edge lines: 6 in solid; yellow on the left edge, white on the right edge, for
   one-way and two-way roads alike. A two-way road's centerline is a double
   yellow: two 6 in solid lines with a 4 in gap (711-001 "Double Solid Lines").
+- Gores and painted medians (711-001 sheet 8). "Traffic Channelization at
+  Gore" for same-direction splits and merges: 8" white gore lines, 18" white
+  chevrons at 45° pointing back at approaching traffic, 20 ft apart. "Markings
+  for Traffic Separation" for opposite directions: 18" yellow diagonals at 45°,
+  spaced Y by posted speed (10 ft at 30 mph or less, 20 ft at 35–40, 30 ft at 45,
+  40 ft at 50 or more). The island's 6" double yellow approach lines are not
+  drawn yet; the roads' 6" yellow edges outline it.
 - Dimensions are to the centerline of markings (711-001). Pavement extends 8 in
   past the edge of traveled way.
 - Markings are drawn true size in sheet pixels using the sheet's inches per
@@ -100,6 +107,18 @@ MUTCD-compliant pavement markings onto them.
 - Lane nodes are drawn slightly inside their road's end so joined roads' nodes
   don't cover each other; snapping accepts either the drawn node or the true
   lane end.
+- **Gores:** wherever two road ends leave the same joint on the same side and
+  their facing edges spread apart (a split, merge, or a two-way road dividing
+  into one-way roads), a gore icon appears at the gore point. Dragging it along
+  the gore's center paves and marks the gore from the point to the icon; drag
+  it back to the point to remove it. Same-direction roads get gore chevrons,
+  opposite directions get traffic separation diagonals. Clicking the icon or
+  the marked area selects it: the panel shows the marked length, a stripe
+  spacing slider (10–40 ft, SignalMaker's slider + number pair) with the FDOT
+  spacing for posted speeds, and Remove Marking. Arrow keys on a focused icon
+  change the length (Shift for larger steps); Delete removes it. Gores are
+  stored per sheet as `{ key, length, spacing }` (feet), keyed by their two road
+  ends, saved, undoable, and dropped when their roads no longer form a gore.
 - Not yet designed: per-road marking edits.
 
 ## Current scope
@@ -117,7 +136,7 @@ MUTCD-compliant pavement markings onto them.
   node or handle; Delete removes the selected road; Escape cancels drawing or
   deselects. Roads belong to the sheet they were drawn on.
 - Persistence: sheets (original files), their order, selection, scale, view,
-  roads, and joints are saved to IndexedDB (`StripeMaker` database) and restored
+  roads, joints, and gore markings are saved to IndexedDB (`StripeMaker` database) and restored
   on reload. Files are written once; small records save shortly after changes.
 
 - Undo/redo follows SignalMaker's `js/history.js` (`js/history.js` here):
