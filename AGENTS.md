@@ -62,6 +62,8 @@ MUTCD-compliant pavement markings onto them.
   Selecting either side outlines both; lane width and Delete apply to both
   sides; Lanes applies to the clicked side. A two-way road's joints sit on its
   centerline, so changing lanes grows outward and the centerline stays put.
+  Both sides are drawn as offsets of one shared centerline curve, so the double
+  yellow (or median) stays parallel through curves.
   Dragging a road's lane node onto an opposite road's node also pairs them.
 - Structural changes (split, detach, delete) keep every remaining road where it
   was; a road end left alone without a set curve goes back to pulling straight.

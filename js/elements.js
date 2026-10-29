@@ -222,7 +222,7 @@
     // Lane boundaries along the road. A tapering lane's width runs from zero at its
     // tapered end to full over the taper length; the first untapered lane holds its
     // place and the others pack against it.
-    function buildShape(sheet, road, line, tapers) {
+    function buildShape(sheet, road, line, tapers, shift = 0) {
       const along = [0];
       for (let i = 1; i < line.length; i++) along.push(along[i - 1] + Math.hypot(line[i].x - line[i - 1].x, line[i].y - line[i - 1].y));
       const total = along[along.length - 1];
@@ -230,7 +230,7 @@
       const tapered = lane => tapers.has(`0:${lane}`) || tapers.has(`1:${lane}`);
       let anchor = 0;
       while (anchor < road.lanes - 1 && tapered(anchor)) anchor++;
-      const anchorLeft = laneLateral(sheet, road, anchor) - laneWidth / 2;
+      const anchorLeft = laneLateral(sheet, road, anchor) - laneWidth / 2 + shift;
       const bounds = along.map(s => {
         const widths = Array.from({ length: road.lanes }, (_, lane) => {
           const start = tapers.get(`0:${lane}`);
@@ -266,9 +266,38 @@
       }
       return tapers;
     }
+    // Both sides of a two-way road are offsets of one shared centerline curve, so
+    // the double yellow (or median) stays parallel through curves. Lane bounds are
+    // shifted right of that centerline by half the gap plus half this side's width.
     function shapeOf(sheet, road, solved) {
-      if (!solved.shapes.has(road)) solved.shapes.set(road, buildShape(sheet, road, centerline(road, solved), tapersOf(sheet, road, solved)));
-      return solved.shapes.get(road);
+      if (solved.shapes.has(road)) return solved.shapes.get(road);
+      const partner = pairOf(sheet, road);
+      const tapers = tapersOf(sheet, road, solved);
+      let shape;
+      if (partner) {
+        const gap = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES) + feetToPixels(sheet, pairLinks(sheet, road, partner)[0]?.median ?? 0);
+        const shift = gap / 2 - laneLateral(sheet, road, LEFT_EDGE);
+        shape = buildShape(sheet, road, sharedCenterline(road, partner, solved, shift), tapers, shift);
+      } else shape = buildShape(sheet, road, centerline(road, solved), tapers);
+      solved.shapes.set(road, shape);
+      return shape;
+    }
+    // The two-way centerline, from this side's point of view: its end centers moved
+    // left by `shift`, with the same Bézier pull both sides share.
+    function sharedCenterline(road, partner, solved, shift) {
+      const [a, b] = [0, 1].map(e => {
+        const at = solved.get(`${road.id}:${e}`);
+        const travel = at.travel ?? travelAt(road, e, solved);
+        const right = rightOf(travel);
+        return { x: at.x - right.x * shift, y: at.y - right.y * shift, travel: at.travel };
+      });
+      const chord = Math.hypot(b.x - a.x, b.y - a.y);
+      // The lower-id side's pulls drive both sides, so they can't drift apart.
+      const lengths = road.id < partner.id ? road.ends.map(end => end.length) : [partner.ends[1].length, partner.ends[0].length];
+      const [l0, l1] = lengths.map((length, e) => ((e ? b : a).travel ? length ?? chord / 3 : 0));
+      const c0 = { x: a.x + (a.travel?.x ?? 0) * l0, y: a.y + (a.travel?.y ?? 0) * l0 };
+      const c1 = { x: b.x - (b.travel?.x ?? 0) * l1, y: b.y - (b.travel?.y ?? 0) * l1 };
+      return bezier(a, c0, c1, b);
     }
     // Where a lane node is drawn: just inside the road, so the end nodes of one road
     // and the start nodes of the next don't cover each other at a joint.
