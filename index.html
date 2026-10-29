@@ -31,7 +31,6 @@
       <div class="editorContent">
         <div class="headActions">
           <button type="button" id="addRoad" aria-pressed="false">Add Road</button>
-          <button type="button" id="connectLanes" aria-pressed="false">Connect Lanes</button>
           <button type="button" id="deleteRoad" disabled>Delete</button>
         </div>
         <p id="elementsHint" class="elementsHint" aria-live="polite"></p>
@@ -145,6 +144,8 @@
       </div>
     </section>
   </div>
+
+  <menu id="nodeMenu" class="nodeMenu" role="menu" aria-label="Lane node actions" hidden></menu>
 
   <section id="sheetsMenu" class="headsMenu" aria-labelledby="sheetsTitle" hidden>
     <div class="headPopoverHeader">
