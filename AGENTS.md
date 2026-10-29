@@ -86,11 +86,14 @@ MUTCD-compliant pavement markings onto them.
 - Tapers belong to one lane at one road end. At an end, the lane narrows from
   full width to zero over the taper length (lane drop); at a start, it widens
   from zero (lane add). The first untapered lane holds its place and the rest
-  pack against it. Each lane end's taper is Auto (tapers only when the lane
-  doesn't continue across a joint into a road going the same way), Taper, or
-  None, with a length in feet (default 300 ft, capped at the road's length).
+  pack against it. Each lane end's taper is Auto (tapers only when the sheet's
+  **Auto tapers** setting is on and the lane doesn't continue across a joint
+  into a road going the same way), Taper, or None, with a length in feet (default 300 ft, capped at the road's length).
   Taper markings are the default lane and edge lines for now; FDOT taper
   markings come later.
+- Auto tapers (Elements panel checkbox) is a per-sheet setting, **off by
+  default**, saved and undoable with the sheet. When off, lanes that start or
+  end at a joint stay full width unless their end is set to Taper.
 - **Keep lane editing simple.** Roads join only by dragging a lane node onto
   another lane's node (ends line up and move together). There is no separate
   lane-connection tool; Cities: Skylines-style Connect Lanes was tried and

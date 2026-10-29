@@ -3,7 +3,8 @@
   // the drawing, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z (and Ctrl+Y off the Mac), and
   // typing in a number field counts as one step until the field is left.
   //
-  // A snapshot is every sheet's scale, roads, joints, and gore markings. Sheets themselves
+  // A snapshot is every sheet's scale, roads, joints, gore markings, and Auto
+  // tapers setting. Sheets themselves
   // (uploads, removal, order) and the view aren't undo steps; restoring a
   // snapshot leaves sheets it doesn't mention alone.
   window.StripeMaker ??= {};
@@ -19,6 +20,7 @@
     let editingInput = null;
     const serialize = () => JSON.stringify(Object.fromEntries(sheets.all.map(sheet => [sheet.id, {
       inchesPerPixel: sheet.inchesPerPixel ?? null, roads: sheet.roads ?? [], joints: sheet.joints ?? [], gores: sheet.gores ?? [],
+      autoTapers: Boolean(sheet.autoTapers),
     }])));
     let currentSnapshot = serialize();
 

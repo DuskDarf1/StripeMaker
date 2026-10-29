@@ -66,6 +66,7 @@
     const taperSelect = document.getElementById("laneTaper");
     const taperLength = document.getElementById("laneTaperLength");
     const taperState = document.getElementById("laneTaperState");
+    const autoTapersInput = document.getElementById("autoTapers");
     const goreFields = document.getElementById("goreFields");
     const goreTitle = document.getElementById("goreTitle");
     const goreState = document.getElementById("goreState");
@@ -289,7 +290,8 @@
           const setting = road.tapers?.[key];
           const mode = setting?.mode ?? "auto";
           const id = `${road.id}:${key}`;
-          if (mode === "taper" || (mode === "auto" && solved.auto.has(id))) {
+          // Auto tapers only when the sheet's Auto tapers setting is on (off by default).
+          if (mode === "taper" || (mode === "auto" && sheet.autoTapers && solved.auto.has(id))) {
             tapers.set(key, feetToPixels(sheet, setting?.length ?? DEFAULT_TAPER_FEET));
           }
         }
@@ -851,9 +853,13 @@
         if (document.activeElement !== taperSelect) taperSelect.value = setting?.mode ?? "auto";
         if (document.activeElement !== taperLength) taperLength.value = setting?.length ?? DEFAULT_TAPER_FEET;
         const tapering = shapeOf(sheet, selectedRoad, solved).tapers.has(key);
-        taperState.textContent = !tapering ? "No taper here."
+        const autoOff = (setting?.mode ?? "auto") === "auto" && !sheet.autoTapers && solved.auto.has(`${selectedRoad.id}:${key}`);
+        taperState.textContent = autoOff ? "Auto tapers are off, so this lane stays full width. Choose Taper to taper it."
+          : !tapering ? "No taper here."
           : lane.e ? "This lane narrows to nothing at its end (lane drop)." : "This lane widens from nothing at its start (lane add).";
       }
+      autoTapersInput.disabled = !ready;
+      autoTapersInput.checked = Boolean(sheet?.autoTapers);
       const candidate = selectedGore && solved && goreCandidates(sheet, solved).get(selectedGore);
       goreFields.hidden = !candidate;
       if (candidate) {
@@ -1067,6 +1073,11 @@
       else deleteRoad();
     }
     document.getElementById("removeGore").addEventListener("click", removeGore);
+    autoTapersInput.addEventListener("change", () => {
+      if (!sheets.selected) return;
+      sheets.selected.autoTapers = autoTapersInput.checked;
+      changed();
+    });
     goreLength.addEventListener("input", () => {
       const feet = Number(goreLength.value);
       if (!(feet >= 0) || !selectedGore) return;
