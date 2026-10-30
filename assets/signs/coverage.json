@@ -1,7 +1,17 @@
 {
-  "officialCodes": 739,
-  "codesWithArtwork": 739,
-  "layouts": 1962,
+  "officialCodes": 1059,
+  "codesWithArtwork": 1059,
+  "layouts": 3137,
   "missing": [],
-  "unmatchedFiles": []
+  "unmatchedFiles": [],
+  "failedLayouts": [
+    {
+      "member": "SHS Release 6/D09-18a General Services with Exit Number/D09-18a General Services with Exit Number 102x84.svg",
+      "error": "No artwork"
+    },
+    {
+      "member": "SHS Release 6/D09-18c General Services with Action Message/D09-18c General Services with Action Message 102x84.svg",
+      "error": "No artwork"
+    }
+  ]
 }

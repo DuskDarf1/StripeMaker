@@ -1026,6 +1026,122 @@
         "uppercase": true,
         "maxLength": 24
       }
+    ],
+    "M1-1": [
+      {
+        "key": "route",
+        "label": "Route number",
+        "roi": [
+          0.05,
+          0.95,
+          0.24,
+          0.85
+        ],
+        "min": 1,
+        "max": 999,
+        "step": 1,
+        "routeDigits": true
+      }
+    ],
+    "M1-1a": [
+      {
+        "key": "route",
+        "label": "Route number",
+        "roi": [
+          0.14,
+          0.86,
+          0.3,
+          0.88
+        ],
+        "min": 1,
+        "max": 999,
+        "step": 1,
+        "routeDigits": true
+      },
+      {
+        "key": "state",
+        "label": "State name",
+        "type": "text",
+        "original": "NEW JERSEY",
+        "default": "NEW JERSEY",
+        "roi": [
+          0.1,
+          0.9,
+          0.22,
+          0.33
+        ],
+        "anchor": "N",
+        "uppercase": true,
+        "variantOverrides": {
+          "3 digits": {
+            "original": "WISCONSIN",
+            "default": "WISCONSIN"
+          }
+        }
+      }
+    ],
+    "M1-4": [
+      {
+        "key": "route",
+        "label": "Route number",
+        "roi": [
+          0.03,
+          0.97,
+          0.18,
+          0.85
+        ],
+        "min": 1,
+        "max": 999,
+        "step": 1,
+        "routeDigits": true
+      }
+    ],
+    "M1-5": [
+      {
+        "key": "route",
+        "label": "Route number",
+        "roi": [
+          0.12,
+          0.88,
+          0.12,
+          0.88
+        ],
+        "min": 1,
+        "max": 999,
+        "step": 1,
+        "routeDigits": true
+      }
+    ],
+    "M1-6": [
+      {
+        "key": "route",
+        "label": "Route number",
+        "roi": [
+          0.12,
+          0.88,
+          0.3,
+          0.85
+        ],
+        "min": 1,
+        "max": 999,
+        "step": 1,
+        "routeDigits": true
+      },
+      {
+        "key": "county",
+        "label": "County name",
+        "type": "text",
+        "original": "STRAFFORD",
+        "default": "STRAFFORD",
+        "roi": [
+          0.1,
+          0.9,
+          0.16,
+          0.31
+        ],
+        "anchor": "R",
+        "uppercase": true
+      }
     ]
   }
 }

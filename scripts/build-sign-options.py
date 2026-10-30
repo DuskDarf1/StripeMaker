@@ -90,6 +90,9 @@ def split_paths(paths):
 def build_fields(entry,paths,specs,font,refs):
     fields=[];w,h=entry['box']
     for spec in specs:
+        spec=dict(spec)
+        for match,overrides in spec.pop('variantOverrides',{}).items():
+            if match in entry['variant']:spec.update(overrides)
         lo,hi,top,bottom=spec['roi'];region=(lo*w,hi*w,top*h,bottom*h)
         selected=[];recognized=[]
         for i,p in enumerate(paths):
@@ -120,12 +123,13 @@ def build_fields(entry,paths,specs,font,refs):
         original=spec.get('original',spec.get('default',''.join(r[2] for r in recognized)))
         default=spec.get('default',original)
         if spec.get('type')!='text' and not str(default).isdigit():raise ValueError(f"Unrecognized numeric legend: {entry['variant']} {spec['key']}={default}")
-        cx=(left+right)/2
+        cx=entry['box'][0]/2 if spec['key']=='route' else (left+right)/2
         maxwidth=max(right-left,min(cx-region[0],region[1]-cx)*2)
         field={k:v for k,v in spec.items() if k not in ['roi','anchor','heightInches']}
         field.update(series=series,type=spec.get('type','number'),default=default,original=original,paths=selected,cx=round(cx,4),top=round(statistics.median(tops),4),height=round(statistics.median(heights),4),maxWidth=round(maxwidth,4),fill=paths[selected[0]]['fill'])
         physical=spec.get('heightInches',{}).get('x'.join(f'{n:g}' for n in entry['size'] if n is not None))
         if physical:field['height']=physical*100/max(entry['size'])
+        if field.pop('routeDigits',False):field['max']=999 if '3 digits' in entry['variant'] or entry['code']=='M1-6' else 99
         if field['type']=='number':field.setdefault('step',1)
         if field.get('step')==5:field['hint']='Use 5 mph increments. Letter height and spacing follow this sign layout.'
         fields.append(field)

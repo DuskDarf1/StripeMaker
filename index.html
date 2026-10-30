@@ -14,6 +14,7 @@
   <script src="js/intersection-geometry.js"></script>
   <script src="js/intersections.js"></script>
   <script src="js/sign-designs.js"></script>
+  <script src="js/sign-layout.js"></script>
   <script src="js/signs.js"></script>
   <script src="js/download.js"></script>
   <script src="js/main.js"></script>
@@ -176,16 +177,34 @@
     <section id="signsEditor" class="editor" aria-labelledby="signsTitle" hidden>
       <div class="editorBar"><h2 id="signsTitle" class="editorTitle" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">signpost</span> Signs</h2></div>
       <div class="editorContent">
-        <div class="headActions"><button type="button" id="addSign" aria-pressed="false">Add Sign</button><button type="button" id="deleteSign" disabled>Delete</button></div>
+        <div class="headActions"><button type="button" id="addSign" aria-pressed="false">Add Sign</button><button type="button" id="uploadSign">Upload Sign</button><button type="button" id="deleteSign" disabled>Delete</button></div>
         <p id="signStatus" class="elementsHint" role="status"></p>
-        <button type="button" id="chooseSign">Choose Sign</button>
+        <button type="button" id="openAssemblyEditor">Assembly Editor</button>
+        <div id="signDetailsHome"><button type="button" id="chooseSign">Choose Sign</button>
         <div id="signCurrent"><img id="signPreview" alt="" hidden /><p id="signName">Loading signs…</p></div>
-        <div class="fieldRow"><label for="signPhysicalSize">Sign size</label><select id="signPhysicalSize" aria-describedby="signSizeHint"></select></div>
-        <p id="signSizeHint" class="signInstructions">Published sign dimensions in inches.</p>
-        <div id="signLegendFields"></div>
+        <div id="signLegendFields"></div></div>
         <div class="fieldRow"><label for="signSize">Callout size (%)</label><input id="signSize" type="number" min="25" max="400" step="5" value="100" /></div>
-        <p class="signInstructions">Choose a sign, click its post location, then click where to show the sign face. Drag either end to move it.</p>
-        <p class="signInstructions">Search official names, codes, and published variants. Guide signs are excluded.</p>
+        <div class="fieldRow"><label for="signRotation">Face rotation (°)</label><div class="dimensionInputs"><input id="signRotation" type="range" min="0" max="360" step="1" value="0" /><input id="signRotationValue" type="number" min="0" max="360" step="1" value="0" aria-label="Face rotation in degrees" /></div></div>
+        <p class="signInstructions">Choose a sign, click its arrow tip location, then click where to show the sign face. Drag either end to move it.</p>
+        <p class="signInstructions">Search official names, codes, and published variants. Paste an image to use it as a sign. Add signs to an assembly and arrange them by row and column.</p>
+      </div>
+    </section>
+    <section id="signAssemblyEditor" class="editor" aria-labelledby="signAssemblyTitle" hidden>
+      <div class="editorBar"><h2 id="signAssemblyTitle" class="editorTitle" tabindex="-1">Assembly Editor</h2></div>
+      <div class="editorContent">
+        <button type="button" id="closeAssemblyEditor">Back to Signs</button>
+        <p class="signInstructions">Drag a sign into a row or column. Drop on another sign to swap positions, or on Remove to remove it. The + cells extend the assembly. Rows and columns touch without gaps.</p>
+        <div id="assemblyGrid" aria-label="Sign assembly"></div>
+        <div class="headActions"><button type="button" id="assemblyCandidate" aria-label="Drag sign to add, or press Enter to add below"></button><button type="button" id="assemblyRemoveDrop">Remove</button></div>
+        <div class="fieldRow"><label for="assemblyPart">Assembly sign</label><select id="assemblyPart"></select></div>
+        <div class="headActions"><button type="button" id="addAssemblySign">Choose Sign to Add</button><button type="button" id="uploadAssemblySign">Upload Sign</button><button type="button" id="removeAssemblySign">Remove Assembly Sign</button></div>
+        <div id="assemblyPosition" hidden>
+          <div class="fieldRow"><label for="assemblyRow">Row</label><input id="assemblyRow" type="number" min="1" max="20" step="1" value="1" /></div>
+          <div class="fieldRow"><label for="assemblyColumn">Column</label><input id="assemblyColumn" type="number" min="1" max="20" step="1" value="1" /></div>
+          <div class="fieldRow"><label for="assemblyScale">Sign width (%)</label><input id="assemblyScale" type="number" min="25" max="200" step="5" value="100" /></div>
+        </div>
+        <div id="assemblyDetails"></div>
+        <p id="assemblyStatus" class="elementsHint" role="status"></p>
       </div>
     </section>
     <section id="simulatorEditor" class="editor" aria-labelledby="simulatorTitle" hidden>
@@ -351,10 +370,11 @@
   <dialog id="signPicker" aria-labelledby="signPickerTitle">
     <h3 id="signPickerTitle">Select a Sign</h3>
     <input id="signSearch" type="search" placeholder="Search signs by code, name, or variant…" aria-label="Search signs by code, name, or variant" />
-    <select id="signCategory" aria-label="Sign category"><option value="">All signs</option>Regulatory</option><option>Warning and object markers</option><option>Temporary traffic control</option><option>School</option></select>
+    <select id="signCategory" aria-label="Sign category"><option value="">All signs</option><option>Regulatory</option><option>Warning and object markers</option><option>Temporary traffic control</option><option>School</option><option>Guide and route signs</option><option>Florida route signs</option></select>
     <div id="signGrid" class="iconGrid" role="group" aria-label="MUTCD signs"></div>
     <p id="signSearchStatus" role="status"></p>
-    <div class="options"><button id="closeSignPicker" type="button">Close</button></div>
+    <input id="signImageFile" type="file" accept="image/*,.svg" aria-label="Upload custom sign image" hidden />
+    <div class="options"><button id="uploadSignPicker" type="button">Upload Sign</button><button id="closeSignPicker" type="button">Close</button></div>
   </dialog>
   <p id="actionStatus" role="status" aria-live="polite"></p>
 

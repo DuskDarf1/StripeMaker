@@ -8,16 +8,20 @@ import xml.etree.ElementTree as ET
 from svgpathtools import parse_path, Line, CubicBezier, QuadraticBezier, Arc
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE = 'https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/'
+PALETTE = json.loads((ROOT/'assets/signs/palette.json').read_text())
+def sign_color(value):
+    color=value.lower()
+    return PALETTE['colors'].get(PALETTE['aliases'].get(color),value)
 
 def clean(s): return re.sub(r'\s+', ' ', html.unescape(re.sub('<[^>]+>', '', s))).strip()
 def code(s): return re.sub(r'(?<=[A-Z-])0+(?=\d)', '', s)
 def catalog(source):
     out = {}
-    for section, category in [('reg','Regulatory'),('ws','Warning and object markers'),('ttcz','Temporary traffic control'),('sas','School')]:
+    for section, category in [('reg','Regulatory'),('ws','Warning and object markers'),('ttcz','Temporary traffic control'),('sas','School'),('gss','Guide and route signs')]:
         table = source.split(f'id="{section}"')[1].split('</table>')[0]
         for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', table, re.S):
             cells = [clean(x) for x in re.findall(r'<(?:td|th)[^>]*>(.*?)</(?:td|th)>',tr,re.S)]
-            if cells and re.match(r'^(R|W|S|OM|G|M)\d', cells[0]):
+            if cells and re.match(r'^[A-Z]+\d', cells[0]):
                 for c in re.split(r',\s*',cells[0]):
                     out[c] = dict(code=c,name=cells[1],category=category,release=cells[-1])
     return out
@@ -29,7 +33,7 @@ def inventory(index, folder):
         with zipfile.ZipFile(archive) as z:
             for member in z.namelist():
                 filename = member.split('/')[-1]
-                is_pdf = filename.lower().endswith(".pdf") and any(c in member for c in ["R03-45a", "R06-03a"])
+                is_pdf = filename.lower().endswith(".pdf") and any(c in member for c in ["R03-45a", "R06-03a", "D03-01"])
                 if not filename.lower().endswith(".svg") and not is_pdf: continue
                 size = re.search(r'(VAR|\d+(?:\.\d+)?)[xX](VAR|\d+(?:\.\d+)?)', filename)
                 if not size: continue # Dimensioned publication pages aren't sign faces.
@@ -101,7 +105,7 @@ def shape(e):
         return f'M{x-rx} {y} A{rx} {ry} 0 1 0 {x+rx} {y} A{rx} {ry} 0 1 0 {x-rx} {y} Z'
     return ''
 
-def flatten(data):
+def flatten(data, resolve_uses=False):
     root=ET.fromstring(data);box=[float(x) for x in root.get('viewBox').split()];k=100/max(box[2:]);matrix=(k,0,0,k,-box[0]*k,-box[1]*k)
     rules={}
     for e in root.iter():
@@ -110,6 +114,7 @@ def flatten(data):
                 props=dict(re.findall(r'([\w-]+)\s*:\s*([^;]+)',body))
                 for sel in selectors.split(','):rules[sel.strip()]=props
     paths=[]
+    references={e.get('id'):e for e in root.iter() if e.get('id')}
     def walk(e,parent,style):
         tag=e.tag.split('}')[-1]
         if tag in ['defs','metadata','foreignObject','style','pattern','clipPath','text']:return
@@ -121,6 +126,10 @@ def flatten(data):
         m=multiply(parent,transform(e.get('transform','')))
         def pt(z):return complex(m[0]*z.real+m[2]*z.imag+m[4],m[1]*z.real+m[3]*z.imag+m[5])
         def fmt(z):return f'{z.real:.3f} {z.imag:.3f}'
+        if tag=='use':
+            reference=references.get((e.get('href') or e.get('{http://www.w3.org/1999/xlink}href') or '').lstrip('#'))
+            if resolve_uses and reference is not None:walk(reference,multiply(m,(1,0,0,1,float(e.get('x',0)),float(e.get('y',0)))),st)
+            return
         d=shape(e)
         if d:
             out=[]
@@ -142,6 +151,9 @@ def flatten(data):
                 a={'d':' '.join(out),'fill':fill}
                 if stroke!='none':a.update(stroke=stroke,**{'stroke-width':str(float(st.get('stroke-width','1').replace('px',''))*math.hypot(m[0],m[1]))})
                 if st.get('fill-rule')=='evenodd':a['fill-rule']='evenodd'
+                if fill in PALETTE['constructionColors'] or stroke in PALETTE['constructionColors']:return
+                for key in ['fill','stroke']:
+                    if key in a:a[key]=sign_color(a[key])
                 if fill!='none' or stroke!='none':paths.append(a)
         for child in e:walk(child,m,st)
     walk(root,matrix,{})
@@ -153,14 +165,20 @@ def flatten(data):
 def main():
     index=catalog(pathlib.Path(sys.argv[1]).read_text());items,unknown=inventory(index,pathlib.Path(sys.argv[2]))
     dest=ROOT/'assets/signs';dest.mkdir(exist_ok=True,parents=True)
-    result=[]
+    result=[]; failures=[]
     for i,(entry,data) in enumerate(items):
-        svg,box=flatten(data);entry['box']=box;entry['src']='assets/signs/'+entry['id']+'.svg';(ROOT/entry['src']).write_text(svg)
+        entry['src']='assets/signs/'+entry['id']+'.svg'
+        try:
+            svg,box=flatten(data,entry['code']=='D3-1')
+        except ValueError as error:
+            failures.append({'member':entry['member'],'error':str(error)})
+            print('FAILED',entry['member'],str(error),flush=True);continue
+        entry['box']=box;(ROOT/entry['src']).write_text(svg)
         result.append(entry)
         if i%100==0:print(i,len(items),flush=True)
     result=list({e['id']:e for e in result}.values());result.sort(key=lambda e:(e['category'],e['code'],e['variant']))
     missing=[e for c,e in index.items() if not any(x['code']==c for x in result)]
-    (dest/'catalog.json').write_text(json.dumps({'source':SOURCE,'edition':'2024 SHS; releases 1–4 and 6','signs':result},ensure_ascii=False,separators=(',',':'))+'\n')
-    (dest/'coverage.json').write_text(json.dumps({'officialCodes':len(index),'codesWithArtwork':len({e['code'] for e in result}),'layouts':len(result),'missing':missing,'unmatchedFiles':unknown},indent=2)+'\n')
+    (dest/'catalog.json').write_text(json.dumps({'source':SOURCE,'edition':'2024 SHS; releases 1–6','signs':result},ensure_ascii=False,separators=(',',':'))+'\n')
+    (dest/'coverage.json').write_text(json.dumps({'officialCodes':len(index),'codesWithArtwork':len({e['code'] for e in result}),'layouts':len(result),'missing':missing,'unmatchedFiles':unknown,'failedLayouts':failures},indent=2)+'\n')
     print('RESULT',len(index),len(result),'MISSING',missing,'UNKNOWN',unknown,flush=True)
 if __name__=='__main__':main()

@@ -1,0 +1,139 @@
+{
+  "signs": [
+    {
+      "id": "FTP-612-25--2",
+      "code": "FTP-612-25",
+      "name": "Florida Route Marker",
+      "category": "Florida route signs",
+      "variant": "Florida Route Marker",
+      "size": [
+        24,
+        24
+      ],
+      "box": [
+        100.0,
+        100.0
+      ],
+      "src": "assets/signs/FTP-612-25--2.svg",
+      "aliases": "Florida state road SR shield FTP-17-06",
+      "source": "FDOT 700-102 / CFX 2026",
+      "routeFamily": true,
+      "digits": 2,
+      "routeMax": 9999
+    },
+    {
+      "id": "FTP-612-25--3",
+      "code": "FTP-612-25",
+      "name": "Florida Route Marker",
+      "category": "Florida route signs",
+      "variant": "Florida Route Marker",
+      "size": [
+        30,
+        24
+      ],
+      "box": [
+        100.0,
+        80.0
+      ],
+      "src": "assets/signs/FTP-612-25--3.svg",
+      "aliases": "Florida state road SR shield FTP-17-06",
+      "source": "FDOT 700-102 / CFX 2026",
+      "routeFamily": true,
+      "digits": 3,
+      "routeMax": 9999
+    },
+    {
+      "id": "FTP-612-25--4",
+      "code": "FTP-612-25",
+      "name": "Florida Route Marker",
+      "category": "Florida route signs",
+      "variant": "Florida Route Marker",
+      "size": [
+        30,
+        24
+      ],
+      "box": [
+        100.0,
+        80.0
+      ],
+      "src": "assets/signs/FTP-612-25--4.svg",
+      "aliases": "Florida state road SR shield FTP-17-06",
+      "source": "FDOT 700-102 / CFX 2026",
+      "routeFamily": true,
+      "digits": 4,
+      "routeMax": 9999
+    },
+    {
+      "id": "FTP-610-25--standard",
+      "code": "FTP-610-25",
+      "name": "Florida\u2019s Turnpike",
+      "category": "Florida route signs",
+      "variant": "Florida\u2019s Turnpike",
+      "size": [
+        30,
+        36
+      ],
+      "box": [
+        83.3333,
+        100.0
+      ],
+      "src": "assets/signs/FTP-610-25--standard.svg",
+      "aliases": "Florida turnpike shield FTP-16-10",
+      "source": "FDOT 700-102 / CFX 2026"
+    },
+    {
+      "id": "FTP-611-25--standard",
+      "code": "FTP-611-25",
+      "name": "Toll Route Marker",
+      "category": "Florida route signs",
+      "variant": "Toll Route Marker",
+      "size": [
+        24,
+        30
+      ],
+      "box": [
+        80.0,
+        100.0
+      ],
+      "src": "assets/signs/FTP-611-25--standard.svg",
+      "aliases": "Florida toll road shield independent use route marker FTP-81-06",
+      "source": "FDOT 700-102 FY 2027\u201328, sheet 15, FTP-611-25 (24 \u00d7 30)"
+    },
+    {
+      "id": "CFX-TM--standard",
+      "code": "CFX-TM",
+      "name": "CFX Toll Route Shield",
+      "category": "Florida route signs",
+      "variant": "CFX Toll Route Shield",
+      "size": [
+        36,
+        48
+      ],
+      "box": [
+        75.0,
+        100.0
+      ],
+      "src": "assets/signs/CFX-TM--standard.svg",
+      "aliases": "Florida Central Florida Expressway Authority toll road shield TM orange",
+      "source": "FDOT 700-102 / CFX 2026"
+    },
+    {
+      "id": "CFX-TM-ALT--standard",
+      "code": "CFX-TM-ALT",
+      "name": "CFX Toll Route Shield \u2014 State Jurisdiction",
+      "category": "Florida route signs",
+      "variant": "CFX Toll Route Shield \u2014 State Jurisdiction",
+      "size": [
+        36,
+        48
+      ],
+      "box": [
+        75.0,
+        100.0
+      ],
+      "src": "assets/signs/CFX-TM-ALT--standard.svg",
+      "aliases": "Florida Central Florida Expressway Authority toll road shield TM ALT black",
+      "source": "FDOT 700-102 / CFX 2026"
+    }
+  ]
+}

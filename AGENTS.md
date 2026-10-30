@@ -228,8 +228,8 @@ MUTCD-compliant pavement markings onto them.
   size including the header. The header lettering is osifont (an ISO 3098 CAD
   font, `fonts/osifont.woff`, GPL-3 with font exception, see
   `fonts/osifont.LICENSE`), slanted like engineering plan-sheet text.
-- **PDFs are vector.** The PDF is written directly (no library): only the sheet
-  image is raster (a JPEG at the chosen width); every road and marking is
+- **PDFs are vector.** The PDF is written directly (no library): the sheet
+  image is raster (a JPEG at the chosen width), as are user-pasted sign images; every road and marking is
   converted from the road layer's SVG into PDF vector paths (fills, strokes,
   dash patterns and phase, clip paths, and each road's joined-road mask as
   successive even-odd clips), and the title is real text in embedded osifont
@@ -381,17 +381,17 @@ MUTCD-compliant pavement markings onto them.
 ## Signs
 
 - Signs uses SignalMaker's searchable regulatory/icon selector. Official names and
-  codes come from FHWA's 2024 SHS release tables, excluding the Guide Signs,
-  miscellaneous details, and discontinued tables. All 739 included codes have
-  local vector artwork; 1,962 published direction, legend, color, and size layouts
+  codes come from FHWA's 2024 SHS release tables, including Guide Signs and route
+  markers; miscellaneous details and discontinued tables are excluded. All 1,059
+  included codes have local vector artwork; 3,137 published layouts
   are searchable. TTC detour signs remain in the TTC category.
 - Choose Sign selects a design (or replaces the selected sign). Add Sign places
   the post on the first click and the face on the second. A leader arrow points
-  from the face to a transverse post marker. Drag the face or post separately;
+  from the face to its location, with no post marker. Drag the face or arrow tip separately;
   arrow keys nudge focused controls, Shift increases the step, Delete removes,
   and Escape cancels placement. Callout size is schematic and requires no sheet
-  scale; physical sign sizes in the selector are the published layout dimensions.
-- Sheet `signs` records store `{ id, design, x, y, postX, postY, width, size, values }`.
+  scale; each design uses one default published layout.
+- Sheet `signs` records store `{ id, design, x, y, postX, postY, width, size, values, rotation, image, panels }`.
   They persist, participate in undo/redo and Clear all, and export as vector
   M/L/Z paths in the road layer. Selection handles and previews never export.
 - `assets/signs/SOURCES.md` documents provenance and rebuild instructions;
@@ -400,7 +400,8 @@ MUTCD-compliant pavement markings onto them.
 - Validate with `node --test tests/sign-catalog.test.cjs` and
   `tests/signs.browser.cjs` (isolated profile, same setup as intersections tests).
 
-- Sign sizes are grouped under each design and chosen in the editor before adding.
+- Each sign design uses its smallest published layout by default; there is no
+  physical-size selector. Existing saved layout IDs remain supported.
   Variable legend inputs use the local FHWA alphabet outlines and checked field
   specifications; see `assets/signs/options-coverage.json` for supported layouts.
   Classic-script catalog/artwork packs support direct `file://` opening.
@@ -415,3 +416,60 @@ MUTCD-compliant pavement markings onto them.
   Both sides of a two-way road remain offsets of their shared centerline.
 - Additional checks: `tests/road-widths.test.cjs`, `tests/sign-options.test.cjs`,
   and `tests/sign-options.browser.cjs` (direct-file loading and downloads).
+
+- Face rotation uses a slider/number pair; there is no post marker or post rotation control. Official sign
+  paths rotate in sheet coordinates and stay vector in PDF exports. Paste an
+  image to start a new sign placement; PNG data, aspect ratio and alpha persist
+  with the sign and export to PNG/PDF (PDF image XObjects with soft masks).
+- **Assembly Editor** opens a separate `signAssemblyEditor` top-left panel, mapped
+  to the Signs toolbar button. It contains a zero-gap grid, per-panel legend
+  controls and keyboard-accessible row/column/width controls. Choose Sign to Add
+  loads the draggable candidate; drop it on a + cell to add a row/column, drag
+  between occupied cells to swap, or drop on Remove to remove a panel. Pointer
+  events support mouse and touch. Clicking the candidate adds below. Each edit
+  is undoable. The main sign plus `panels` store each panel's design/image, values,
+  row, column, and relative width (`scale`). One face rotation applies to the
+  entire assembly; one leader points to the shared post.
+- Tests: `tests/sign-layout.test.cjs`, `tests/sign-assemblies.browser.cjs`, and
+  `tests/sign-guides.browser.cjs` cover assembly geometry, drag editing, route
+  shields, pasted images, rotations, save/reload, undo and exports.
+
+- The selector filters D/E signs to standalone assembly components. Overhead and
+  large guide-board layouts are left to SignMaker; bundled legacy artwork remains
+  available for saved sheets. `signDesigns.standalone` records this product scope.
+- Interstate, U.S., and state shield digit-count layouts form one family per
+  shield style. Editing Route number selects the published 1–2 or 3-digit
+  artwork automatically, preserves other legends and face height, and records
+  the number/layout change as one edit. The input accepts 1–999.
+- Assembly + targets fill an entire cell, matching the neighboring row/column
+  dimensions; there are no thin insertion strips or gaps between cells.
+
+- Built-in sign colors use `assets/signs/palette.json`, based on the FHWA SHS
+  artwork palette. Normalize source aliases and remove cyan construction paths
+  in the importer; rebuild both thumbnails and lazy packs together. This does
+  not recolor user-pasted images or change pavement marking colors. Route numbers
+  use the shield centerline and actual glyph bounds for horizontal alignment.
+
+- The callout is just the face and arrow. Its arrow-tip drag target is transparent
+  (visible keyboard focus remains); legacy `postRotation` data is ignored.
+
+- Florida standalone shields live in the supplemental `florida.js` catalog:
+  FTP-610/611/612-25 and CFX TM/TM-ALT. State marker numbers support 1–9999
+  with automatic digit-layout selection; toll numbers support 1–999. FTP-611
+  uses the 24 × 30 route-marker detail from the latest posted FDOT 700-102
+  sheet 15, not an assembly illustration. See SOURCES.md for edition dates.
+- Upload Sign uses SignalMaker's hidden image file input and image-normalization
+  convention. Main-panel uploads start placement; assembly uploads become the
+  draggable candidate. PNG/JPEG/WebP/SVG and other browser-decodable images use
+  the same persisted PNG pipeline as paste. Paste starts a new sign placement.
+- Picker tiles append in batches of 48 on scroll or keyboard focus near the end;
+  search still includes the entire catalog. Thumbnails decode asynchronously.
+- Assembly + cells appear orthogonally around every occupied cell; diagonals are
+  blank. Adding above/left normalizes row/column coordinates in the same undo
+  step. New panels always start at scale 100; existing panels retain their scale.
+- Validate Florida digit layouts, uploads, picker batching, and orthogonal adding
+  with `tests/sign-florida.test.cjs` / `tests/sign-florida.browser.cjs`.
+
+- CFX numeral fitting ports SignMaker v2.2 `fitOfficialRouteInk`: retain an 8%
+  cap-height minimum ink gap before horizontal compression; retain cap height.
+  36 × 48 markers use its 22.84-inch limit, 15.64-inch center, and 22.53-inch top.

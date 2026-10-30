@@ -10,12 +10,15 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(pathToFileURL(path.resolve(__dirname,'../index.html')).href);
   await page.locator('[data-editor="signsEditor"]').click();await page.locator('#chooseSign').click();
+  for(const code of ['R1-2','W14-3']) {
+   await page.locator('#signSearch').fill(code);
+   assert.equal(await page.locator('#signGrid button').count(),1,`${code}: only one size in the selector`);
+  }
   await page.locator('#signSearch').fill('R2-1');
   assert.equal(await page.locator('#signGrid button').count(),1,'sizes must not appear as separate designs');
   await page.locator('#signGrid button').click();await page.locator('#signPicker').waitFor({state:'hidden'});
-  assert.equal(await page.locator('#signPhysicalSize option').count(),5);
-  await page.locator('#signPhysicalSize').selectOption({label:'24 × 30 in'});
-  await page.waitForFunction(()=>document.querySelector('#signPhysicalSize').value===StripeMaker.signCatalog.signs.find(e=>e.code==='R2-1'&&e.size[0]===24).id && document.querySelector('#signValue-speed'));
+  assert.equal(await page.locator('#signPhysicalSize').count(),0,'physical sizes are not exposed');
+  await page.locator('#signValue-speed').waitFor();
   await page.locator('#signValue-speed').fill('35');await page.locator('#signValue-speed').blur();
   await page.locator('#signSize').fill('125');await page.locator('#signSize').blur();
   const preview=await page.locator('#signPreview').getAttribute('src');assert(preview.startsWith('data:image/svg+xml'));
@@ -33,9 +36,6 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.equal((await state())[0].values.speed,'65');
   await page.locator('#undoButton').click();assert.equal((await state())[0].values.speed,'35');
   await page.locator('#redoButton').click();assert.equal((await state())[0].values.speed,'65');
-  await page.locator('#signPhysicalSize').selectOption({label:'36 × 48 in'});
-  await page.waitForFunction(()=>StripeMaker.sheets.selected.signs[0].design===document.querySelector('#signPhysicalSize').value);
-  assert.equal((await state())[0].values.speed,'65');
   await page.waitForTimeout(600);const before=await state();await page.reload();
   await page.waitForFunction(()=>document.querySelector('.signCallout path'));
   assert.deepEqual(await state(),before);
@@ -56,6 +56,6 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    const pending=page.waitForEvent('download');await page.locator('#downloadSheet').click();
    await(await pending).saveAs(`/tmp/stripemaker-file-options.${format}`);
   }
-  assert.deepEqual(errors,[]);console.log('Direct-file loading, grouped sizes, variable legends, validation, persistence and history passed.');
+  assert.deepEqual(errors,[]);console.log('Direct-file loading, default sizes, variable legends, validation, persistence and history passed.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

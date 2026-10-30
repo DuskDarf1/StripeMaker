@@ -1,0 +1,17 @@
+{
+  "source": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/",
+  "specification": "https://mutcd.fhwa.dot.gov/kno-colorspec.htm",
+  "notes": "Screen/print colors use the main swatches in FHWA 2024 SHS artwork. MUTCD fabrication colors are chromaticity/luminance specifications, not universal RGB values. Cyan is a construction/dimension layer, not sign-face blue.",
+  "colors": {"black":"#000000","white":"#ffffff","red":"#bf311a","yellow":"#ffd046","orange":"#f7921e","green":"#006f53","blue":"#005a9c","brown":"#7d4802","yellowGreen":"#bed73d","purple":"#6d276a"},
+  "aliases": {
+    "#000":"black","#000000":"black","#010101":"black","#0a0a0a":"black","#221f1f":"black","#231f20":"black",
+    "#fff":"white","#ffffff":"white",
+    "#bf311a":"red","#bf301a":"red","#ed1c24":"red",
+    "#ffd046":"yellow","#ffd147":"yellow","#fff200":"yellow","#facb31":"yellow","#ffcd05":"yellow","#f0d040":"yellow",
+    "#f7921e":"orange",
+    "#006f53":"green","#006f54":"green","#64a696":"green","#9dc5bb":"green","#6abd45":"green",
+    "#005a9c":"blue","#7d4802":"brown","#bed73d":"yellowGreen",
+    "#6d276a":"purple","#2c286d":"purple"
+  },
+  "constructionColors": ["#00aeef"]
+}

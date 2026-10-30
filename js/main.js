@@ -25,7 +25,7 @@
 
     // Editor panels opened from the sheet rather than the toolbar, and the
     // toolbar button each one belongs to.
-    const panels = { intersectionEditor: "intersectionsEditor" };
+    const panels = { intersectionEditor: "intersectionsEditor", signAssemblyEditor: "signsEditor" };
     function showEditor(id) {
       buttons.forEach(button => {
         const selected = button.dataset.editor === (panels[id] ?? id);

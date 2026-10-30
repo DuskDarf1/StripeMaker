@@ -3,14 +3,33 @@
 (() => {
   const app = globalThis.StripeMaker ??= {};
   const sizeName = e => e.size.map(n => n == null ? 'Variable' : n).join(' × ') + ' in';
-  const familyKey = e => e.code + '|' + e.variant
-    .replace(/\b(?:VAR|\d+(?:\.\d+)?)[x×](?:VAR|\d+(?:\.\d+)?)\b/gi, '')
-    .replace(/\b2024\b/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  // Triangles have three published edge lengths; other panels have two.
+  // Keep direction, color, and legend variants, but never a size-only variant.
+  const designLabel = e => e.variant
+    .replace(/\b(?:VAR|\d+(?:\.\d+)?)(?:\s*[x×]\s*(?:VAR|\d+(?:\.\d+)?)){1,}\b/gi, '')
+    .replace(/\b2024\b/g, '').replace(/\s+/g, ' ').trim();
+  const routeFamily = e => e.routeFamily || /^M1-(?:1a?|4|5)$/.test(e.code);
+  // StripeMaker offers standalone assembly components. Large guide-board and
+  // overhead layouts belong in SignMaker (FHWA MUTCD Chapters 2D/2E/2G).
+  const standalone = e => {
+    if(/overhead/i.test(e.name+' '+e.variant))return false;
+    if(/^E\d/.test(e.code))return /^E5-|^E8-(?:1a?|2a|4)$/.test(e.code);
+    if(/^D\d/.test(e.code)){
+      if(/P$/.test(e.code))return true;
+      if(/^D(?:1|2|3|4|10|11|12|13|17)-/.test(e.code))return true;
+      if(/^D9-/.test(e.code))return !/^D9-(?:16[b-e]|17a|18[a-c]?)$/.test(e.code);
+      return false;
+    }
+    return true;
+  };
+  const familyKey = e => routeFamily(e)
+    ? `${e.code}|${/independent assembly/i.test(e.variant)?'independent':/guide sign use/i.test(e.variant)?'guide':'route'}`
+    : e.code + '|' + designLabel(e).toLowerCase();
   function families(catalog) {
     const map = new Map();
     for (const entry of catalog) {
       const key = familyKey(entry);
-      if (!map.has(key)) map.set(key, { key, entries:[], label:entry.variant.replace(/\b(?:VAR|\d+(?:\.\d+)?)[x×](?:VAR|\d+(?:\.\d+)?)\b/gi, '').replace(/\b2024\b/g, '').replace(/\s+/g,' ').trim() });
+      if (!map.has(key)) map.set(key, { key, entries:[], label:designLabel(entry) });
       map.get(key).entries.push(entry);
     }
     for (const group of map.values()) group.entries.sort((a,b) => (a.size[0]??0)*(a.size[1]??0)-(b.size[0]??0)*(b.size[1]??0));
@@ -19,6 +38,14 @@
   function transformPath(path, x, y, scale) {
     let coordinate = 0;
     return path.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, v => (+v*scale+(coordinate++%2 ? y:x)).toFixed(4));
+  }
+  const glyphInk=new WeakMap();
+  function inkBounds(glyph){
+    if(!glyphInk.has(glyph)){
+      const coords=glyph.d.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi).map(Number).filter((_,i)=>i%2===0);
+      glyphInk.set(glyph,[Math.min(...coords),Math.max(...coords)]);
+    }
+    return glyphInk.get(glyph);
   }
   function legend(value, field, alphabets) {
     const chars = [...String(value)], alphabet = alphabets[field.series];
@@ -31,9 +58,42 @@
       letters.push({glyph,x:cursor}); cursor += glyph.width+glyph.right;
     }
     if (letters.length) cursor -= letters.at(-1).glyph.right;
-    const k=field.height/100, width=cursor*k;
-    if (!field.flexWidth && width>field.maxWidth+.02) return {error:'This legend does not fit at the specified letter height. Use a shorter value or a larger sign size.'};
-    return {paths:letters.map(({glyph,x})=>({d:transformPath(glyph.d,field.cx-width/2+x*k,field.top,k),fill:field.fill})),width};
+    const k=field.height/100;let width=cursor*k;
+    // FHWA M1-1/M1-4 drawings call for numerals optically spaced about the
+    // vertical centerline. Tighten spacing, never the numeral outlines/height,
+    // when a three-digit legend exceeds the generic alphabet side bearings.
+    if(field.key==='route'&&!field.fitWidth&&letters.length>1&&width>field.maxWidth){
+      const ink=letters.reduce((sum,item)=>sum+item.glyph.width,0),gap=(field.maxWidth/k-ink)/(letters.length-1);
+      if(gap>0){let x=0;for(const item of letters){item.x=x;x+=item.glyph.width+gap;}width=field.maxWidth;}
+    }
+    if (!field.flexWidth && !field.fitWidth && width>field.maxWidth+.02) return {error:'This legend does not fit at the specified letter height. Use a shorter value or a larger sign size.'};
+    let inkLeft=Math.min(...letters.map(({glyph,x})=>x+inkBounds(glyph)[0]));
+    let inkRight=Math.max(...letters.map(({glyph,x})=>x+inkBounds(glyph)[1]));
+    let horizontal=1;
+    if(field.fitWidth && (inkRight-inkLeft)*k>field.maxWidth){
+      // Ported from SignMaker v2.2 Control.js fitOfficialRouteInk (GPL-3.0).
+      // Keep 8% of cap height between adjacent glyph ink bounds before scaleX.
+      // Use our vector glyph metrics in place of its Roadgeek canvas metrics.
+      let minimumSpacing=-Infinity;
+      for(let i=0;i<letters.length-1;i++){
+        const a=letters[i],b=letters[i+1];
+        minimumSpacing=Math.max(minimumSpacing,8-(b.x+inkBounds(b.glyph)[0]-a.x-inkBounds(a.glyph)[1]));
+      }
+      if(letters.length>1){
+        const spacing=Math.min(0,Math.max(minimumSpacing,(field.maxWidth/k-(inkRight-inkLeft))/(letters.length-1)));
+        letters.forEach((letter,i)=>letter.x+=i*spacing);
+        inkLeft=Math.min(...letters.map(({glyph,x})=>x+inkBounds(glyph)[0]));
+        inkRight=Math.max(...letters.map(({glyph,x})=>x+inkBounds(glyph)[1]));
+      }
+      horizontal=Math.min(1,field.maxWidth/((inkRight-inkLeft)*k));
+      width=(inkRight-inkLeft)*k;
+    }
+    const origin=field.cx-(inkLeft+inkRight)*k*horizontal/2;
+    return {paths:letters.map(({glyph,x})=>{
+      let coordinate=0;
+      const d=glyph.d.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi,v=>(coordinate++%2?+v*k+field.top:(+v+x)*k*horizontal+origin).toFixed(4));
+      return {d,fill:field.fill};
+    }),width:width*horizontal};
   }
   function validate(value, field, alphabets) {
     const text=String(value).trim();
@@ -67,12 +127,12 @@
     });
     for (const field of fields ?? []) {
       const value=values?.[field.key] ?? field.default;
-      if (String(value)===String(field.original ?? field.default)) continue;
+      if (field.key!=='route' && String(value)===String(field.original ?? field.default)) continue;
       if (validate(value,field,alphabets)) continue;
       field.paths.forEach(i=>removed.add(i));extra.push(...legend(value,{...field,cx:field.cx+widen/2,maxWidth:field.maxWidth+widen},alphabets).paths);
     }
     return [...background.filter((_,i)=>!removed.has(i)),...extra];
   }
-  app.signDesigns = { families, familyKey, sizeName, transformPath, legend, validate, expansion, compose };
+  app.signDesigns = { standalone, routeFamily, families, familyKey, sizeName, transformPath, legend, validate, expansion, compose };
   if (typeof module!=='undefined') module.exports=app.signDesigns;
 })();

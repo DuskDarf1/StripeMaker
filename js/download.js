@@ -154,7 +154,7 @@
     // The road layer as PDF vector drawing, in sheet pixels: pavement, markings,
     // gore stripes clipped to their gores, and each road's lines clipped away from
     // the roads joined to it (the SVG mask, as one even-odd clip per hole).
-    function roadOps(svg) {
+    function roadOps(svg, images = new Map()) {
       const out = [];
       const byId = id => svg.querySelector(`[id="${id.replace(/^url\(#|\)$/g, "")}"]`);
       const walk = node => {
@@ -175,6 +175,15 @@
           if (clip) for (const shape of clip.querySelectorAll("path")) out.push(`${pathOps(shape.getAttribute("d"))}\nW n`);
           [...node.children].forEach(walk);
           out.push("Q");
+          return;
+        }
+        if (name === "image") {
+          const image=images.get(node.getAttribute('href'));
+          if(image){
+            const matrix=node.getAttribute('transform').match(/matrix\(([^)]+)\)/)[1].trim().split(/\s+/).map(Number);
+            const [a,b,c,d,e,f]=matrix;
+            out.push(`q ${[a,b,-c,-d,e+c,f+d].map(n).join(' ')} cm /${image.name} Do Q`);
+          }
           return;
         }
         if (name !== "path") return;
@@ -240,13 +249,28 @@
       const literal = `(${title.map(code => (code === 40 || code === 41 || code === 92 ? `\\${String.fromCharCode(code)}`
         : code < 127 ? String.fromCharCode(code) : `\\${code.toString(8).padStart(3, "0")}`)).join("")})`;
       const k = pageWidth / sheet.width;
+      const signImages=new Map(),imageObjects=[];
+      for(const node of sheet.roadLayer?.querySelectorAll('image')??[]){
+        const src=node.getAttribute('href');if(signImages.has(src))continue;
+        const image=new Image();image.src=src;await image.decode();
+        const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+        const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
+        const pixels=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+        const color=new Uint8Array(pixels.length/4*3),alpha=new Uint8Array(pixels.length/4);
+        for(let i=0;i<alpha.length;i++){color.set(pixels.subarray(i*4,i*4+3),i*3);alpha[i]=pixels[i*4+3];}
+        const [rgbBytes,alphaBytes]=await Promise.all([deflate(color),deflate(alpha)]);
+        const object=10+imageObjects.length,name=`Sign${signImages.size}`;
+        signImages.set(src,{object,name});
+        const stream=(bytes,space,extra='')=>[`<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /${space} /BitsPerComponent 8 /Filter /FlateDecode ${extra} /Length ${bytes.length} >>\nstream\n`,bytes,'\nendstream'];
+        imageObjects.push(stream(rgbBytes,'DeviceRGB',`/SMask ${object+1} 0 R`),stream(alphaBytes,'DeviceGray'));
+      }
       const content = [
         "1 1 1 rg", `0 0 ${n(pageWidth)} ${n(pageHeight)} re f`,
         // Sheet pixels, y down, below the header; everything clipped to the sheet.
         "q", `${n(k)} 0 0 ${n(-k)} 0 ${n(pageHeight - headerPoints)} cm`,
         `0 0 ${sheet.width} ${sheet.height} re W n`,
         "q", `${sheet.width} 0 0 ${-sheet.height} 0 ${sheet.height} cm`, "/Im0 Do", "Q",
-        sheet.roadLayer ? roadOps(sheet.roadLayer) : "",
+        sheet.roadLayer ? roadOps(sheet.roadLayer, signImages) : "",
         "Q",
         // Header rule and slanted title.
         "0 0 0 rg", `0 ${n(pageHeight - headerPoints)} ${n(pageWidth)} ${n(ruleSize(header) * fit)} re f`,
@@ -273,7 +297,7 @@
       const objects = [
         ["<< /Type /Catalog /Pages 2 0 R >>"],
         ["<< /Type /Pages /Kids [3 0 R] /Count 1 >>"],
-        [`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(pageWidth)} ${n(pageHeight)}] /Resources << /XObject << /Im0 4 0 R >> /Font << /F1 7 0 R >> >> /Contents 5 0 R >>`],
+        [`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n(pageWidth)} ${n(pageHeight)}] /Resources << /XObject << /Im0 4 0 R ${[...signImages.values()].map(i=>`/${i.name} ${i.object} 0 R`).join(' ')} >> /Font << /F1 7 0 R >> >> /Contents 5 0 R >>`],
         [`<< /Type /XObject /Subtype /Image /Width ${width} /Height ${imageHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`, jpeg, "\nendstream"],
         [`<< /Length ${contentBytes.length} /Filter /FlateDecode >>\nstream\n`, contentBytes, "\nendstream"],
         [`<< /Title ${info} /Producer (StripeMaker) >>`],
@@ -281,6 +305,7 @@
         ["<< /Type /FontDescriptor /FontName /Osifont /Flags 32 /FontBBox [-200 -250 1200 1000] /ItalicAngle 0 /Ascent 800 /Descent -200 /CapHeight 700 /StemV 80 /FontFile2 9 0 R >>"],
         [`<< /Length ${fontBytes.length} /Length1 ${fontFile.length} /Filter /FlateDecode >>\nstream\n`, fontBytes, "\nendstream"],
       ];
+      objects.push(...imageObjects);
       const parts = [encoder.encode("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n")];
       let length = parts[0].length;
       const offsets = [];
