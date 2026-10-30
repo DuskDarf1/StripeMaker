@@ -22,7 +22,7 @@
   const PAVEMENT_MARGIN_INCHES = 8;   // edge of traveled way to edge of pavement
   const YELLOW = "#ffc72c";
   const WHITE = "#ffffff";
-  const MAX_LANES = 8;
+  const MAX_LANES = 999;
   const MIN_LANE_WIDTH = 8;
   const MAX_LANE_WIDTH = 20;
   const MAX_MEDIAN_FEET = 200;
@@ -144,12 +144,13 @@
     const attachments = (sheet, joint) => sheet.roads.flatMap(road => road.ends
       .map((end, e) => ({ road, e, end }))).filter(({ end }) => end.joint === joint.id);
     // Sideways position of a lane's center (or the left edge), right of travel.
-    const laneLateral = (sheet, road, lane) => (Math.min(lane, road.lanes - 1) + 0.5 - road.lanes / 2) * feetToPixels(sheet, road.laneWidth);
+    const endWidth = (sheet, road, e) => e == null ? road.laneWidth : window.StripeMaker.roadWidths.endWidth(sheet, road, e);
+    const laneLateral = (sheet, road, lane, e) => (Math.min(lane, road.lanes - 1) + 0.5 - road.lanes / 2) * feetToPixels(sheet, endWidth(sheet, road, e));
     // A link names a lane by index, or a road's left ("L") or right ("R") edge line,
     // so roads can be joined edge to edge as well as lane to lane.
-    const linkLateral = (sheet, road, index) => (index === "L" || index === "R"
-      ? (index === "R" ? 1 : -1) * road.lanes * feetToPixels(sheet, road.laneWidth) / 2
-      : laneLateral(sheet, road, index));
+    const linkLateral = (sheet, road, index, e) => (index === "L" || index === "R"
+      ? (index === "R" ? 1 : -1) * road.lanes * feetToPixels(sheet, endWidth(sheet, road, e)) / 2
+      : laneLateral(sheet, road, index, e));
     const pairOf = (sheet, road) => road && sheet.roads.find(other => other !== road
       && other.ends[0].joint === road.ends[1].joint && other.ends[1].joint === road.ends[0].joint);
     const pairLinks = (sheet, road, pair) => road.ends.flatMap(end => jointOf(sheet, end.joint).links)
@@ -194,9 +195,9 @@
               const b = byRoad.get(to);
               if (!a || !b || !offsets.has(from) || offsets.has(to)) continue;
               const reference = link.pair
-                ? offsets.get(from) + a.end.sign * (laneLateral(sheet, a.road, LEFT_EDGE) - separation - feetToPixels(sheet, link.median ?? 0))
-                : offsets.get(from) + a.end.sign * linkLateral(sheet, a.road, fromLane);
-              offsets.set(to, reference - b.end.sign * (link.pair ? laneLateral(sheet, b.road, LEFT_EDGE) : linkLateral(sheet, b.road, toLane)));
+                ? offsets.get(from) + a.end.sign * (laneLateral(sheet, a.road, LEFT_EDGE, a.e) - separation - feetToPixels(sheet, link.median ?? 0))
+                : offsets.get(from) + a.end.sign * linkLateral(sheet, a.road, fromLane, a.e);
+              offsets.set(to, reference - b.end.sign * (link.pair ? laneLateral(sheet, b.road, LEFT_EDGE, b.e) : linkLateral(sheet, b.road, toLane, b.e)));
               grew = true;
             }
           }
@@ -207,12 +208,12 @@
         if (pairLink) {
           const half = byRoad.get(pairLink.a);
           const gap = separation + feetToPixels(sheet, pairLink.median ?? 0);
-          const center = offsets.get(pairLink.a) + half.end.sign * (laneLateral(sheet, half.road, LEFT_EDGE) - gap / 2);
+          const center = offsets.get(pairLink.a) + half.end.sign * (laneLateral(sheet, half.road, LEFT_EDGE, half.e) - gap / 2);
           for (const [id, value] of offsets) offsets.set(id, value - center);
         }
         // Lanes that don't continue across a joint taper automatically: ending
         // lanes drop, starting lanes are added.
-        const lateral = (item, lane) => (offsets.get(item.road.id) ?? 0) + item.end.sign * laneLateral(sheet, item.road, lane);
+        const lateral = (item, lane) => (offsets.get(item.road.id) ?? 0) + item.end.sign * laneLateral(sheet, item.road, lane, item.e);
         for (const item of here) {
           const across = here.filter(other => other.e !== item.e && other.end.sign === item.end.sign);
           if (!across.length) continue;
@@ -298,12 +299,13 @@
       const along = [0];
       for (let i = 1; i < line.length; i++) along.push(along[i - 1] + Math.hypot(line[i].x - line[i - 1].x, line[i].y - line[i - 1].y));
       const total = along[along.length - 1];
-      const laneWidth = feetToPixels(sheet, road.laneWidth);
+      const startWidth = endWidth(sheet, road, 0), finishWidth = endWidth(sheet, road, 1);
       const tapered = lane => tapers.has(`0:${lane}`) || tapers.has(`1:${lane}`);
       let anchor = 0;
       while (anchor < road.lanes - 1 && tapered(anchor)) anchor++;
-      const anchorLeft = laneLateral(sheet, road, anchor) - laneWidth / 2 + shift;
       const bounds = along.map(s => {
+        const laneWidth = feetToPixels(sheet, window.StripeMaker.roadWidths.widthAt(road.laneWidth, startWidth, finishWidth, total ? s / total : 0));
+        const anchorLeft = (anchor - road.lanes / 2) * laneWidth + (typeof shift === "function" ? shift(laneWidth) : shift);
         const widths = Array.from({ length: road.lanes }, (_, lane) => {
           const start = tapers.get(`0:${lane}`);
           const end = tapers.get(`1:${lane}`);
@@ -349,9 +351,9 @@
       let shape;
       if (partner) {
         const gap = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES) + feetToPixels(sheet, pairLinks(sheet, road, partner)[0]?.median ?? 0);
-        const shift = gap / 2 - laneLateral(sheet, road, LEFT_EDGE);
+        const shift = [0, 1].map(e => gap / 2 - laneLateral(sheet, road, LEFT_EDGE, e));
         const { a, c0, c1, b } = sharedControls(road, partner, solved, shift);
-        shape = buildShape(sheet, road, bezier(a, c0, c1, b), tapers, shift);
+        shape = buildShape(sheet, road, bezier(a, c0, c1, b), tapers, width => gap / 2 + road.lanes * width / 2);
       } else shape = buildShape(sheet, road, centerline(road, solved), tapers);
       solved.shapes.set(road, shape);
       return shape;
@@ -363,7 +365,7 @@
         const at = solved.get(`${road.id}:${e}`);
         const travel = at.travel ?? travelAt(road, e, solved);
         const right = rightOf(travel);
-        return { x: at.x - right.x * shift, y: at.y - right.y * shift, travel: at.travel };
+        return { x: at.x - right.x * shift[e], y: at.y - right.y * shift[e], travel: at.travel };
       });
       // The lower-id side's pulls drive both sides, so they can't drift apart.
       return controls(a, b, road.id < partner.id ? road.ends.map(end => end.length) : [partner.ends[1].length, partner.ends[0].length]);
@@ -374,7 +376,7 @@
       const partner = pairOf(sheet, road);
       if (!partner) return controls(solved.get(`${road.id}:0`), solved.get(`${road.id}:1`), road.ends.map(end => end.length));
       const gap = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES) + feetToPixels(sheet, pairLinks(sheet, road, partner)[0]?.median ?? 0);
-      return sharedControls(road, partner, solved, gap / 2 - laneLateral(sheet, road, LEFT_EDGE));
+      return sharedControls(road, partner, solved, [0, 1].map(e => gap / 2 - laneLateral(sheet, road, LEFT_EDGE, e)));
     }
     // Where a lane node is drawn: just inside the road, so the end nodes of one road
     // and the start nodes of the next don't cover each other at a joint.
@@ -652,6 +654,7 @@
       return best;
     }
     // Road pavement edges and marked gore outlines, which medians snap to and follow.
+    const medianAnchorKey = on => on.intersection ? `intersection:${on.intersection}:${on.approach}:${on.side}` : `${on.road}:${on.side}`;
     function pavementEdges(sheet, solved) {
       if (solved.pavementEdges) return solved.pavementEdges;
       const margin = inchesToPixels(sheet, PAVEMENT_MARGIN_INCHES);
@@ -680,6 +683,14 @@
         corners.push(e1[0], e1[last], e2[last]);
         edges.push(e1, e2, [e1[last], e2[last]]);
       }
+      const intersections = window.StripeMaker.intersections?.boundaries(sheet, solved);
+      if (intersections) {
+        corners.push(...intersections.corners);
+        for (const edge of intersections.edges) {
+          edges.push(edge);
+          byKey.set(medianAnchorKey(edge.on), edge);
+        }
+      }
       return (solved.pavementEdges = { corners, edges, byKey });
     }
     // Arc-length fraction of position `s` (segment index plus fraction) along a
@@ -699,7 +710,7 @@
       const { byKey } = pavementEdges(sheet, solved);
       for (const p of sheet.medians.flatMap(median => median.points)) {
         if (!p.on) continue;
-        const edge = byKey.get(`${p.on.road}:${p.on.side}`);
+        const edge = byKey.get(medianAnchorKey(p.on));
         if (!edge) delete p.on;
         else Object.assign(p, pointAtFraction(edge, p.on.f));
       }
@@ -722,7 +733,30 @@
     // A median's drawn outline: between two points on the same pavement edge it
     // follows that edge (a curved road's edge, say) instead of cutting across.
     function medianOutline(sheet, solved, points) {
-      const { edges } = pavementEdges(sheet, solved);
+      const { edges: pavement } = pavementEdges(sheet, solved);
+      // Join longitudinal edges across segment boundaries before tracing the
+      // median. End caps must not become shortcuts across the traveled way.
+      const edges = pavement.map(edge => [...edge]);
+      const chains = pavement.filter(edge => edge.on && ["L", "R"].includes(edge.on.side)).map(edge => [...edge]);
+      for (let i = 0; i < chains.length; i++) {
+        let joined = true;
+        while (joined) {
+          joined = false;
+          for (let j = i + 1; j < chains.length; j++) {
+            const a = chains[i], b = chains[j];
+            const close = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) <= 0.5;
+            if (close(a.at(-1), b[0])) a.push(...b.slice(1));
+            else if (close(a.at(-1), b.at(-1))) a.push(...b.slice(0, -1).reverse());
+            else if (close(a[0], b.at(-1))) a.unshift(...b.slice(0, -1));
+            else if (close(a[0], b[0])) a.unshift(...b.slice(1).reverse());
+            else continue;
+            chains.splice(j, 1);
+            joined = true;
+            break;
+          }
+        }
+      }
+      edges.push(...chains);
       const tolerance = 0.5;
       const on = points.map(p => edges.map(edge => {
         const at = nearestOn(edge, p);
@@ -760,6 +794,28 @@
     function snapMedian(sheet, point, exclude = new Set(), extra = []) {
       const radius = SNAP_PIXELS / sheet.view.scale;
       const { corners, edges } = medianSnaps(sheet, solve(sheet), exclude);
+      // Intersections make precise pinch-point targets, even when neither
+      // road has a pavement corner there. Only inspect segments near the cursor.
+      const nearby = [];
+      for (const edge of edges) for (let i = 1; i < edge.length; i++) {
+        const a = edge[i - 1], b = edge[i];
+        if (point.x < Math.min(a.x, b.x) - radius || point.x > Math.max(a.x, b.x) + radius ||
+            point.y < Math.min(a.y, b.y) - radius || point.y > Math.max(a.y, b.y) + radius) continue;
+        nearby.push({ a, b, edge, i });
+      }
+      for (let i = 0; i < nearby.length; i++) for (let j = i + 1; j < nearby.length; j++) {
+        const a = nearby[i], b = nearby[j];
+        if (a.edge === b.edge) continue;
+        const u = { x: a.b.x - a.a.x, y: a.b.y - a.a.y };
+        const v = { x: b.b.x - b.a.x, y: b.b.y - b.a.y };
+        const d = u.x * v.y - u.y * v.x;
+        if (Math.abs(d) < 1e-9) continue;
+        const x = b.a.x - a.a.x, y = b.a.y - a.a.y;
+        const t = (x * v.y - y * v.x) / d, f = (x * u.y - y * u.x) / d;
+        if (t < 0 || t > 1 || f < 0 || f > 1) continue;
+        corners.push({ x: a.a.x + t * u.x, y: a.a.y + t * u.y,
+          on: a.edge.on && { ...a.edge.on, f: fractionAt(a.edge, a.i - 1 + t) } });
+      }
       let best = null;
       for (const corner of [...corners, ...extra]) {
         const distance = Math.hypot(corner.x - point.x, corner.y - point.y);
@@ -909,6 +965,7 @@
       if (selectedRoad || selectedGore) selectedMedian = null;
       if (sheet) {
         const layer = layerFor(sheet);
+        if (!drag) window.StripeMaker.intersections?.alignLinks(sheet);
         solved = solve(sheet);
         anchorMedians(sheet, solved);
         const layers = Object.fromEntries(["pavement", "markings", "selection"].map(name => {
@@ -928,10 +985,14 @@
           }
           if ((drawing?.start || drawing?.end) && drawing.cursor) drawPreview(sheet, layers);
         }
+        if (sheet.inchesPerPixel) window.StripeMaker.intersections?.draw(sheet, layers, solved);
+        window.StripeMaker.signs?.draw(sheet, layers.markings);
         layer.replaceChildren(layers.pavement, layers.markings, layers.selection);
       }
       drawOverlay(solved);
       updatePanel(solved);
+      window.StripeMaker.intersections?.refreshOverlay();
+      window.StripeMaker.signs?.refreshOverlay();
     }
     // A two-way preview puts the clicked line on the centerline, like the result.
     function drawPreview(sheet, layers) {
@@ -1389,6 +1450,21 @@
       selectedRoad = road;
       selectedLane = null;
       render();
+      // SignalMaker's flashSelection timing and pulse, applied to the actual
+      // SVG outline while retaining the persistent yellow selection beneath it.
+      if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        workspace.querySelectorAll(".roadOutline").forEach(outline => {
+          const flash = outline.cloneNode();
+          outline.after(flash);
+          const zoom = sheets.selected?.view.scale ?? 1;
+          flash.animate([
+            { strokeWidth: `${8 / zoom}px`, opacity: 1, offset: 0 },
+            { strokeWidth: `${18 / zoom}px`, opacity: 1, offset: 0.15 },
+            { strokeWidth: `${8 / zoom}px`, opacity: 1, offset: 0.25 },
+            { strokeWidth: `${8 / zoom}px`, opacity: 0, offset: 1 }
+          ], { duration: 500, easing: "ease-in", fill: "forwards" }).onfinish = () => flash.remove();
+        });
+      }
     }
     // Drawing can begin from a lane's end (`start`) or toward a lane's start (`end`).
     function startDrawing({ start = null, end = null } = {}) {
@@ -1535,6 +1611,7 @@
       reanchor(sheet, before, results);
     }
     function detach(sheet, road, e) {
+      window.StripeMaker.intersections?.releaseRoad(sheet, road.id, e);
       const joint = jointOf(sheet, road.ends[e].joint);
       if (attachments(sheet, joint).length < 2) return;
       const before = solve(sheet);
@@ -1777,6 +1854,7 @@
       const pulls = { start: a.travel ? distance(a, p01) : null, before: distance(p012, m), after: distance(m, p123), end: b.travel ? distance(p23, b) : null };
       const joint = newJoint(sheet, m, road.id, unit(distance(p012, p123) > 1e-6 ? { x: p123.x - p012.x, y: p123.y - p012.y } : { x: b.x - a.x, y: b.y - a.y }));
       const rename = (at, from, to) => {
+        window.StripeMaker.intersections?.rehomeRoad(sheet, from, 1, to, 1);
         const far = jointOf(sheet, at);
         far.links.forEach(link => {
           if (link.a === from) link.a = to;
@@ -1854,8 +1932,11 @@
     function drawingPoint(sheet, clientX, clientY) {
       const point = sheets.toImage(clientX, clientY);
       const solved = solve(sheet);
-      snapTarget = snapLane(sheet, solved, point, drawing.start ? 1 : 0)
-        ?? (defaults.opposite ? null : snapEdge(sheet, solved, point, SNAP_PIXELS / sheet.view.scale));
+      const e = drawing.start ? 1 : 0;
+      snapTarget = snapLane(sheet, solved, point, e);
+      const approach = !snapTarget && window.StripeMaker.intersections?.laneAt(sheet, { e }, point);
+      if (approach) snapTarget = { ...approach.point, approach };
+      snapTarget ??= defaults.opposite ? null : snapEdge(sheet, solved, point, SNAP_PIXELS / sheet.view.scale);
       return snapTarget ? { x: snapTarget.x, y: snapTarget.y, target: snapTarget } : point;
     }
 
@@ -1874,6 +1955,17 @@
       const point = drawingPoint(sheet, event.clientX, event.clientY);
       if (drawing.start || drawing.end) drawing.cursor = point;
       render();
+    });
+    workspace.addEventListener("contextmenu", event => {
+      const sheet = sheets.selected;
+      if (!active() || drawing || medianDraw || !sheet?.inchesPerPixel || event.defaultPrevented) return;
+      const point = sheets.toImage(event.clientX, event.clientY);
+      const road = roadAt(sheet, point);
+      if (!road) return;
+      const button = nodeButtons.get(`${road.id}:0:0`);
+      if (!button) return;
+      event.preventDefault();
+      openMenu(button, point);
     });
     workspace.addEventListener("click", event => {
       const sheet = sheets.selected;
@@ -1909,10 +2001,18 @@
       sheet.roads.push(road);
       // A new road lines its matching lane up with the lane it was drawn from or to.
       [start, end].forEach((p, e) => {
+        if (p.target?.approach) return; // Align after creating the opposite side, if any.
         if (p.target?.edge) attachToEdge(sheet, road, e, p);
         else if (p.target) connect(sheet, road, e, Math.min(p.target.lane, road.lanes - 1), p.target);
       });
       if (defaults.opposite) addOpposite(sheet, road, defaults.opposite, defaults.median, false);
+      [start, end].forEach((p, e) => {
+        const target = p.target?.approach;
+        if (!target) return;
+        const binding = { road: road.id, e };
+        alignLaneEnd(sheet, binding, 0, target.point, target.angle);
+        window.StripeMaker.intersections.linkLane(sheet, target, binding, 0);
+      });
       snapTarget = null;
       // Like Cities: Skylines, each click adds a node: the road carries on from the
       // segment just drawn until a double-click or Esc, or until it joins a lane
@@ -1970,7 +2070,9 @@
         // Option/Alt-drag gives this road's end its own joint, pulling it free.
         if (event.altKey) detach(node.sheet, node.road, node.e);
         const solved = solve(node.sheet);
-        drag = { ...node, from: lanePoint(node.sheet, node.road, node.e, node.lane, solved), pointer: sheets.toImage(event.clientX, event.clientY) };
+        const dir = jointOf(node.sheet, node.road.ends[node.e].joint).dir;
+        drag = { ...node, from: lanePoint(node.sheet, node.road, node.e, node.lane, solved), pointer: sheets.toImage(event.clientX, event.clientY),
+          dir: dir && { ...dir } };
         render();
       });
       button.addEventListener("pointermove", event => {
@@ -1978,16 +2080,27 @@
         const { sheet, road, e, lane } = drag;
         const pointer = sheets.toImage(event.clientX, event.clientY);
         const wanted = { x: drag.from.x + pointer.x - drag.pointer.x, y: drag.from.y + pointer.y - drag.pointer.y };
+        // Lane nodes first, then intersection openings, then edge lines, which pull
+        // the dragged lane onto the center of the edge lane it will feed. An
+        // opening turns the road end to line up with it, so undo that turn first.
+        const joint = jointOf(sheet, road.ends[e].joint);
+        if (drag.dir) joint.dir = { ...drag.dir };
+        else delete joint.dir;
         const solved = solve(sheet);
-        // Lane nodes first, then edge lines, which pull the dragged lane onto the
-        // center of the edge lane it will feed.
-        const moving = attachments(sheet, jointOf(sheet, road.ends[e].joint)).map(item => item.road);
+        const moving = attachments(sheet, joint).map(item => item.road);
         snapTarget = snapLane(sheet, solved, wanted, e, road);
+        drag.moved = true;
+        const approach = !snapTarget && window.StripeMaker.intersections?.laneAt(sheet, { road: road.id, e }, wanted);
+        if (approach) {
+          alignLaneEnd(sheet, { road: road.id, e }, lane, approach.point, approach.angle);
+          snapTarget = { ...approach.point, approach };
+          render();
+          return;
+        }
         const edge = !snapTarget && snapEdge(sheet, solved, wanted, SNAP_PIXELS / sheet.view.scale, [...moving, road]);
         if (edge) snapTarget = { ...edge, x: edge.center.x, y: edge.center.y, edgePoint: { x: edge.x, y: edge.y } };
         const goal = snapTarget ?? wanted;
-        const current = lanePoint(sheet, road, e, lane, solved);
-        const joint = jointOf(sheet, road.ends[e].joint);
+        const current = lanePoint(sheet, road, e, lane, solve(sheet));
         joint.x += goal.x - current.x;
         joint.y += goal.y - current.y;
         render();
@@ -1995,7 +2108,11 @@
       const finish = event => {
         if (!drag || !button.hasPointerCapture(event.pointerId)) return;
         button.releasePointerCapture(event.pointerId);
-        if (snapTarget?.edge && event.type === "pointerup") feedEdge(drag.sheet, drag.road, drag.e, drag.lane, snapTarget.edgePoint);
+        // Moving a road end off an intersection lane unlinks it.
+        if (drag.moved) window.StripeMaker.intersections?.releaseLanes(drag.sheet, drag.road.id, drag.e);
+        if (snapTarget?.approach && event.type === "pointerup")
+          window.StripeMaker.intersections.linkLane(drag.sheet, snapTarget.approach, { road: drag.road.id, e: drag.e }, drag.lane);
+        else if (snapTarget?.edge && event.type === "pointerup") feedEdge(drag.sheet, drag.road, drag.e, drag.lane, snapTarget.edgePoint);
         else if (snapTarget && event.type === "pointerup") connect(drag.sheet, drag.road, drag.e, drag.lane, snapTarget);
         drag = null;
         snapTarget = null;
@@ -2021,7 +2138,14 @@
       button.addEventListener("contextmenu", event => {
         event.preventDefault();
         event.stopPropagation();
-        openMenu(button);
+        const preferred = [...nodeButtons.values()].find(candidate => {
+          const target = nodeTarget(candidate);
+          const rect = candidate.getBoundingClientRect();
+          return target?.road === selectedRoad &&
+            (!selectedLane || (target.e === selectedLane.e && target.lane === selectedLane.lane)) &&
+            event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+        });
+        openMenu(preferred ?? button);
       });
       button.addEventListener("keydown", event => {
         if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
@@ -2055,6 +2179,27 @@
 
     // Right-clicking a lane node opens a popover of actions for that road end,
     // with a pointer to the node, like a macOS popover.
+    function reverseRoad(sheet, road) {
+      // Freeze both ends before changing their travel direction. Existing lane
+      // links cannot remain end-to-start links after this operation.
+      detach(sheet, road, 0);
+      detach(sheet, road, 1);
+      road.ends.reverse();
+      road.ends.forEach(end => { end.sign *= -1; });
+      road.tapers = Object.fromEntries(Object.entries(road.tapers ?? {}).map(([key, value]) => {
+        const [e, lane] = key.split(":").map(Number);
+        return [`${1 - e}:${road.lanes - 1 - lane}`, value];
+      }));
+      for (const median of sheet.medians) for (const p of median.points) {
+        if (p.on?.road !== road.id) continue;
+        p.on.side = { L: "R", R: "L", S: "E", E: "S" }[p.on.side];
+        p.on.f = 1 - p.on.f;
+      }
+      openCurves.delete(`${road.id}:0`);
+      openCurves.delete(`${road.id}:1`);
+      selectedLane = null;
+      changed();
+    }
     function menuItems(node) {
       const { sheet, road, e, lane } = node;
       const end = road.ends[e];
@@ -2082,18 +2227,19 @@
         partner ? { label: "Make One-Way", run: () => { removeRoads(sheet, [partner]); changed(); } }
           : { label: "Make Two-Way", run: () => { addOpposite(sheet, road, road.lanes, defaults.median, true); changed(); } },
         partner && { label: "Split Into One-Way Roads", run: splitRoad },
+        { label: "Reverse Direction", run: () => reverseRoad(sheet, road) },
         { label: partner ? "Delete Two-Way Road" : "Delete Road", run: deleteRoad },
       ].filter(Boolean);
     }
-    function openMenu(button) {
+    function openMenu(button, point = null) {
       const node = nodeTarget(button);
       if (!node || drawing) return;
       closeMenu();
       selectedRoad = node.road;
       selectedLane = { e: node.e, lane: node.lane };
-      menuNode = { button, key: `${node.road.id}:${node.e}:${node.lane}` };
+      menuNode = { button, point, key: `${node.road.id}:${node.e}:${node.lane}` };
       nodeMenu.setAttribute("aria-label", `Road ${node.road.id}, lane ${node.lane + 1} ${node.e ? "end" : "start"}`);
-      nodeMenu.replaceChildren(...menuItems(node).map(item => {
+      nodeMenu.replaceChildren(...menuItems(node).filter(item => !point || (item !== "separator" && /^(Make |Split |Delete |Reverse )/.test(item.label))).map(item => {
         const li = document.createElement("li");
         li.setAttribute("role", item === "separator" ? "separator" : "presentation");
         if (item === "separator") return li;
@@ -2129,8 +2275,9 @@
       const button = nodeButtons.get(menuNode.key);
       if (!button || overlay.hidden) return closeMenu();
       const node = button.getBoundingClientRect();
-      const x = node.left + node.width / 2;
-      const y = node.top + node.height / 2;
+      const screen = menuNode.point && sheets.toScreen(menuNode.point);
+      const x = screen ? screen.x : node.left + node.width / 2;
+      const y = screen ? screen.y : node.top + node.height / 2;
       const gap = node.width / 2 + 10;
       const margin = 8;
       const { width, height } = nodeMenu.getBoundingClientRect();
@@ -2267,6 +2414,74 @@
       closeMenu();
       render();
     });
+    // An intersection mouth attaches to a terminal road end. Keep geometry and
+    // joint mutation here so intersection editing uses the same solved road model.
+    function intersectionEnd(sheet, binding, solved = solve(sheet)) {
+      const road = roadOf(sheet, binding.road);
+      const e = binding.e;
+      if (!road || (e !== 0 && e !== 1)) return null;
+      const joint = jointOf(sheet, road.ends[e].joint);
+      const partner = pairOf(sheet, road);
+      const here = attachments(sheet, joint);
+      const terminal = here.every(item => item.road === road || item.road === partner);
+      const shape = shapeOf(sheet, road, solved);
+      const at = endOf(shape.line, e);
+      const travel = at.tangent ?? travelAt(road, e, solved);
+      const outward = { x: travel.x * (e ? -1 : 1), y: travel.y * (e ? -1 : 1) };
+      const incoming = e ? road : partner;
+      const outgoing = e ? partner : road;
+      const normal = rightOf(outward);
+      const median = partner ? pairLinks(sheet, road, partner)[0]?.median ?? 0 : 0;
+      const gap = partner ? median + (DOUBLE_GAP_INCHES + LINE_INCHES) / 12 : 0;
+      const inWidth = incoming ? endWidth(sheet, incoming, 1) : endWidth(sheet, outgoing, 0);
+      const outWidth = outgoing ? endWidth(sheet, outgoing, 0) : endWidth(sheet, incoming, 1);
+      const center = partner ? { x: joint.x, y: joint.y }
+        : { x: at.x - normal.x * (e ? -1 : 1) * feetToPixels(sheet, road.lanes * endWidth(sheet, road, e) / 2),
+            y: at.y - normal.y * (e ? -1 : 1) * feetToPixels(sheet, road.lanes * endWidth(sheet, road, e) / 2) };
+      const tapered = here.some(item => [...shapeOf(sheet, item.road, solved).tapers.keys()].some(key => key.startsWith(`${item.e}:`)));
+      return { ...center, angle: Math.atan2(outward.y, outward.x) * 180 / Math.PI,
+        incoming: incoming?.lanes ?? 0, outgoing: outgoing?.lanes ?? 0,
+        width: inWidth, outWidth, median, gap, joint: joint.id, terminal: terminal && !tapered,
+        binding: { road: road.id, e, joint: joint.id },
+        ends: here.map(item => ({ road: item.road.id, e: item.e })),
+      };
+    }
+    function intersectionEnds(sheet) {
+      const solved = solve(sheet), seen = new Set(), result = [];
+      for (const road of sheet.roads) for (const e of [0, 1]) {
+        const end = intersectionEnd(sheet, { road: road.id, e }, solved);
+        if (!end?.terminal || seen.has(end.joint)) continue;
+        seen.add(end.joint); result.push(end);
+      }
+      return result;
+    }
+    function moveIntersectionEnd(sheet, binding, point, angle) {
+      const end = intersectionEnd(sheet, binding);
+      if (!end) return;
+      const joint = jointOf(sheet, end.joint);
+      const delta = (angle - end.angle) * Math.PI / 180;
+      const old = joint.dir ?? (() => {
+        const road = roadOf(sheet, binding.road), t = travelAt(road, binding.e, solve(sheet));
+        return { x: t.x * road.ends[binding.e].sign, y: t.y * road.ends[binding.e].sign };
+      })();
+      joint.x += point.x - end.x; joint.y += point.y - end.y;
+      joint.dir = { x: old.x * Math.cos(delta) - old.y * Math.sin(delta), y: old.x * Math.sin(delta) + old.y * Math.cos(delta) };
+    }
+    // Turns a road end to an approach's direction, then moves it so one of its
+    // lanes ends at the given point.
+    function alignLaneEnd(sheet, binding, lane, point, angle) {
+      const end = intersectionEnd(sheet, binding);
+      if (!end) return;
+      moveIntersectionEnd(sheet, binding, end, angle);
+      const at = lanePoint(sheet, roadOf(sheet, binding.road), binding.e, lane, solve(sheet));
+      const joint = jointOf(sheet, end.joint);
+      joint.x += point.x - at.x;
+      joint.y += point.y - at.y;
+    }
+    window.StripeMaker.roadEditor = { render, intersectionEnd, intersectionEnds, moveIntersectionEnd, alignLaneEnd,
+      pavementMarginFeet: PAVEMENT_MARGIN_INCHES / 12,
+      markingStyle: { white: WHITE, yellow: YELLOW, lineFeet: LINE_INCHES / 12 },
+      medianStyle: { grass: GRASS, concrete: CONCRETE, curb: CURB, curbFeet: CURB_INCHES / 12 } };
     render();
   });
 })();

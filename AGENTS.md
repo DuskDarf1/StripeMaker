@@ -176,7 +176,7 @@ MUTCD-compliant pavement markings onto them.
 - Elements (editor panel): Add Road, then click a start point and then each
   next node (like Cities: Skylines): each click adds a segment joined to the
   last, and a double-click or Escape finishes (selecting the last segment).
-  Ending on a lane node or edge line also finishes. Lanes (1–8) and lane width (default 12 ft, 8–20 ft)
+  Ending on a lane node or edge line also finishes. Lanes (1–999) and lane width (default 12 ft, 8–20 ft)
   apply to the selected road, or to the next road when none is selected. Lanes
   are separated by FDOT white skip lane lines, with FDOT edge lines. Clicking a
   lane node selects that lane end and shows its Taper setting and length.
@@ -238,9 +238,16 @@ MUTCD-compliant pavement markings onto them.
   class, `clip-path`/`mask` on groups) so they export to PDF as vectors too.
   The page prints the chosen width at 150 ppi (capped at the 200 in PDF page
   limit); the document title is the sheet's name.
-- Markings, Intersections, Signs, Simulator, Levels, Copy, and Clear all are
-  placeholders and do nothing yet. Dark/light mode, Undo, Redo, and Download are
-  functional.
+- Markings, Simulator, Levels, and Copy are placeholders and do nothing
+  yet. Dark/light mode, Undo, Redo, Download, and Clear all are functional.
+- Clear all asks for confirmation (`window.confirm`, as SignalMaker does for
+  destructive replacements), then erases the selected sheet's roads, joints,
+  gores, medians, and intersections as one undo step; the sheet image and its
+  scale stay. Deleting an intersection (panel, popover, or Delete key) also asks
+  first.
+- Intersection movement paths stop short of the lane arrows at both mouths
+  wherever the arrows are shown, and a lane's drag strip appears only while a
+  movement is being dragged from its incoming lane to an outgoing lane.
 
 ## Implementation
 
@@ -249,3 +256,162 @@ MUTCD-compliant pavement markings onto them.
   (geotiff.js 3.0.5, MIT). Fonts are vendored in `fonts/` with their licenses.
 - Only modify StripeMaker. Leave SignalMaker and the SignMaker projects untouched.
 - Preserve the inherited GPL license and attribution when reusing their UI.
+
+## Intersections
+
+- Intersections is an up-opening popover following SignalMaker's Heads menu. Its
+  list contains the current sheet's intersections, with New Intersection, Edit,
+  Duplicate, and Delete. There is **no intersection dialog**: everything is
+  created and edited on the sheet. New Intersection places the default layout
+  at the center of the view (named "Intersection N"), selects it, and opens the
+  side panel with its name ready to type; Edit (or double-clicking the list
+  entry or the intersection) opens the panel.
+- Default: two 2-lane two-way roads crossing: four approaches, one incoming and
+  one outgoing 12 ft lane per approach (Add Approach adds the same), openings
+  55 ft from the center (`G.REACH`), 20 ft corner radii, and **no movements**.
+  Movements are only ever drawn by the user: adding approaches or lanes, or
+  attaching a road, never adds movements. An incoming lane without a movement
+  shows a yellow **?** where its arrow would be. These are editable starting
+  geometry, not prescribed engineering dimensions. Approaches
+  support arbitrary angles, additional legs, 0–999 lanes per direction (at least
+  one direction), and 8–20 ft lane widths. Keep at least two approaches.
+- Picking an intersection on the sheet (its pavement, a handle, or a
+  connection) opens a top-left **Intersection** editor panel (SignalMaker's Head
+  Editor pattern; it has no toolbar button of its own and lights the
+  Intersections button). It has Name, Add Approach, Delete, the chosen
+  approach's settings, its medians, and its lane movements; each change is one
+  undo step. Unlike the popover it stays open while panning or clicking
+  empty sheet, so the intersection stays selected; the Intersections button
+  returns to the list popover. The selected intersection shows lane arrows on
+  the sheet: drag from an incoming arrow to an outgoing lane to add a movement,
+  and drag a connection to bend it. Outgoing arrows take presses only as the
+  selected movement's end, so the pavement around them still drags.
+- Dragging a road's lane node (Elements) onto any approach lane going its way
+  (a road end arriving at the intersection onto an incoming lane, a departing
+  start onto an outgoing lane) snaps that lane's end to the lane's mouth, turned
+  to the approach's direction. Dropping links the two lanes and does **not**
+  resize the approach. While drawing a road, clicking a free incoming approach
+  lane mouth also aligns and links the new road and finishes drawing; a road
+  can start from a free outgoing mouth. Creation and linking are one undo step.
+  Links are stored on the approach as `links: [{ road, e,
+  lane, to }]` (road lane index, approach lane id); linked road ends follow the
+  intersection's moves and edits, and dragging the road end away unlinks it.
+  Links drop when their lane, road end, or terminal status disappears.
+- Each approach has two outer-edge handles. Dragging moves/turns its opening
+  without changing lane widths; snap to terminal road pavement corners to adopt
+  that road's cross section and tangent. Only road ends attach; intersections
+  never cut through-roads. Occupied, nonterminal, and tapered ends are excluded.
+- Attached approaches follow road edits; moving an attached opening moves its
+  road joint. Moving/rotating an intersection transforms its attached joints once
+  each. Lane dimensions follow the road until Detach Approach or Option/Alt-drag.
+  Deletion leaves external roads in place. Road cuts rehome endpoint references;
+  deleted or incompatible endpoints release their intersection attachments.
+- A two-way approach keeps the same centerline spacing as a two-way road: its
+  lanes start 5" either side of the centerline (the 10" between the centers of
+  the double yellow lines, 711-001), plus any median width. That spacing is not
+  a median; a median is drawn only when its width is above zero. This keeps a
+  two-way road joined lane to lane flush with the approach's pavement.
+- Corner-radius handles round the pavement between approaches; zero is square.
+  Divided approaches have median inner-edge handles and a nose handle, with grass
+  or concrete surfaces.
+- **Several medians per approach.** Besides the center median between the two
+  directions, an approach can have medians between lanes going the same way
+  (channelizing islands), stored as `splits: [{ id, incoming, after, width,
+  nose, surface }]` (between lane `after - 1` and `after` of that side, counted
+  from the center); they push the outer lanes outward. A selected unattached
+  approach shows a small **+** just outside its opening at every free lane
+  boundary (and at the center when it has no median); clicking it adds a 6 ft
+  concrete median (editable starting geometry). A split median has an
+  outer-edge square (drag to widen; drag to zero to remove; Delete key removes)
+  and a nose dot. The panel lists each median with width, nose, surface, and
+  Remove Median, plus an Add Median choice. Attaching an approach to a road
+  (adopting its cross section) drops its splits.
+- **Intersection markings** (`drawMarkings` in `js/intersections.js`) are only
+  6" solid lines (711-001) in the road layer's markings group, so they export to
+  PDF as vectors. White rides the right side of traffic: each curb from one
+  approach's outgoing outer edge around the corner to the next approach's
+  incoming outer edge (where both have lanes), and around every
+  same-direction (split) median. Yellow marks the
+  opposite-direction side: a two-way approach's double yellow runs from the
+  mouth to where the curbs start curving (`G.throat`), or, with a center
+  median, one yellow line runs up one side of it, wraps its rounded nose (same
+  center as the island, at the double yellow's 5" offset), and back down the
+  other side. A split's white line traces its island edge the same way.
+  No lane lines, stop bars, crosswalks, or painted treatments are drawn yet.
+  Existing external roads keep their markings.
+- Drag from an incoming lane arrow to an outgoing lane to create a movement;
+  dragging onto a lane that movement already reaches removes it instead (the
+  status reads "Release to remove this movement."). Drag an existing
+  movement's outgoing end to reconnect it. Lane dots are
+  deliberately absent. Drag a connection directly to bend it, or use the
+  destination list and numeric pulls as keyboard alternatives. Click a
+  connection to reveal its two square tangent handles; they appear only for
+  that connection.
+  Moving an intersection or a handle keeps the selection. Delete Movement and Reset Curve are available.
+  Several movements and U-turns are supported; schematic lane arrows derive from
+  their destinations. Keep the square handles for actual pavement corners.
+- Movement paths fit the actual curved pavement and avoid median noses; they are
+  rerouted continuously instead of clipped at edges. A turn's arc starts and ends
+  no farther out than where the curbs start curving into the neighboring
+  approaches (`G.throat`), so turns happen inside the intersection like real
+  ones rather than sweeping from the openings. Automatic movements between
+  the same two approaches (two or three throughs, dual turns) never cross or
+  crowd each other: when they would, `G.routes` redraws them as offsets of the
+  innermost route of the turn (the middle one for throughs), so they run
+  parallel. Manually curved movements keep their own curve. Thin white guides with
+  repeated arrowheads remain visible with the Intersections popover closed.
+- Standalone median points snap to intersection mouths, curved pavement edges,
+  and median noses. Anchors use `{ intersection, approach, side, f }`, with an
+  arc-length fraction, follow intersection edits, and detach in place when the
+  referenced boundary disappears. Outlines follow a shared curved boundary.
+- `js/intersection-geometry.js` contains pure feet-based geometry. Per-sheet
+  `intersections` records store sheet-pixel origins, stable approach/lane IDs,
+  dimensions, road-end bindings, and movement references/pulls. Save and undo
+  include these records; one panel edit or completed drag is one history step.
+  Duplicate regenerates IDs and creates an unattached independent copy.
+- `js/intersections.js` integrates with `StripeMaker.roadEditor` for solved road
+  endpoint geometry, joint movement, and rendering. Pavement and median surfaces
+  use M/L/Z paths in the road SVG, preserving vector PDF export. Guides and
+  interactive handles are a separate overlay and never appear in downloads.
+- Validation: `node --test tests/intersection-geometry.test.cjs`. Browser regression
+  instructions are at the top of `tests/intersections.browser.cjs`; use an isolated
+  profile and a local server. No production framework/build dependency is added.
+
+
+## Signs
+
+- Signs uses SignalMaker's searchable regulatory/icon selector. Official names and
+  codes come from FHWA's 2024 SHS release tables, excluding the Guide Signs,
+  miscellaneous details, and discontinued tables. All 739 included codes have
+  local vector artwork; 1,962 published direction, legend, color, and size layouts
+  are searchable. TTC detour signs remain in the TTC category.
+- Choose Sign selects a design (or replaces the selected sign). Add Sign places
+  the post on the first click and the face on the second. A leader arrow points
+  from the face to a transverse post marker. Drag the face or post separately;
+  arrow keys nudge focused controls, Shift increases the step, Delete removes,
+  and Escape cancels placement. Callout size is schematic and requires no sheet
+  scale; physical sign sizes in the selector are the published layout dimensions.
+- Sheet `signs` records store `{ id, design, x, y, postX, postY, width, size, values }`.
+  They persist, participate in undo/redo and Clear all, and export as vector
+  M/L/Z paths in the road layer. Selection handles and previews never export.
+- `assets/signs/SOURCES.md` documents provenance and rebuild instructions;
+  `scripts/import-signs.py` imports downloaded official archives using isolated
+  Python tools, with no production dependency. `coverage.json` audits coverage.
+- Validate with `node --test tests/sign-catalog.test.cjs` and
+  `tests/signs.browser.cjs` (isolated profile, same setup as intersections tests).
+
+- Sign sizes are grouped under each design and chosen in the editor before adding.
+  Variable legend inputs use the local FHWA alphabet outlines and checked field
+  specifications; see `assets/signs/options-coverage.json` for supported layouts.
+  Classic-script catalog/artwork packs support direct `file://` opening.
+- Road and intersection lane counts support up to 999. Incoming and outgoing
+  intersection widths are independently editable unless the whole mouth inherits
+  an attached road's dimensions. Lane-linked roads match the appropriate width
+  at that end, including the opposite side of a paired road.
+- `js/road-widths.js` derives endpoint widths from lane connections. Continuing
+  roads share the mean of their chosen lane widths at a joint; beside/pair links
+  do not average widths. Each road smoothly blends from these endpoint widths
+  to its chosen width at mid-length. Intersection mouths override endpoint width.
+  Both sides of a two-way road remain offsets of their shared centerline.
+- Additional checks: `tests/road-widths.test.cjs`, `tests/sign-options.test.cjs`,
+  and `tests/sign-options.browser.cjs` (direct-file loading and downloads).

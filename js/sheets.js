@@ -199,7 +199,7 @@
     const record = sheet => ({
       name: sheet.name, inchesPerPixel: sheet.inchesPerPixel, view: sheet.view,
       roads: sheet.roads ?? [], joints: sheet.joints ?? [], gores: sheet.gores ?? [], medians: sheet.medians ?? [],
-      autoTapers: Boolean(sheet.autoTapers),
+      autoTapers: Boolean(sheet.autoTapers), intersections: sheet.intersections ?? [], signs: sheet.signs ?? [],
     });
     function saveFailed(error) {
       status.textContent = `Couldn't save sheets for next time: ${error?.message || "storage unavailable"}.`;
@@ -665,6 +665,23 @@
         renderList();
         document.dispatchEvent(new CustomEvent("sheethistory"));
       },
+    });
+
+    // Clear all (SignalMaker's toolbar action) erases the selected sheet's drawing
+    // after a confirmation; the sheet image and its scale stay, and it is undoable.
+    const clearAll = document.getElementById("clearAll");
+    clearAll.addEventListener("click", () => {
+      if (!selected) {
+        report("Upload a sheet first.");
+        return;
+      }
+      if (!window.confirm(`Clear all roads, medians, gores, intersections, and signs on “${selected.name}”? You can undo this.`)) return;
+      window.StripeMaker.showEditor?.(null);
+      Object.assign(selected, { roads: [], joints: [], gores: [], medians: [], intersections: [], signs: [] });
+      scheduleSave(selected);
+      history.record();
+      document.dispatchEvent(new CustomEvent("sheethistory"));
+      report("Sheet cleared.");
     });
     restore();
   });

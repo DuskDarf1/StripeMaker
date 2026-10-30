@@ -3,7 +3,7 @@
   // the drawing, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z (and Ctrl+Y off the Mac), and
   // typing in a number field counts as one step until the field is left.
   //
-  // A snapshot is every sheet's scale, roads, joints, gore markings, medians, and Auto
+  // A snapshot is every sheet's scale, roads, joints, gore markings, medians, intersections, and Auto
   // tapers setting. Sheets themselves
   // (uploads, removal, order) and the view aren't undo steps; restoring a
   // snapshot leaves sheets it doesn't mention alone.
@@ -20,7 +20,7 @@
     let editingInput = null;
     const serialize = () => JSON.stringify(Object.fromEntries(sheets.all.map(sheet => [sheet.id, {
       inchesPerPixel: sheet.inchesPerPixel ?? null, roads: sheet.roads ?? [], joints: sheet.joints ?? [], gores: sheet.gores ?? [],
-      medians: sheet.medians ?? [], autoTapers: Boolean(sheet.autoTapers),
+      intersections: sheet.intersections ?? [], signs: sheet.signs ?? [], medians: sheet.medians ?? [], autoTapers: Boolean(sheet.autoTapers),
     }])));
     let currentSnapshot = serialize();
 

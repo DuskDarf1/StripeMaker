@@ -10,7 +10,7 @@
     const toolbar = document.getElementById("configBar");
     const buttons = [...toolbar.querySelectorAll("[data-editor]")];
 
-    const popovers = ['sheetsMenu', 'downloadMenu'].map(id => ({
+    const popovers = ['sheetsMenu', 'downloadMenu', 'intersectionsEditor'].map(id => ({
       menu: document.getElementById(id), button: buttons.find(button => button.dataset.editor === id),
     }));
     function positionPopovers() {
@@ -23,24 +23,30 @@
       }
     }
 
+    // Editor panels opened from the sheet rather than the toolbar, and the
+    // toolbar button each one belongs to.
+    const panels = { intersectionEditor: "intersectionsEditor" };
     function showEditor(id) {
       buttons.forEach(button => {
-        const selected = button.dataset.editor === id;
+        const selected = button.dataset.editor === (panels[id] ?? id);
         button.classList.toggle("selected", selected);
         button.setAttribute("aria-expanded", String(selected));
-        document.getElementById(button.dataset.editor).hidden = !selected;
+        document.getElementById(button.dataset.editor).hidden = button.dataset.editor !== id;
       });
+      for (const panel of Object.keys(panels)) document.getElementById(panel).hidden = panel !== id;
       positionPopovers();
     }
 
     buttons.forEach(button => {
       button.addEventListener("click", () => {
-        showEditor(button.getAttribute("aria-expanded") === "true" ? null : button.dataset.editor);
+        // From a sheet-opened panel, the button returns to its own menu.
+        showEditor(document.getElementById(button.dataset.editor).hidden ? button.dataset.editor : null);
       });
     });
 
     document.addEventListener("click", event => {
-      if (popovers.some(({ menu, button }) => !menu.hidden && !menu.contains(event.target) && !button.contains(event.target))) {
+      if (event.target.closest("dialog")) return;
+      if (popovers.some(({ menu, button }) => !menu.hidden && !event.composedPath().includes(menu) && !event.composedPath().includes(button))) {
         showEditor(null);
       }
     });
@@ -83,6 +89,6 @@
 
     Object.assign(window.StripeMaker ??= {}, { showEditor });
 
-    // Copy and Clear all are placeholders until their features are requested.
+    // Copy is a placeholder until its feature is requested; Clear all lives in sheets.js.
   });
 })();

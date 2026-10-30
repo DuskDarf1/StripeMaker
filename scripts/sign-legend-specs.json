@@ -1,0 +1,1031 @@
+{
+  "source": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/",
+  "notes": "Regions select only changeable legend outlines in the official layouts. Letter height and baseline are measured from those outlines; Series 2000 letterforms and spacing come from FHWA SHS Standard Alphabets. Speed limits/advisory speeds use 5 mph increments (MUTCD 11th ed. 2B.21, 2C.59). Numeric maxima reflect the digit capacity of the field, not a jurisdiction's lawful maximum.",
+  "specs": {
+    "R2-1": [
+      {
+        "key": "speed",
+        "label": "Speed limit (mph)",
+        "roi": [
+          0,
+          1,
+          0.48,
+          0.94
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5,
+        "heightInches": {
+          "18x24": 8,
+          "24x30": 10,
+          "30x36": 12,
+          "36x48": 14,
+          "48x60": 16
+        }
+      }
+    ],
+    "R2-2P": [
+      {
+        "key": "speed",
+        "label": "Truck speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.38,
+          0.94
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "R2-2aP": [
+      {
+        "key": "speed",
+        "label": "Bus speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.38,
+          0.94
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "R2-2bP": [
+      {
+        "key": "speed",
+        "label": "Truck / bus speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.49,
+          0.95
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "R2-2cP": [
+      {
+        "key": "speed",
+        "label": "Speed limit (mph)",
+        "roi": [
+          0,
+          1,
+          0.55,
+          0.95
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      },
+      {
+        "key": "weight",
+        "label": "Vehicles over (tons)",
+        "roi": [
+          0.1,
+          0.35,
+          0.3,
+          0.6
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 9
+      }
+    ],
+    "R2-3P": [
+      {
+        "key": "speed",
+        "label": "Night speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.38,
+          0.94
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "R2-4P": [
+      {
+        "key": "speed",
+        "label": "Minimum speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.38,
+          0.94
+        ],
+        "series": "D",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "R2-4a": [
+      {
+        "key": "speed",
+        "label": "Maximum speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.32,
+          0.6
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      },
+      {
+        "key": "minimum",
+        "label": "Minimum speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.71,
+          0.95
+        ],
+        "series": "D",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "S5-1": [
+      {
+        "key": "speed",
+        "label": "School speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.46,
+          0.74
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "S4-5": [
+      {
+        "key": "speed",
+        "label": "School speed (mph)",
+        "roi": [
+          0.28,
+          0.72,
+          0.54,
+          0.8
+        ],
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "S4-5a": [
+      {
+        "key": "speed",
+        "label": "School speed (mph)",
+        "roi": [
+          0.26,
+          0.44,
+          0.22,
+          0.39
+        ],
+        "series": "C",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W3-5": [
+      {
+        "key": "speed",
+        "label": "Speed limit ahead (mph)",
+        "roi": [
+          0.28,
+          0.72,
+          0.48,
+          0.8
+        ],
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W3-5a": [
+      {
+        "key": "speed",
+        "label": "Speed ahead (mph)",
+        "roi": [
+          0.26,
+          0.44,
+          0.2,
+          0.39
+        ],
+        "series": "C",
+        "default": "50",
+        "original": "XX",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W3-5c": [
+      {
+        "key": "speed",
+        "label": "Truck speed ahead (mph)",
+        "roi": [
+          0.26,
+          0.44,
+          0.18,
+          0.36
+        ],
+        "default": "50",
+        "original": "XX",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-1P": [
+      {
+        "key": "speed",
+        "label": "Advisory speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.05,
+          0.63
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-1aP": [
+      {
+        "key": "speed",
+        "label": "Advisory speed (mph)",
+        "roi": [
+          0.04,
+          0.45,
+          0.12,
+          0.9
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-2": [
+      {
+        "key": "speed",
+        "label": "Exit speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.4,
+          0.78
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-3": [
+      {
+        "key": "speed",
+        "label": "Ramp speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.4,
+          0.78
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-6": [
+      {
+        "key": "speed",
+        "label": "Exit speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.63,
+          0.88
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-7": [
+      {
+        "key": "speed",
+        "label": "Ramp speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.63,
+          0.88
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-8": [
+      {
+        "key": "speed",
+        "label": "Exit speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.63,
+          0.88
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-9": [
+      {
+        "key": "speed",
+        "label": "Ramp speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.63,
+          0.88
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-10": [
+      {
+        "key": "speed",
+        "label": "Exit speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.54,
+          0.82
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-11": [
+      {
+        "key": "speed",
+        "label": "Ramp speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.54,
+          0.82
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-12": [
+      {
+        "key": "speed",
+        "label": "Exit speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.63,
+          0.88
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-13": [
+      {
+        "key": "speed",
+        "label": "Ramp speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.63,
+          0.88
+        ],
+        "series": "E",
+        "min": 5,
+        "max": 95,
+        "step": 5
+      }
+    ],
+    "W13-20": [
+      {
+        "key": "speed",
+        "label": "Displayed speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.56,
+          0.94
+        ],
+        "series": "E",
+        "min": 0,
+        "max": 99
+      }
+    ],
+    "W13-20aP": [
+      {
+        "key": "speed",
+        "label": "Displayed speed (mph)",
+        "roi": [
+          0,
+          1,
+          0.4,
+          0.94
+        ],
+        "series": "E",
+        "min": 0,
+        "max": 99
+      }
+    ],
+    "R12-1": [
+      {
+        "key": "weight",
+        "label": "Weight limit (tons)",
+        "roi": [
+          0.2,
+          0.8,
+          0.46,
+          0.69
+        ],
+        "series": "E",
+        "min": 1,
+        "max": 99
+      }
+    ],
+    "R12-2": [
+      {
+        "key": "weight",
+        "label": "Axle weight (tons)",
+        "roi": [
+          0.04,
+          0.27,
+          0.67,
+          0.94
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 9
+      }
+    ],
+    "R12-4": [
+      {
+        "key": "axle",
+        "label": "Per axle (tons)",
+        "roi": [
+          0.04,
+          0.15,
+          0.43,
+          0.6
+        ],
+        "series": "C",
+        "min": 1,
+        "max": 9
+      },
+      {
+        "key": "gross",
+        "label": "Gross weight (tons)",
+        "roi": [
+          0.1,
+          0.25,
+          0.68,
+          0.86
+        ],
+        "series": "C",
+        "min": 1,
+        "max": 99
+      }
+    ],
+    "R12-5": [
+      {
+        "key": "single",
+        "label": "Single unit (tons)",
+        "roi": [
+          0.6,
+          0.85,
+          0.4,
+          0.58
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 99
+      },
+      {
+        "key": "semi",
+        "label": "Semi-trailer (tons)",
+        "roi": [
+          0.6,
+          0.85,
+          0.6,
+          0.76
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 99
+      },
+      {
+        "key": "double",
+        "label": "Double trailer (tons)",
+        "roi": [
+          0.6,
+          0.85,
+          0.78,
+          0.94
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 99
+      }
+    ],
+    "W12-2": [
+      {
+        "key": "feet",
+        "label": "Clearance (ft)",
+        "roi": [
+          0.13,
+          0.43,
+          0.33,
+          0.67
+        ],
+        "series": "C",
+        "min": 1,
+        "max": 99
+      },
+      {
+        "key": "inches",
+        "label": "Clearance (in)",
+        "roi": [
+          0.51,
+          0.8,
+          0.33,
+          0.67
+        ],
+        "series": "C",
+        "min": 0,
+        "max": 11
+      }
+    ],
+    "W12-2a": [
+      {
+        "key": "feet",
+        "label": "Clearance (ft)",
+        "roi": [
+          0.06,
+          0.33,
+          0.15,
+          0.84
+        ],
+        "series": "E",
+        "min": 1,
+        "max": 99
+      },
+      {
+        "key": "inches",
+        "label": "Clearance (in)",
+        "roi": [
+          0.55,
+          0.77,
+          0.15,
+          0.84
+        ],
+        "series": "E",
+        "min": 0,
+        "max": 11
+      }
+    ],
+    "W12-2b": [
+      {
+        "key": "feet",
+        "label": "Clearance (ft)",
+        "roi": [
+          0.04,
+          0.28,
+          0.15,
+          0.84
+        ],
+        "series": "E",
+        "min": 1,
+        "max": 99
+      },
+      {
+        "key": "inches",
+        "label": "Clearance (in)",
+        "roi": [
+          0.63,
+          0.82,
+          0.15,
+          0.84
+        ],
+        "series": "E",
+        "min": 0,
+        "max": 11
+      }
+    ],
+    "W16-2P": [
+      {
+        "key": "distance",
+        "label": "Distance (ft)",
+        "roi": [
+          0,
+          1,
+          0.07,
+          0.48
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 9999
+      }
+    ],
+    "W16-2aP": [
+      {
+        "key": "distance",
+        "label": "Distance (ft)",
+        "roi": [
+          0.06,
+          0.58,
+          0.1,
+          0.9
+        ],
+        "min": 1,
+        "max": 9999
+      }
+    ],
+    "W16-3P": [
+      {
+        "key": "distance",
+        "label": "Distance (miles)",
+        "roi": [
+          0.25,
+          0.75,
+          0.07,
+          0.48
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 99
+      }
+    ],
+    "W16-3aP": [
+      {
+        "key": "distance",
+        "label": "Distance (miles)",
+        "roi": [
+          0.09,
+          0.3,
+          0.15,
+          0.85
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 99
+      }
+    ],
+    "W16-4P": [
+      {
+        "key": "distance",
+        "label": "Distance (ft)",
+        "roi": [
+          0.06,
+          0.55,
+          0.5,
+          0.94
+        ],
+        "series": "C",
+        "min": 1,
+        "max": 9999
+      }
+    ],
+    "W7-1a": [
+      {
+        "key": "grade",
+        "label": "Grade (%)",
+        "roi": [
+          0.32,
+          0.47,
+          0.63,
+          0.85
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 99
+      }
+    ],
+    "W7-3P": [
+      {
+        "key": "grade",
+        "label": "Grade (%)",
+        "roi": [
+          0.25,
+          0.45,
+          0.08,
+          0.45
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 99
+      }
+    ],
+    "W7-3aP": [
+      {
+        "key": "distance",
+        "label": "Distance (miles)",
+        "roi": [
+          0.08,
+          0.26,
+          0.5,
+          0.93
+        ],
+        "series": "C",
+        "min": 1,
+        "max": 99
+      }
+    ],
+    "W7-3bP": [
+      {
+        "key": "grade",
+        "label": "Grade (%)",
+        "roi": [
+          0.07,
+          0.2,
+          0.17,
+          0.46
+        ],
+        "series": "C",
+        "min": 1,
+        "max": 99
+      },
+      {
+        "key": "distance",
+        "label": "Distance (miles)",
+        "roi": [
+          0.17,
+          0.32,
+          0.57,
+          0.87
+        ],
+        "series": "C",
+        "min": 1,
+        "max": 99
+      }
+    ],
+    "R16-7": [
+      {
+        "key": "distance",
+        "label": "Distance (miles)",
+        "roi": [
+          0.4,
+          0.55,
+          0.55,
+          0.85
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 99
+      }
+    ],
+    "G20-1": [
+      {
+        "key": "distance",
+        "label": "Distance (miles)",
+        "roi": [
+          0.4,
+          0.53,
+          0.5,
+          0.85
+        ],
+        "series": "C",
+        "min": 1,
+        "max": 99
+      }
+    ],
+    "R4-12": [
+      {
+        "key": "vehicles",
+        "label": "Following vehicles",
+        "roi": [
+          0.35,
+          0.44,
+          0.32,
+          0.5
+        ],
+        "series": "C",
+        "min": 1,
+        "max": 9
+      }
+    ],
+    "R4-19": [
+      {
+        "key": "feet",
+        "label": "Passing clearance (ft)",
+        "roi": [
+          0.13,
+          0.29,
+          0.05,
+          0.24
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 9
+      }
+    ],
+    "R2-6bP": [
+      {
+        "key": "fine",
+        "label": "Fine ($)",
+        "roi": [
+          0.36,
+          0.78,
+          0.1,
+          0.46
+        ],
+        "series": "D",
+        "min": 1,
+        "max": 999
+      }
+    ],
+    "W16-8P": [
+      {
+        "key": "street",
+        "label": "Street name",
+        "roi": [
+          0.08,
+          0.92,
+          0.1,
+          0.85
+        ],
+        "series": "D",
+        "type": "text",
+        "default": "First St",
+        "anchor": "F",
+        "maxLength": 40,
+        "flexWidth": true,
+        "hint": "The sign width grows to keep the specified letter height and margins."
+      }
+    ],
+    "W16-8aP": [
+      {
+        "key": "street1",
+        "label": "First street",
+        "roi": [
+          0.25,
+          0.92,
+          0.07,
+          0.47
+        ],
+        "series": "D",
+        "type": "text",
+        "default": "Elm St",
+        "anchor": "E",
+        "maxLength": 40,
+        "flexWidth": true,
+        "hint": "The sign width grows to keep the specified letter height and margins."
+      },
+      {
+        "key": "street2",
+        "label": "Second street",
+        "roi": [
+          0.03,
+          0.75,
+          0.53,
+          0.94
+        ],
+        "series": "D",
+        "type": "text",
+        "default": "Lumsden Rd",
+        "anchor": "L",
+        "maxLength": 40,
+        "flexWidth": true,
+        "hint": "The sign width grows to keep the specified letter height and margins."
+      }
+    ],
+    "R7-2": [
+      {
+        "key": "start",
+        "label": "From",
+        "roi": [
+          0.12,
+          0.88,
+          0.62,
+          0.78
+        ],
+        "series": "B",
+        "type": "text",
+        "default": "8:30 AM",
+        "anchor": "8",
+        "pattern": "^(1[0-2]|[1-9]):[0-5][0-9] (AM|PM)$",
+        "hint": "Use a time such as 8:30 AM."
+      },
+      {
+        "key": "end",
+        "label": "Until",
+        "roi": [
+          0.31,
+          0.93,
+          0.78,
+          0.95
+        ],
+        "series": "B",
+        "type": "text",
+        "default": "5:30 PM",
+        "anchor": "5",
+        "pattern": "^(1[0-2]|[1-9]):[0-5][0-9] (AM|PM)$",
+        "hint": "Use a time such as 5:30 PM."
+      }
+    ],
+    "S4-1P": [
+      {
+        "key": "morning",
+        "label": "Morning hours",
+        "roi": [
+          0.03,
+          0.97,
+          0.1,
+          0.49
+        ],
+        "series": "D",
+        "type": "text",
+        "default": "7:30 - 8:30 AM",
+        "anchor": "7",
+        "maxLength": 25
+      },
+      {
+        "key": "afternoon",
+        "label": "Afternoon hours",
+        "roi": [
+          0.03,
+          0.97,
+          0.5,
+          0.94
+        ],
+        "series": "D",
+        "type": "text",
+        "default": "2:30 - 3:30 PM",
+        "anchor": "2",
+        "maxLength": 25
+      }
+    ],
+    "S4-6P": [
+      {
+        "key": "days",
+        "label": "Days",
+        "roi": [
+          0.04,
+          0.96,
+          0.12,
+          0.88
+        ],
+        "series": "D",
+        "type": "text",
+        "default": "MON - FRI",
+        "anchor": "M",
+        "uppercase": true,
+        "maxLength": 24
+      }
+    ]
+  }
+}

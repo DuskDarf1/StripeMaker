@@ -109,6 +109,7 @@
     const ruleSize = header => Math.max(1, Math.round(header / 30));
 
     async function render(sheet) {
+      await window.StripeMaker.signs?.ready(sheet);
       const scale = width / sheet.width;
       const header = headerHeight(width);
       const canvas = document.createElement("canvas");
@@ -187,7 +188,8 @@
           ops.unshift(dash ? `[${dash.split(/[\s,]+/).map(v => n(+v)).join(" ")}] ${n(+(node.getAttribute("stroke-dashoffset") ?? 0))} d` : "[] 0 d");
         }
         if (fill && fill !== "none") ops.unshift(`${rgb(fill)} rg`);
-        ops.push(fill && fill !== "none" ? (stroke ? "B" : "f") : "S");
+        const evenOdd = node.getAttribute("fill-rule") === "evenodd";
+        ops.push(fill && fill !== "none" ? (stroke ? (evenOdd ? "B*" : "B") : (evenOdd ? "f*" : "f")) : "S");
         out.push(ops.join("\n"));
       };
       [...svg.children].forEach(walk);
@@ -205,6 +207,7 @@
     // title in embedded osifont. The page prints the chosen width at 150 ppi
     // (smaller if that would pass the 200 in page limit).
     async function pdfBlob(sheet) {
+      await window.StripeMaker.signs?.ready(sheet);
       const header = headerHeight(width);
       const imageHeight = Math.round(sheet.height * width / sheet.width);
       const fit = Math.min(72 / PDF_PIXELS_PER_INCH, PDF_MAX_POINTS / width, PDF_MAX_POINTS / (imageHeight + header));
@@ -253,7 +256,17 @@
       ].join("\n");
       const encoder = new TextEncoder();
       const contentBytes = await deflate(encoder.encode(content));
-      const fontFile = new Uint8Array(await (await fetch("fonts/osifont.ttf")).arrayBuffer());
+      let fontFile;
+      if (location.protocol === "file:") {
+        if (!window.StripeMaker.pdfFontBase64) await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "fonts/osifont-data.js";
+          script.onload = () => { script.remove(); resolve(); };
+          script.onerror = () => { script.remove(); reject(new Error("Could not load the PDF title font.")); };
+          document.head.append(script);
+        });
+        fontFile = Uint8Array.from(atob(window.StripeMaker.pdfFontBase64), char => char.charCodeAt(0));
+      } else fontFile = new Uint8Array(await (await fetch("fonts/osifont.ttf")).arrayBuffer());
       const fontBytes = await deflate(fontFile);
       // The title as a UTF-16BE text string, so any characters survive.
       const info = `<FEFF${sheet.name.split("").map(c => c.charCodeAt(0).toString(16).padStart(4, "0")).join("").toUpperCase()}>`;

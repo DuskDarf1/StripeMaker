@@ -9,12 +9,18 @@
   <script src="js/vendor/geotiff.js"></script>
   <script src="js/history.js"></script>
   <script src="js/sheets.js"></script>
+  <script src="js/road-widths.js"></script>
   <script src="js/elements.js"></script>
+  <script src="js/intersection-geometry.js"></script>
+  <script src="js/intersections.js"></script>
+  <script src="js/sign-designs.js"></script>
+  <script src="js/signs.js"></script>
   <script src="js/download.js"></script>
   <script src="js/main.js"></script>
   <link href="css/page.css" rel="stylesheet" />
   <link href="css/form.css" rel="stylesheet" />
   <link href="css/menus.css" rel="stylesheet" />
+  <link href="css/signs.css" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
 </head>
 <body>
@@ -39,11 +45,11 @@
         <p id="elementsHint" class="elementsHint" aria-live="polite"></p>
         <div class="fieldRow">
           <label for="roadLanes">Lanes</label>
-          <input id="roadLanes" type="number" min="1" max="8" step="1" value="1" />
+          <input id="roadLanes" type="number" min="1" max="999" step="1" value="1" />
         </div>
         <div class="fieldRow">
           <label for="roadOpposite">Opposite lanes</label>
-          <input id="roadOpposite" type="number" min="0" max="8" step="1" value="0" aria-describedby="oppositeHint" />
+          <input id="roadOpposite" type="number" min="0" max="999" step="1" value="0" aria-describedby="oppositeHint" />
         </div>
         <p id="oppositeHint" class="fieldHint">0 = one-way</p>
         <div id="medianRow" class="fieldRow" hidden>
@@ -139,6 +145,24 @@
       </div>
     </section>
 
+    <section id="intersectionEditor" class="editor" aria-labelledby="intersectionEditorTitle" hidden>
+      <div class="editorBar">
+        <h2 id="intersectionEditorTitle" class="editorTitle" tabindex="-1">
+          <span class="material-symbols-outlined" aria-hidden="true">add_road</span>
+          Intersection
+        </h2>
+      </div>
+      <div class="editorContent">
+        <div class="fieldRow"><label for="intersectionSheetName">Name</label><input id="intersectionSheetName" maxlength="120" autocomplete="off"></div>
+        <div class="headActions">
+          <button type="button" id="intersectionSheetAdd">Add Approach</button>
+          <button type="button" id="intersectionSheetDelete">Delete</button>
+        </div>
+        <p id="intersectionSheetMessage" class="elementsHint" aria-live="polite"></p>
+        <div id="intersectionSheetFields"></div>
+      </div>
+    </section>
+
     <section id="markingsEditor" class="editor" aria-labelledby="markingsTitle" hidden>
       <div class="editorBar">
         <h2 id="markingsTitle" class="editorTitle" tabindex="-1">
@@ -149,23 +173,20 @@
       <div class="editorContent"></div>
     </section>
 
-    <section id="intersectionsEditor" class="editor" aria-labelledby="intersectionsTitle" hidden>
-      <div class="editorBar">
-        <h2 id="intersectionsTitle" class="editorTitle" tabindex="-1">
-          <span class="material-symbols-outlined" aria-hidden="true">add_road</span>
-          Intersections
-        </h2>
-      </div>
-      <div class="editorContent"></div>
-    </section>
     <section id="signsEditor" class="editor" aria-labelledby="signsTitle" hidden>
-      <div class="editorBar">
-        <h2 id="signsTitle" class="editorTitle" tabindex="-1">
-          <span class="material-symbols-outlined" aria-hidden="true">signpost</span>
-          Signs
-        </h2>
+      <div class="editorBar"><h2 id="signsTitle" class="editorTitle" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">signpost</span> Signs</h2></div>
+      <div class="editorContent">
+        <div class="headActions"><button type="button" id="addSign" aria-pressed="false">Add Sign</button><button type="button" id="deleteSign" disabled>Delete</button></div>
+        <p id="signStatus" class="elementsHint" role="status"></p>
+        <button type="button" id="chooseSign">Choose Sign</button>
+        <div id="signCurrent"><img id="signPreview" alt="" hidden /><p id="signName">Loading signs…</p></div>
+        <div class="fieldRow"><label for="signPhysicalSize">Sign size</label><select id="signPhysicalSize" aria-describedby="signSizeHint"></select></div>
+        <p id="signSizeHint" class="signInstructions">Published sign dimensions in inches.</p>
+        <div id="signLegendFields"></div>
+        <div class="fieldRow"><label for="signSize">Callout size (%)</label><input id="signSize" type="number" min="25" max="400" step="5" value="100" /></div>
+        <p class="signInstructions">Choose a sign, click its post location, then click where to show the sign face. Drag either end to move it.</p>
+        <p class="signInstructions">Search official names, codes, and published variants. Guide signs are excluded.</p>
       </div>
-      <div class="editorContent"></div>
     </section>
     <section id="simulatorEditor" class="editor" aria-labelledby="simulatorTitle" hidden>
       <div class="editorBar">
@@ -256,6 +277,14 @@
     </div>
   </section>
 
+  <section id="intersectionsEditor" class="headsMenu" aria-labelledby="intersectionsTitle" hidden>
+    <div class="headPopoverHeader"><h2 id="intersectionsTitle">Intersections</h2></div>
+    <div class="headActions"><button type="button" id="newIntersection">New Intersection</button></div>
+    <ul id="intersectionList" aria-label="Intersections"></ul>
+    <div class="headActions"><button type="button" id="editIntersection" disabled>Edit</button><button type="button" id="duplicateIntersection" disabled>Duplicate</button><button type="button" id="deleteIntersection" disabled>Delete</button></div>
+    <p id="intersectionStatus" role="status">Set a sheet's scale to add an intersection.</p>
+  </section>
+
   <nav id="configBar" aria-label="StripeMaker tools">
     <button type="button" class="configOption" data-editor="sheetsMenu"
       aria-label="Sheets" aria-controls="sheetsMenu" aria-expanded="false" title="Sheets">
@@ -277,6 +306,7 @@
       aria-label="Intersections" aria-controls="intersectionsEditor" aria-expanded="false" title="Intersections">
       <span class="material-symbols-outlined" aria-hidden="true">add_road</span>
       <span class="configLabel">Intersections</span>
+      <span class="material-symbols-outlined dropdownIcon" aria-hidden="true">expand_more</span>
     </button>
     <button type="button" class="configOption" data-editor="signsEditor"
       aria-label="Signs" aria-controls="signsEditor" aria-expanded="false" title="Signs">
@@ -317,6 +347,15 @@
       </button>
     </div>
   </nav>
+  <!-- SignalMaker / SignMaker v2.2 searchable icon selector (GPL-3.0). -->
+  <dialog id="signPicker" aria-labelledby="signPickerTitle">
+    <h3 id="signPickerTitle">Select a Sign</h3>
+    <input id="signSearch" type="search" placeholder="Search signs by code, name, or variant…" aria-label="Search signs by code, name, or variant" />
+    <select id="signCategory" aria-label="Sign category"><option value="">All signs</option>Regulatory</option><option>Warning and object markers</option><option>Temporary traffic control</option><option>School</option></select>
+    <div id="signGrid" class="iconGrid" role="group" aria-label="MUTCD signs"></div>
+    <p id="signSearchStatus" role="status"></p>
+    <div class="options"><button id="closeSignPicker" type="button">Close</button></div>
+  </dialog>
   <p id="actionStatus" role="status" aria-live="polite"></p>
 
   <dialog id="sheetGuide" aria-labelledby="sheetGuideTitle">
