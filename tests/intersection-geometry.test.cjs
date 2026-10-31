@@ -226,3 +226,39 @@ test("a new intersection starts with no movements", () => {
   assert.deepEqual(x.movements, []);
   assert.equal(G.validate(x), "");
 });
+
+test('connected median islands taper at the mouth without moving lane centers',()=>{
+ const item=G.create(),a=item.approaches[0];a.incoming=2;a.outgoing=2;a.median=0;G.normalize(item);
+ const lanes=[true,false].flatMap(incoming=>[0,1].map(i=>G.lane(a,incoming,i)));
+ const edges=[G.edge(a,true),G.edge(a,false)];
+ a.gap=G.gap(a);a.median=6;a.medianInset=true;a.medianMouth=0;
+ a.splits=[{id:'inset',incoming:true,after:1,width:6,nose:35,surface:'grass',inset:true}];
+ assert.deepEqual([true,false].flatMap(incoming=>[0,1].map(i=>G.lane(a,incoming,i))),lanes);
+ assert.deepEqual([G.edge(a,true),G.edge(a,false)],edges);
+ for(const m of G.medians(a)){
+  assert.deepEqual(m.points[0],m.points.at(-1),'island tapers to its mouth point');
+  assert(m.points.length>26,'full rounded nose remains');
+  assert(m.points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)));
+ }
+});
+
+// Same 8-inch pavement margin used by the road renderer, measured from
+// marking center; split islands use white, center medians use yellow.
+test('intersection island surfaces match road median edge-line setbacks', () => {
+ const a=G.create().approaches[0];a.median=8;a.nose=25;
+ a.incoming=2;a.inLanes=['i0','i1'];
+ a.splits=[{id:'island',incoming:true,after:1,width:6,nose:20,surface:'concrete'}];
+ for(const m of G.medians(a)) {
+  const points=G.medianSurface(a,m,8/12);
+  const half=(m.split?m.split.width:a.median)/2;
+  const ring=half+(m.split?0:5/12);
+  const n=G.axes(a).n,u=G.axes(a).u;
+  const lateral=p=>G.dot(G.sub(p,a),n);
+  assert(Math.abs(Math.abs(lateral(points[0])-m.center)-(ring-8/12))<1e-9);
+  assert(Math.abs(G.dot(G.sub(points[0],a),u))<1e-9,'mouth remains at road joint');
+  const tip=points.reduce((best,p)=>G.dot(G.sub(p,a),u)<G.dot(G.sub(best,a),u)?p:best);
+  const surfaceReach=-G.dot(G.sub(tip,a),u);
+  const lineReach=G.reach(a,half,m.nose)-half+ring;
+  assert(Math.abs(lineReach-surfaceReach-8/12)<1e-9,'same setback around rounded nose');
+ }
+});

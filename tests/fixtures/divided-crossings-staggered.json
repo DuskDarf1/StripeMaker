@@ -1,0 +1,229 @@
+{
+  "inchesPerPixel": 2,
+  "roads": [
+    {
+      "id": 1,
+      "lanes": 2,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "ends": [
+        {
+          "joint": 1,
+          "sign": 1,
+          "length": null
+        },
+        {
+          "joint": 24,
+          "sign": 1,
+          "length": 129.40671306694375
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0,
+          "to": 0.004223561711912858
+        },
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0,
+          "to": 0.004223561711912858
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "lanes": 2,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "ends": [
+        {
+          "joint": 7,
+          "sign": 1,
+          "length": null
+        },
+        {
+          "joint": 26,
+          "sign": 1,
+          "length": 322.74042637971337
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0,
+          "to": 0.027293417480540268
+        },
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0,
+          "to": 0.027293417480540268
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "lanes": 2,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "laneWidths": {},
+      "laneEndWidths": {},
+      "laneTypes": {},
+      "ends": [
+        {
+          "joint": 27,
+          "sign": 1,
+          "length": 329.8633984401727
+        },
+        {
+          "joint": 6,
+          "sign": 1,
+          "length": null
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.971673157786157,
+          "to": 1
+        },
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.971673157786157,
+          "to": 1
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "lanes": 2,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "laneWidths": {},
+      "laneEndWidths": {},
+      "laneTypes": {},
+      "ends": [
+        {
+          "joint": 29,
+          "sign": 1,
+          "length": 127.81252124696786
+        },
+        {
+          "joint": 4,
+          "sign": 1,
+          "length": null
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.9958663694305577,
+          "to": 1
+        },
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.9958663694305577,
+          "to": 1
+        }
+      ]
+    }
+  ],
+  "joints": [
+    {
+      "id": 1,
+      "x": 9825.793696009223,
+      "y": 4258.592304517753,
+      "root": 1,
+      "links": []
+    },
+    {
+      "id": 4,
+      "x": 10092.61831239747,
+      "y": 4254.084260537324,
+      "dir": null,
+      "root": 16,
+      "links": []
+    },
+    {
+      "id": 6,
+      "x": 8908.310709140775,
+      "y": 4832.955318823578,
+      "dir": null,
+      "root": 15,
+      "links": []
+    },
+    {
+      "id": 7,
+      "x": 8921.022418656947,
+      "y": 5114.731546432057,
+      "dir": null,
+      "root": 4,
+      "links": []
+    },
+    {
+      "id": 24,
+      "x": 9829.802616228288,
+      "y": 5566.964022642834,
+      "dir": {
+        "x": -0.002007889115630171,
+        "y": 0.9999979841886178
+      },
+      "root": 1,
+      "links": []
+    },
+    {
+      "id": 26,
+      "x": 10971.35230620872,
+      "y": 5081.8289706690175,
+      "dir": {
+        "x": 0.9997715810643105,
+        "y": -0.021372545383472923
+      },
+      "root": 4,
+      "links": []
+    },
+    {
+      "id": 27,
+      "x": 10990.373104789798,
+      "y": 4797.992250459937,
+      "dir": {
+        "x": -0.999536463761178,
+        "y": 0.0304443362844288
+      },
+      "root": 15,
+      "links": []
+    },
+    {
+      "id": 29,
+      "x": 10105.899013826966,
+      "y": 5575.403863189935,
+      "dir": {
+        "x": 0.0004278064304035921,
+        "y": -0.9999999084908249
+      },
+      "root": 16,
+      "links": []
+    }
+  ],
+  "intersections": []
+}

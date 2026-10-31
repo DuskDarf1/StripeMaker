@@ -148,6 +148,11 @@
       else redo();
     }, true);
     updateButtons();
-    return { record, rebase, undo, redo, runWithUndo };
+    return { record, rebase, undo, redo, runWithUndo,
+      diagnostics: ids => {
+        const subset = value => value === null ? null : Object.fromEntries(Object.entries(JSON.parse(value)).filter(([id])=>ids.includes(Number(id))));
+        return {undo:undoStack.map(subset),redo:redoStack.map(subset),pending:subset(pendingBefore),current:subset(serialize()),editingInput:editingInput?.id??null};
+      }
+    };
   };
 })();

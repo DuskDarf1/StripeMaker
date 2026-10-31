@@ -8,6 +8,7 @@
   let values = { ...defaults };
   try { Object.assign(values, JSON.parse(localStorage.getItem(KEY) ?? '{}')); } catch {}
   const settings = {
+    snapshot: () => ({...defaults,...values}),
     get: key => values[key] ?? defaults[key],
     set(key, value) {
       values[key] = value;
@@ -33,7 +34,7 @@
     const contrast = document.getElementById('autoContrast');
     contrast.checked = settings.get('autoContrast');
     contrast.addEventListener('change', () => settings.set('autoContrast', contrast.checked));
-    document.addEventListener('settingschange', () => window.StripeMaker.roadEditor?.render());
+    document.addEventListener('settingschange', () => { show();levels.value=String(settings.get('hideLevelsAbove'));contrast.checked=settings.get('autoContrast');window.StripeMaker.roadEditor?.render(); });
     show();
   });
 })();

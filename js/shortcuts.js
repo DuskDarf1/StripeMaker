@@ -134,5 +134,9 @@
       list.querySelectorAll('input').forEach(input => { input.value = format(valueOf(input.dataset.shortcut)); });
     });
   });
-  app.shortcuts = { list: SHORTCUTS.map(([id, label]) => ({ id, label, keys: format(valueOf(id)) })) };
+  app.shortcuts = { snapshot:()=>({...overrides}), restore(value) {
+    overrides={...value};save();
+    document.querySelectorAll('[data-shortcut]').forEach(input=>{input.value=format(valueOf(input.dataset.shortcut));});
+    const modeInput=document.getElementById('keybindMode');if(modeInput)modeInput.value=mode();
+  }, list: SHORTCUTS.map(([id, label]) => ({ id, label, keys: format(valueOf(id)) })) };
 })();

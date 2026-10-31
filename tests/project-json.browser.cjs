@@ -1,0 +1,125 @@
+const selectChoice=require('./select-choice.cjs');
+const assert=require('node:assert/strict');
+const fs=require('node:fs/promises');
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+(async()=>{
+ const browser=await chromium.launch({headless:true,...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{})});
+ try {
+  const page=await browser.newPage({viewport:{width:1400,height:1000}}),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(process.env.STRIPEMAKER_URL||'http://127.0.0.1:8878');
+  await page.waitForFunction(()=>StripeMaker.sheets.ready&&StripeMaker.projectJSON);
+  await page.click('button[aria-controls="sheetsMenu"]');await page.click('#blankSheet');
+  await page.waitForFunction(()=>StripeMaker.sheets.selected);
+  await page.evaluate(()=>{
+   const s=StripeMaker.sheets.selected;s.name='Bike diagnosis';
+   s.roads=[{id:1,lanes:2,laneWidth:12,laneTypes:{1:{type:'bufferedBike',width:7,conflict:'auto',continueCrossover:true}},ends:[{joint:1,sign:1,length:200},{joint:2,sign:1,length:null}],tapers:{'0:0':{mode:'none',length:300}}}];
+   s.joints=[{id:1,x:15000,y:16000,dir:{x:0,y:-1},root:1,links:[]},{id:2,x:15000,y:14000,dir:{x:0,y:-1},root:1,links:[]}];
+   s.roads.push({id:2,lanes:2,laneWidth:12,laneTypes:{1:{type:'bufferedBike',width:7}},ends:[{joint:2,sign:1,length:null},{joint:3,sign:1,length:null}]});
+   s.joints[1].links=[{a:1,ai:0,b:2,bi:0},{a:1,ai:1,b:2,bi:1,feed:true}];
+   s.joints.push({id:3,x:15100,y:13000,dir:{x:.1,y:-.995},root:2,links:[]});
+   s.lines=[{id:'custom-line',on:{road:1,k:0},from:.2,to:.4,style:'solid',color:'yellow'}];
+   s.bridges=[{id:'bridge',span:'bridge',road:1,from:.4,to:.6,level:2,skew:10}];
+   const intersection=StripeMaker.intersectionGeometry.create();
+   Object.assign(intersection,{name:'Shared intersection',x:12000,y:12000});
+   s.intersections=[intersection];
+   s.surfaces=[{id:'manual-green',on:{road:1,lane:1},from:.1,to:.3,color:'green',pattern:'solid'}];
+   s.markings=[{id:'bike-arrow',type:'bikeArrow',on:{road:1,lane:1},back:30}];
+   s.medians=[{id:1,type:'grass',points:[{x:14700,y:14500},{x:14800,y:14500},{x:14800,y:14600}]}];
+   s.view={x:-5000,y:-5000,scale:.4,fitted:false};
+   StripeMaker.settings.set('signArrowWeight',175);StripeMaker.shortcuts.restore({AddRoad:'ALT+R'});
+   StripeMaker.roadEditor.render();StripeMaker.sheets.save(s);
+  });
+  // Include an actual background file as well as the blank canvas.
+  const png=await page.evaluate(()=>{
+   const c=document.createElement('canvas');c.width=64;c.height=32;const src=c.toDataURL();
+   StripeMaker.sheets.selected.signs=[{id:'custom-sign',image:{src,width:64,height:32,name:'Embedded sign'},x:14500,y:14500,postX:14600,postY:14600,width:80,rotation:15}];
+   StripeMaker.roadEditor.render();
+   return src.split(',')[1];
+  });
+  await page.locator('#sheetFile').setInputFiles({name:'background.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
+  await page.waitForFunction(()=>StripeMaker.sheets.all.length===2);
+  await page.click('button[aria-controls="downloadMenu"]');
+  const waiting=page.waitForEvent('download');await page.click('#exportProject');
+  const download=await waiting;const exported=JSON.parse(await fs.readFile(await download.path(),'utf8'));
+  assert.equal(exported.sheets.length,2);assert.equal(exported.settings.signArrowWeight,175);
+  assert.equal(exported.shortcuts.AddRoad,'ALT+R');assert.equal(exported.sheets[1].file.base64,png);
+  assert.equal(exported.sheets[0].data.roads[0].ends[0].length,200);
+  assert.equal(exported.sheets[0].data.joints[1].links.length,2);
+  for(const key of ['signs','intersections','bridges','surfaces','lines','markings','medians'])assert(exported.sheets[0].data[key].length,key+' exported');
+  assert(!Object.hasOwn(exported.sheets[0].data,'roadLayer'));
+  assert.equal(exported.sheets[0].data.roads[0].laneTypes[1].continueCrossover,true);
+  assert.equal(exported.minReaderVersion,1);
+  assert.equal(exported.diagnostics.sheets[0].laneTracks.length,2);
+  assert(exported.diagnostics.sheets[0].renderedSVG.includes('<svg'));
+  assert(exported.diagnostics.controls.some(c=>c.id==='roadLanes'));
+  assert(exported.diagnostics.history.current);
+  // A future additive format explicitly declares that reader 1 can handle it.
+  exported.version=2;exported.futureProject={enabled:true};
+  exported.settings.futureSetting=42;
+  exported.sheets[0].futureEnvelope={value:'kept'};
+  exported.sheets[0].file.futureMetadata='original';
+  exported.sheets[0].data.futureFeature={points:[{x:12,y:34}]};
+  exported.sheets[0].data.roads[0].futureRoadProperty={value:7};
+  await page.evaluate(()=>StripeMaker.settings.set('signArrowWeight',80));
+  await page.click('button[aria-controls="sheetsMenu"]');
+  await page.locator('#projectFile').setInputFiles({name:'project.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(exported))});
+  await page.waitForFunction(()=>document.getElementById('projectImportStatus').textContent.startsWith('Imported'));
+  const after=await page.evaluate(()=>StripeMaker.projectJSON.snapshot());
+  assert.equal(after.sheets.length,4);assert.equal(after.settings.signArrowWeight,80,'settings opt-in');
+  for(let i=0;i<2;i++){
+   assert.notEqual(after.sheets[i+2].id,exported.sheets[i].id);
+   assert.deepEqual(after.sheets[i+2].data,exported.sheets[i].data,'editable state round trip');
+   assert.deepEqual(after.sheets[i+2].file,exported.sheets[i].file,'original image bytes round trip');
+  }
+  const bad=structuredClone(exported);bad.sheets[0].data.roads[0].ends[0].joint=999;
+  await page.locator('#projectFile').setInputFiles({name:'bad.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(bad))});
+  await page.waitForFunction(()=>document.getElementById('projectImportStatus').textContent.startsWith('Could not import'));
+  assert.equal(await page.evaluate(()=>StripeMaker.sheets.all.length),4);
+  const brokenImage=structuredClone(exported);brokenImage.sheets[1].file.base64='AAAA';
+  await page.locator('#projectFile').setInputFiles({name:'bad-image.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(brokenImage))});
+  await page.waitForFunction(()=>!document.getElementById('importProject').disabled);
+  assert.match(await page.locator('#projectImportStatus').textContent(),/Could not import/);
+  assert.equal(await page.evaluate(()=>StripeMaker.sheets.all.length),4,'decode failure does not partially import');
+  await page.locator('#projectImportSettings').check();
+  await page.locator('#projectFile').setInputFiles({name:'project.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(exported))});
+  await page.waitForFunction(()=>StripeMaker.sheets.all.length===6);
+  assert.equal(await page.evaluate(()=>StripeMaker.settings.get('signArrowWeight')),175);
+  await page.waitForTimeout(650);await page.reload();
+  await page.waitForFunction(()=>StripeMaker.sheets.ready);
+  assert.equal(await page.evaluate(()=>StripeMaker.sheets.all.length),6,'import persisted on reload');
+  const persisted=await page.evaluate(()=>StripeMaker.projectJSON.snapshot());
+  const imported=persisted.sheets[2];
+  assert.equal(imported.data.roads[0].laneTypes[1].continueCrossover,true);
+  assert.deepEqual(imported.data.futureFeature,exported.sheets[0].data.futureFeature);
+  assert.equal(imported.data.roads[0].futureRoadProperty.value,7);
+  assert.deepEqual(imported.source.project.futureProject,{enabled:true});
+  assert.equal(imported.source.project.settings.futureSetting,42);
+  assert.equal(imported.futureEnvelope.value,'kept');
+  assert.equal(imported.file.futureMetadata,'original');
+  assert.deepEqual(imported.source.originalData,exported.sheets[0].data);
+  assert.equal(imported.source.project.version,2);
+  await page.click('button[aria-controls="downloadMenu"]');await selectChoice(page.locator('#projectExportScope'),'selected');
+  const one=page.waitForEvent('download');await page.click('#exportProject');
+  const single=JSON.parse(await fs.readFile(await (await one).path(),'utf8'));assert.equal(single.sheets.length,1);
+  for(const step of [...single.diagnostics.history.undo,...single.diagnostics.history.redo,single.diagnostics.history.current])assert(Object.keys(step).every(id=>Number(id)===single.selectedSheet));
+  const evidence=await page.evaluate(async()=>{
+   window.dispatchEvent(new ErrorEvent('error',{message:'diagnostic regression probe'}));
+   const original=StripeMaker.roadEditor.laneTracks;
+   StripeMaker.roadEditor.laneTracks=()=>{throw Error('geometry probe');};
+   try{return await StripeMaker.projectJSON.snapshot('selected');}finally{StripeMaker.roadEditor.laneTracks=original;}
+  });
+  assert(evidence.diagnostics.errors.some(e=>e.message==='diagnostic regression probe'));
+  assert.equal(evidence.diagnostics.sheets[0].laneTracks.error,'geometry probe');
+  assert(evidence.diagnostics.editors.roadEditor.defaults);
+  assert(evidence.diagnostics.editors.markings.draft);
+  assert(evidence.diagnostics.editors.selection.roads);
+  assert.equal(evidence.sheets.length,1,'raw export survives diagnostic calculation failure');
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('#exportProject').scrollIntoViewIfNeeded();
+  const box=await page.locator('#exportProject').boundingBox();assert(box.x>=0&&box.x+box.width<=390);
+  await page.screenshot({path:'/tmp/stripemaker-project-json-mobile.png'});
+  assert.deepEqual(errors,[]);
+  console.log('PASS: portable project JSON, original images, exact geometry, settings opt-in, atomic rejection, reload, selected-sheet export and mobile controls.');
+ } finally {await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

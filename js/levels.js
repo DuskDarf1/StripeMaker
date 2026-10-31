@@ -423,6 +423,7 @@
     overlay.className = 'markingOverlay levelOverlay';
     sheets.addOverlay(overlay);
     let selected = null, drag = null, hover = false;
+    app.levels.diagnostics = () => ({selected});
 
     const active = () => !panel.hidden && Boolean(sheets.selected?.inchesPerPixel);
     // The selected bridge's pieces, in the order traffic crosses them.

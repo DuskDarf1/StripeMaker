@@ -210,6 +210,7 @@
       roads: sheet.roads ?? [], joints: sheet.joints ?? [], gores: sheet.gores ?? [], medians: sheet.medians ?? [],
       autoTapers: Boolean(sheet.autoTapers), intersections: sheet.intersections ?? [], signs: sheet.signs ?? [],
       markings: sheet.markings ?? [], lines: sheet.lines ?? [], bridges: sheet.bridges ?? [], surfaces: sheet.surfaces ?? [], blank: Boolean(sheet.blank),
+      ...(sheet.projectArchive ? { projectArchive: sheet.projectArchive } : {}),
       ...(sheet.blank ? { width: sheet.width, height: sheet.height } : {}),
     });
     function saveFailed(error) {
@@ -326,6 +327,40 @@
           uploadButton.disabled = false;
         }
       }
+    }
+
+    // Decode every background before changing the open project. Import adds
+    // sheets with new sheet IDs; all geometry IDs stay local to each sheet.
+    async function importProject(entries, selectedId) {
+      if(restoring)throw Error("Sheets are still loading. Try again in a moment.");
+      const prepared=[];
+      try {
+        for(const entry of entries) {
+          const decoded=await decode(entry.file);
+          const sheet={...decoded,...entry.data,projectArchive:entry.projectArchive,file:entry.file,content:decoded.content};
+          prepared.push(sheet);
+          if(!sheet.blank&&(decoded.width!==entry.width||decoded.height!==entry.height))throw Error("Background dimensions do not match the sheet.");
+          blankSize(sheet);
+        }
+        // Reserve IDs after decoding so concurrent image uploads cannot collide.
+        for(const sheet of prepared)sheet.id=nextId++;
+        // One IndexedDB transaction: a storage failure cannot leave half an import.
+        await transact("readwrite",transaction=>{
+          for(const sheet of prepared) {
+            transaction.objectStore("files").put(sheet.file,sheet.id);
+            transaction.objectStore("sheets").put(record(sheet),sheet.id);
+          }
+          const index=Math.max(0,entries.findIndex(e=>e.id===selectedId));
+          transaction.objectStore("meta").put({order:[...sheets,...prepared].map(s=>s.id),selected:prepared[index].id},"app");
+        });
+      } catch(error) {
+        for(const sheet of prepared)if(sheet.url)URL.revokeObjectURL(sheet.url);
+        throw error;
+      }
+      sheets.push(...prepared);renderList();
+      select(prepared[Math.max(0,entries.findIndex(e=>e.id===selectedId))]);
+      history.rebase();
+      return prepared;
     }
 
     uploadButton.addEventListener("click", () => fileInput.click());
@@ -684,6 +719,9 @@
       },
       get all() { return sheets; },
       save: scheduleSave,
+      snapshot: sheet => { const {projectArchive,...data}=record(sheet);return structuredClone(data); },
+      importProject,
+      get ready() { return !restoring; },
       addOverlay(element) {
         overlays.push(element);
         if (selected) stage.append(element);

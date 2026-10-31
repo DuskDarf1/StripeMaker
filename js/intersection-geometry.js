@@ -22,7 +22,8 @@
   // road's lanes line up with an approach's lanes. A median adds to it.
   const DOUBLE_YELLOW_FEET = (6 + 4) / 12;
   const gap = (a) => (a.incoming && a.outgoing ? (a.gap ?? (a.median ?? 0) + DOUBLE_YELLOW_FEET) : 0);
-  const width = (a, incoming) => (incoming ? a.width : (a.outWidth ?? a.width));
+  const width = (a, incoming, index) => a.laneDetails?.[(incoming ? a.inLanes : a.outLanes)?.[index]]?.width ?? (incoming ? a.width : (a.outWidth ?? a.width));
+  const widthsBefore = (a,incoming,count) => Array.from({length:count},(_,i)=>width(a,incoming,i)).reduce((sum,w)=>sum+w,0);
   const local = (a, d, along = 0) => {
     const { u, n } = axes(a);
     return add(a, add(mul(n, d), mul(u, along)));
@@ -36,11 +37,11 @@
       .filter((s) => s.incoming === incoming && s.after > 0 && s.after < (incoming ? a.incoming : a.outgoing))
       .sort((x, y) => x.after - y.after);
   const splitWidth = (a, incoming, below = Infinity) =>
-    splits(a, incoming).reduce((sum, s) => sum + (s.after <= below ? s.width : 0), 0);
+    splits(a, incoming).reduce((sum, s) => sum + (s.after <= below && !s.inset ? s.width : 0), 0);
   const side = (a, incoming, margin = 0) =>
     (incoming ? -1 : 1) *
     (gap(a) / 2 +
-      (incoming ? a.incoming : a.outgoing) * width(a, incoming) +
+      widthsBefore(a,incoming,incoming ? a.incoming : a.outgoing) +
       splitWidth(a, incoming) +
       margin);
   const edge = (a, incoming, margin = 0) => local(a, side(a, incoming, margin));
@@ -48,14 +49,18 @@
     local(
       a,
       (incoming ? -1 : 1) *
-        (gap(a) / 2 + (index + 0.5) * width(a, incoming) + splitWidth(a, incoming, index)),
+        (gap(a) / 2 + widthsBefore(a,incoming,index) + width(a,incoming,index)/2 + splitWidth(a, incoming, index)),
     );
+  const ridingLane = (a,incoming,index) => {
+    const p=lane(a,incoming,index),shift=a.laneDetails?.[(incoming?a.inLanes:a.outLanes)?.[index]]?.centerShift??0;
+    return add(p,mul(axes(a).n,(incoming?-1:1)*shift));
+  };
   // Center offset of a split median, and the lane boundary it sits on.
   const splitCenter = (a, s) =>
     (s.incoming ? -1 : 1) *
-    (gap(a) / 2 + s.after * width(a, s.incoming) + splitWidth(a, s.incoming, s.after - 1) + s.width / 2);
+    (gap(a) / 2 + widthsBefore(a,s.incoming,s.after) + splitWidth(a, s.incoming, s.after - 1) + (s.inset ? 0 : s.width / 2));
   const boundary = (a, incoming, after) =>
-    (incoming ? -1 : 1) * (gap(a) / 2 + after * width(a, incoming) + splitWidth(a, incoming, after - 1));
+    (incoming ? -1 : 1) * (gap(a) / 2 + widthsBefore(a,incoming,after) + splitWidth(a, incoming, after - 1));
   function normalize(item) {
     item.movements ??= [];
     item.rotation ??= 0;
@@ -206,19 +211,22 @@
   // inside the approach and at least as long as its rounded tip.
   const reach = (a, half, nose) => clamp(nose, half, Math.max(half, length(a) - 5));
   // A median band from the mouth inward, with a rounded nose.
-  function band(a, center, half, noseLength) {
-    const nose = reach(a, half, noseLength);
-    const points = [local(a, center - half), local(a, center - half, -nose + half)];
+  function band(a, center, half, noseLength, mouthHalf = half) {
+    const nose = reach(a, half, noseLength),bend=Math.min((nose-half)/2,Math.max(half,6));
+    const points = [local(a, center - mouthHalf)];
+    if(mouthHalf!==half)points.push(local(a,center-half,-bend));
+    points.push(local(a, center - half, -nose + half));
     for (let i = 0; i <= 24; i++) {
       const t = (Math.PI * i) / 24;
       points.push(local(a, center - Math.cos(t) * half, -nose + half - Math.sin(t) * half));
     }
-    points.push(local(a, center + half));
+    if(mouthHalf!==half)points.push(local(a,center+half,-bend));
+    points.push(local(a, center + mouthHalf));
     return points;
   }
   function median(a) {
     if (!a.incoming || !a.outgoing || !(a.median > 0.01)) return [];
-    return band(a, 0, a.median / 2, a.nose);
+    return band(a, 0, a.median / 2, a.nose, a.medianInset ? (a.medianMouth??0)/2 : a.median/2);
   }
   // Every median of an approach: the center one and any splits.
   function medians(a) {
@@ -232,19 +240,31 @@
           list.push({
             key: `split-${s.id}`,
             split: s,
-            points: band(a, splitCenter(a, s), s.width / 2, s.nose),
+            points: band(a, splitCenter(a, s), s.width / 2, s.nose, s.inset ? 0 : s.width/2),
             surface: s.surface,
             nose: s.nose,
             center: splitCenter(a, s),
           });
     return list;
   }
+  // Match a road median anchored to pavement edges: its surface stops at
+  // the pavement margin inside the edge-line center. Keep the nose's arc
+  // center and the open mouth fixed so the attached median meets it flush.
+  function medianSurface(a, m, pavementMargin) {
+    const half = (m.split ? m.split.width : a.median) / 2;
+    const lineOffset = m.split ? 0 : DOUBLE_YELLOW_FEET / 2;
+    const inset = Math.min(half, Math.max(0, pavementMargin - lineOffset));
+    const mouthHalf = m.split ? (m.split.inset ? 0 : half)
+      : (a.medianInset ? (a.medianMouth ?? 0) / 2 : half);
+    return band(a, m.center, half - inset, reach(a, half, m.nose) - inset,
+      Math.max(0, mouthHalf - inset));
+  }
   function pulls(item, m) {
     if (!m.autoCurve) return [m.pullIn, m.pullOut];
     const a = item.approaches.find((a) => a.id === m.from),
       b = item.approaches.find((a) => a.id === m.to);
-    const p = lane(a, true, a.inLanes.indexOf(m.input)),
-      q = lane(b, false, b.outLanes.indexOf(m.output));
+    const p = ridingLane(a, true, a.inLanes.indexOf(m.input)),
+      q = ridingLane(b, false, b.outLanes.indexOf(m.output));
     const u = axes(a).u,
       v = axes(b).u,
       den = cross(u, v);
@@ -262,8 +282,8 @@
     const i = a.inLanes.indexOf(m.input),
       j = b.outLanes.indexOf(m.output);
     if (i < 0 || j < 0) return null;
-    const p = lane(a, true, i),
-      q = lane(b, false, j),
+    const p = ridingLane(a, true, i),
+      q = ridingLane(b, false, j),
       [entry, exit] = pulls(item, m);
     return [p, sub(p, mul(axes(a).u, entry)), sub(q, mul(axes(b).u, exit)), q];
   }
@@ -647,6 +667,7 @@
     side,
     edge,
     lane,
+    ridingLane,
     splits,
     splitCenter,
     boundary,
@@ -660,6 +681,7 @@
     outline,
     median,
     medians,
+    medianSurface,
     pulls,
     curve,
     sample,

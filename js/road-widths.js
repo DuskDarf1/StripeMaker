@@ -43,7 +43,7 @@
       for (const link of a.links ?? []) {
         const linked = sheet.roads.find(r => r.id === link.road);
         if (!linked || linked.ends[link.e].joint !== joint?.id) continue;
-        if (link.road === road.id && (link.lane == null || link.lane === lane)) return link.e ? a.width : (a.outWidth ?? a.width);
+        if (link.road === road.id && (link.lane == null || link.lane === lane)) return a.laneDetails?.[link.to]?.width ?? (link.e ? a.width : (a.outWidth ?? a.width));
         // A paired road shares this mouth but travels in the opposite direction.
         if (linked.ends[0].joint === road.ends[1].joint && linked.ends[1].joint === road.ends[0].joint)
           return e ? a.width : (a.outWidth ?? a.width);
@@ -82,7 +82,42 @@
     }
     return widthAt(laneWidth(road, lane), ends[0], ends[1], fraction);
   }
-  const api = { endWidth, widthAt, laneWidth, laneAt, splitWidths };
+  // Split medians make real spaces between lanes at the connected road end.
+  // Lane widths stay unchanged; spacing blends smoothly between the two ends.
+  function endGaps(sheet,road,e) {
+    const gaps=Array.from({length:road.lanes+1},(_,k)=>({width:road.gapProfiles?.[k]?gapProfileAt(road.gapProfiles[k],e):0,surface:road.gapProfiles?.[k]?.surface??'grass'}));
+    for(const item of sheet.intersections??[])for(const a of item.approaches){
+      let base=null;
+      if(a.binding){const host=sheet.roads.find(r=>r.id===a.binding.road);
+        if(host?.ends[a.binding.e]?.joint===road.ends?.[e]?.joint)base=0;
+      }else{
+        const link=a.links?.find(l=>l.road===road.id&&l.e===e);
+        if(link){const index=(e?a.inLanes:a.outLanes)?.indexOf(link.to)??-1;if(index>=0)base=index-(link.lane??0);}
+      }
+      if(base==null)continue;
+      for(let k=1;k<road.lanes;k++)gaps[k]={width:0,surface:'grass'};
+      for(const split of a.splits??[]){const k=split.after-base;
+        if(split.incoming===(e===1)&&k>0&&k<road.lanes)gaps[k]={width:split.width,surface:split.surface??'grass'};
+      }
+    }
+    return gaps;
+  }
+  const smooth=f=>{const t=Math.max(0,Math.min(1,f));return t*t*(3-2*t);};
+  const blendGap=(start,end,f)=>start+(end-start)*smooth(f);
+  const gapProfileAt=(p,f)=>blendGap(p.start,p.end,p.from+(p.to-p.from)*f);
+  function gapAt(road,k,f,start,end){
+    const p=road.gapProfiles?.[k];
+    return p?gapProfileAt(p,f)+blendGap(start-gapProfileAt(p,0),end-gapProfileAt(p,1),f):blendGap(start,end,f);
+  }
+  function splitGaps(sheet,road,f){
+    const ends=[0,1].map(e=>endGaps(sheet,road,e)),before={},after={};
+    for(let k=1;k<road.lanes;k++)if(ends[0][k].width||ends[1][k].width||road.gapProfiles?.[k]){
+      const p=road.gapProfiles?.[k]??{start:ends[0][k].width,end:ends[1][k].width,from:0,to:1,surface:ends[0][k].width?ends[0][k].surface:ends[1][k].surface};
+      const mid=p.from+(p.to-p.from)*f;before[k]={...p,to:mid};after[k]={...p,from:mid};
+    }
+    return [before,after];
+  }
+  const api = { gapAt,splitGaps,endGaps, endWidth, widthAt, laneWidth, laneAt, splitWidths };
   if (typeof module !== 'undefined') module.exports = api;
   else (window.StripeMaker ??= {}).roadWidths = api;
 })();

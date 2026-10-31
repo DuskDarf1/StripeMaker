@@ -1,0 +1,81 @@
+const selectChoice=require('./select-choice.cjs');
+const assert=require('node:assert/strict');
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+(async()=>{const browser=await chromium.launch({headless:true,...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{})});try{
+ const page=await browser.newPage({viewport:{width:1400,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(process.env.STRIPEMAKER_URL||'http://127.0.0.1:8878');await page.waitForFunction(()=>StripeMaker.sheets.ready);
+ await page.click('button[aria-controls="sheetsMenu"]');await page.click('#blankSheet');await page.waitForFunction(()=>StripeMaker.sheets.selected);
+ const result=await page.evaluate(()=>{
+  const s=StripeMaker.sheets.selected;s.inchesPerPixel=2;
+  const road=(id,a,b)=>({id,lanes:2,laneWidth:12,ends:[{joint:a,sign:1,length:null},{joint:b,sign:1,length:null}]});
+  const joint=(id,x,y,root,dx,dy)=>({id,x,y,root,dir:{x:dx,y:dy},links:[]});
+  s.roads=[road(1,1,2),road(2,3,4),road(3,5,6)];s.joints=[joint(1,900,1500,1,1,0),joint(2,2100,1500,1,1,0),joint(3,2100,1200,2,-1,0),joint(4,900,1200,2,-1,0),joint(5,1500,2100,3,0,-1),joint(6,1500,600,3,0,-1)];
+  StripeMaker.history.rebase();StripeMaker.roadEditor.render();
+  const item=StripeMaker.roadEditor.makeIntersection(s,[...s.roads]);
+  return {item,medians:item.approaches.map(a=>StripeMaker.intersectionGeometry.medians(a)),roads:s.roads};
+ });
+ assert.equal(result.item.approaches.length,4);const divided=result.item.approaches.filter(a=>a.median>0);assert.equal(divided.length,2);
+ for(const a of divided){assert.equal(a.surface,'grass');assert.equal(a.links.length,4);assert(!a.binding);assert(Math.abs(a.median-(26-10/12))<.01);}
+ assert(result.medians.filter(m=>m.length).every(m=>m[0].points.length>24));
+ await page.click('button[aria-controls="intersectionsEditor"]');await page.click('#editIntersection');
+ await selectChoice(page.locator('#intersection-approach'),divided[0].id);
+ await selectChoice(page.locator('#intersection-median-add'),'in-1');await page.getByRole('button',{name:'Add Median',exact:true}).click();
+ const added=await page.evaluate(()=>StripeMaker.sheets.selected.intersections[0]);
+ assert.equal(added.approaches.find(a=>a.id===divided[0].id).splits.length,1);
+ await page.click('#undoButton');assert.equal(await page.evaluate(id=>StripeMaker.sheets.selected.intersections[0].approaches.find(a=>a.id===id).splits?.length??0,divided[0].id),0);
+ await page.click('#redoButton');
+ await page.evaluate(()=>{const svg=StripeMaker.sheets.selected.roadLayer.cloneNode(true);svg.id='medianPreview';svg.setAttribute('viewBox','800 500 1400 1800');svg.style.cssText='position:fixed;top:0;right:0;width:800px;height:950px;z-index:9999;transform:none;background:white';document.body.append(svg);});
+ await page.locator('#medianPreview').screenshot({path:'/tmp/intersection-divided-medians.png'});await page.locator('#medianPreview').evaluate(e=>e.remove());
+ // A fully adopted two-way road used to hide all median controls.
+ const bound=await page.evaluate(()=>{
+  const s=StripeMaker.sheets.selected;
+  const road=(id,a,b,sign=1)=>({id,lanes:2,laneWidth:12,ends:[{joint:a,sign,length:null},{joint:b,sign,length:null}]});
+  const pair={a:100,b:101,ai:0,bi:0,pair:true,median:0};
+  s.roads=[road(100,101,102),road(101,102,101,-1),road(102,103,104)];
+  s.joints=[{id:101,x:15000,y:16000,root:100,dir:{x:0,y:-1},links:[pair]},{id:102,x:15000,y:15200,root:100,dir:{x:0,y:-1},links:[{...pair}]},{id:103,x:15400,y:15000,root:102,dir:{x:1,y:0},links:[]},{id:104,x:16000,y:15000,root:102,dir:{x:1,y:0},links:[]}];
+  s.markings=[{id:'split-arrow',type:'bikeArrow',on:{road:100,lane:1},back:30}];
+  s.surfaces=[{id:'split-paint',on:{road:100,lane:1},from:.1,to:.3,color:'green',pattern:'solid'}];
+  s.lines=[{id:'split-line',on:{road:100,k:2},from:.1,to:.3,style:'solid',color:'white'}];
+  s.intersections=[];const item=StripeMaker.intersections.makeAt(s,{x:15000,y:15000},[102,103]);
+  StripeMaker.roadEditor.render();StripeMaker.history.rebase();
+  return {id:item.approaches[0].id,joints:JSON.stringify(s.joints),roads:JSON.stringify(s.roads)};
+ });
+ await page.click('button[aria-controls="intersectionsEditor"]');await page.click('#editIntersection');
+ await selectChoice(page.locator('#intersection-approach'),bound.id);
+ assert(await page.locator('#intersection-median').isEnabled());
+ await selectChoice(page.locator('#intersection-median-add'),'center');await page.getByRole('button',{name:'Add Median',exact:true}).click();
+ await selectChoice(page.locator('#intersection-median-add'),'in-1');await page.getByRole('button',{name:'Add Median',exact:true}).click();
+ await page.click('#undoButton');assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.roads.length),3);
+ await page.click('#redoButton');assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.roads.length),4);
+ const check=()=>page.evaluate(id=>{const s=StripeMaker.sheets.selected;return {a:s.intersections[0].approaches.find(a=>a.id===id),joints:JSON.stringify(s.joints),roads:JSON.stringify(s.roads)};},bound.id);
+ const after=await check();assert(!after.a.binding);assert.equal(after.a.median,6);assert(!after.a.medianInset);assert(!after.a.splits[0].inset);
+ assert.equal(JSON.parse(after.roads).length,JSON.parse(bound.roads).length+1,'median creates another road');
+ await page.locator('#intersection-median').fill('8');await page.locator('#intersection-median').press('Tab');assert.equal((await check()).a.median,8);
+ await page.click('#undoButton');assert.equal((await check()).a.median,6);await page.click('#redoButton');
+ await page.evaluate(()=>{const s=StripeMaker.sheets.selected;s.view={scale:.6,x:-8400,y:-8700,fitted:false};document.dispatchEvent(new Event('sheetchange'));StripeMaker.roadEditor.render();StripeMaker.sheets.save(s);});
+ await page.evaluate(()=>{const svg=StripeMaker.sheets.selected.roadLayer.cloneNode(true);svg.id='medianPreview';svg.setAttribute('viewBox','14700 14700 1400 1500');svg.style.cssText='position:fixed;top:0;right:0;width:800px;height:950px;z-index:9999;transform:none;background:white';document.body.append(svg);});
+ await page.locator('#medianPreview').screenshot({path:'/tmp/intersection-connected-medians.png'});await page.locator('#medianPreview').evaluate(e=>e.remove());
+ await page.waitForTimeout(700);await page.reload();await page.waitForFunction(()=>StripeMaker.sheets.ready);
+ const restored=await check();assert(!restored.a.binding&&!restored.a.medianInset&&!restored.a.splits[0].inset);assert.equal(restored.a.median,8);
+ const separation=await page.evaluate(id=>{
+  const s=StripeMaker.sheets.selected,item=s.intersections[0],a=item.approaches.find(a=>a.id===id),G=StripeMaker.intersectionGeometry;
+  const incoming=a.links.filter(l=>l.e===1),tracks=StripeMaker.roadEditor.laneTracks(s);
+  const centers=incoming.map(l=>{const t=tracks.find(t=>t.road===l.road),i=t.line.length-1,p=t.line[i],d=(t.laneBounds[i][l.lane][0]+t.laneBounds[i][l.lane][1])/2;
+   const target=G.lane(a,true,a.inLanes.indexOf(l.to));
+   if(Math.hypot(p.x-p.tangent.y*d-item.x-target.x*6,p.y+p.tangent.x*d-item.y-target.y*6)>.05)throw Error('Road group misses approach lane '+JSON.stringify({l,p,d,target,item:{x:item.x,y:item.y},joints:s.joints,roads:s.roads}));
+   return {road:l.road,lanes:s.roads.find(r=>r.id===l.road).lanes,width:(t.laneBounds[i][l.lane][1]-t.laneBounds[i][l.lane][0])/6};
+  });
+  const outer=incoming.find(l=>l.to===a.inLanes[1]);
+  for(const mark of [s.markings.find(m=>m.id==='split-arrow'),s.surfaces.find(m=>m.id==='split-paint')])
+   if(mark.on.road!==outer.road||mark.on.lane!==0)throw Error('Lane placement lost during road split');
+  const line=s.lines.find(l=>l.id==='split-line');if(line.on.road!==outer.road||line.on.k!==1)throw Error('Edge marking lost during road split');
+  const independent=incoming.map(l=>s.roads.find(r=>r.id===l.road).ends[0].joint);
+  if(new Set(independent).size!==2)throw Error('Split road ends remain coupled');
+  const count=s.roads.length;StripeMaker.roadEditor.render();StripeMaker.roadEditor.render();
+  if(s.roads.length!==count)throw Error('Repeated rendering splits roads again');
+  return centers;
+ },bound.id);
+ assert.equal(new Set(separation.map(c=>c.road)).size,2);
+ assert(separation.every(c=>c.lanes===1&&Math.abs(c.width-12)<.001));
+ assert.deepEqual(errors,[]);console.log('PASS: grouped crossings form divided grass approaches with rounded noses; linked-approach median add/undo/redo.');
+ }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

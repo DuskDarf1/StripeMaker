@@ -1,3 +1,4 @@
+const selectChoice=require('./select-choice.cjs');
 /* Isolated browser; run with the environment variables used by signs.browser.cjs. */
 const assert=require('node:assert/strict'),path=require('node:path');
 const {pathToFileURL}=require('node:url');
@@ -35,7 +36,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  const occupied=await page.locator('#assemblyGrid [data-row="0"][data-column="0"]').boundingBox();
  assert(Math.abs(fullCell.width-occupied.width)<1);assert(Math.abs(fullCell.height-occupied.height)<1);
  await page.screenshot({path:'/tmp/stripemaker-route-assembly.png'});
- await page.locator('#assemblyPart').selectOption('0');await page.locator('#signValue-route').fill('75');await page.locator('#signValue-route').blur();
+ await selectChoice(page.locator('#assemblyPart'),'0');await page.locator('#signValue-route').fill('75');await page.locator('#signValue-route').blur();
  assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.signs[0].values.route),'75');
  assert.equal(await page.evaluate(()=>StripeMaker.signCatalog.signs.find(e=>e.id===StripeMaker.sheets.selected.signs[0].design).variant.includes('3 digits')),false);
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/tmp/stripemaker-assembly-narrow.png'});

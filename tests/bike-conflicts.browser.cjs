@@ -1,3 +1,4 @@
+const selectChoice=require('./select-choice.cjs');
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 (async () => {
@@ -8,7 +9,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  // Instrument only the test response to inspect the production conflict ranges.
  await page.route('**/js/elements.js', async route=>{
    const response=await route.fetch();
-   const body=(await response.text()).replace('window.StripeMaker.roadEditor = { render,',
+   const body=(await response.text()).replace('window.StripeMaker.roadEditor = {',
      `window.StripeMaker.roadEditor = { auditRoutes: s => {const solved=solve(s);return bikeTransitions(s,solved).map(t=>{
        const left=boundary(t.shape,t.lane),right=boundary(t.shape,t.lane+1);
        const centers=left.map((p,i)=>({x:(p.x+right[i].x)/2,y:(p.y+right[i].y)/2}));
@@ -24,7 +25,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
        const p=boundary(t.shape,t.lane,inchesToPixels(s,BIKE_BUFFER_INCHES))[t.entering?0:left.length-1];
        const q=boundary(otherShape,otherLane,inchesToPixels(s,BIKE_BUFFER_INCHES))[t.entering?otherShape.line.length-1:0];
        return {solidTargets:[boundary(otherShape,otherLane)[t.entering?otherShape.line.length-1:0],q],meets:Math.max(...mismatches,Math.hypot(p.x-q.x,p.y-q.y),Math.hypot(end.x-target.x,end.y-target.y)),onPavement:centers.slice(1,-1).every(p=>insidePolygon(p,polygon))};
-     });}, auditConflicts: (s,r) => [...bikeConflicts(s,r,shapeOf(s,r,solve(s)),solve(s))], render,`);
+     });}, auditConflicts: (s,r) => [...bikeConflicts(s,r,shapeOf(s,r,solve(s)),solve(s))], `);
    await route.fulfill({response,body});
  });
  await page.goto(process.env.STRIPEMAKER_URL || 'http://127.0.0.1:8876/');
@@ -77,6 +78,18 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   : {id:'gap',on:{road:1,lane:upLane},from:1-50/upFeet,to:1-20/upFeet,color:'green',pattern:'conflict'}];
  StripeMaker.roadEditor.render();
  if(s.roadLayer.querySelectorAll('.laneSurface').length)throw new Error('Green paint entered the weaving gap');
+ const active=scenario==='entry'?downstream:upstream,activeLane=scenario==='entry'?bikeLane:upLane;
+ active.laneTypes[activeLane].continueCrossover=true;
+ StripeMaker.roadEditor.render();
+ const continued=StripeMaker.roadEditor.auditConflicts(s,active);
+ for(const k of [activeLane,activeLane+1]) {
+  const ranges=continued.find(([n])=>n===k)?.[1]??[];
+  if(ranges.some(r=>r[2]==='blank')||!ranges.some(r=>r[2]==='dotted'&&r[0]<=s.surfaces[0].from&&r[1]>=s.surfaces[0].to))throw Error('Crossover edges remain interrupted');
+ }
+ if(!s.roadLayer.querySelectorAll('.laneSurface').length)throw Error('Manual color did not continue across crossover');
+ delete active.laneTypes[activeLane].continueCrossover;
+ StripeMaker.roadEditor.render();
+ if(s.roadLayer.querySelectorAll('.laneSurface').length)throw Error('Turning continuation off did not restore gap');
  s.surfaces[0].from=0;
  s.surfaces[0].to=1;StripeMaker.roadEditor.render();
  if(!s.roadLayer.querySelectorAll('.laneSurface').length)throw new Error('Missing conflict color');
@@ -157,10 +170,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  // Road selection exposes setup without selecting or right-clicking a node.
  await page.evaluate(()=>StripeMaker.roadEditor.focusRoad(StripeMaker.sheets.selected.roads[0]));
  assert(await page.locator('#bikeSetup').isVisible());
- await page.selectOption('#bikeConflict','separate');
+ await page.evaluate(()=>StripeMaker.history.rebase());
+ await page.locator('#bikeCrossover').check();
+ assert(await page.evaluate(()=>StripeMaker.sheets.selected.roads[0].laneTypes[3].continueCrossover));
+ await page.click('#undoButton');assert(!(await page.locator('#bikeCrossover').isChecked()));
+ await page.click('#redoButton');assert(await page.locator('#bikeCrossover').isChecked());
+ await page.locator('#bikeCrossover').uncheck();
+ await selectChoice(page.locator('#bikeConflict'),'separate');
  await page.click('#bikeAddTurn');
  assert.deepEqual(await page.evaluate(()=>{const r=StripeMaker.sheets.selected.roads[0];return [r.lanes,r.tapers['0:4'].mode];}),[5,'taper']);
- await page.selectOption('#bikeSpeed','45');
+ await selectChoice(page.locator('#bikeSpeed'),'45');
  assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.roads[0].tapers['0:4'].length),85);
  assert.equal(await page.locator('#bikeGreen').count(),0);
  assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.surfaces.length),0);
@@ -196,7 +215,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  await page.click('#redoButton'); assert.deepEqual(await lanes(),[4,'bufferedBike','travel']);
  // The explicit layout and design-speed controls persist as one edit each.
  await node.dispatchEvent('contextmenu',{button:2});await page.keyboard.press('Escape');
- await page.selectOption('#bikeConflict','separate');await page.selectOption('#bikeSpeed','45');
+ await selectChoice(page.locator('#bikeConflict'),'separate');await selectChoice(page.locator('#bikeSpeed'),'45');
  assert.deepEqual(await page.evaluate(()=>{const l=StripeMaker.sheets.selected.roads[1].laneTypes[2];return [l.conflict,l.designSpeed];}),['separate',45]);
  await page.click('#undoButton');
  assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.roads[1].laneTypes[2].designSpeed??0),0);

@@ -164,12 +164,13 @@
       });
       const onCopied = on => on && (roadIds.has(on.road) || interIds.has(on.intersection));
       const markings = (s.markings ?? []).filter(m => ids('markings').has(m.id) || onCopied(m.on)
-        || (m.a?.on && roadIds.has(m.a.on.road) && roadIds.has(m.b?.on?.road))).map(clone);
+        || (onCopied(m.a?.on) && onCopied(m.b?.on))).map(clone);
       const lines = (s.lines ?? []).filter(l => ids('lines').has(l.id) || onCopied(l.on)).map(clone);
       const goreKeys = new Set(gores.map(g => g.key));
       const medians = (s.medians ?? []).filter(m => ids('medians').has(m.id)).map(median => {
         const copy = clone(median);
         for (const p of copy.points) {
+          if(p.on?.crossing&&!(roadIds.has(p.on.crossing.road)||interIds.has(p.on.crossing.intersection)||goreKeys.has(p.on.crossing.gore)))delete p.on.crossing;
           if (p.on && !(roadIds.has(p.on.road) || interIds.has(p.on.intersection) || goreKeys.has(p.on.gore))) delete p.on;
         }
         return copy;
@@ -252,6 +253,7 @@
       }
       const remapOn = on => {
         if (!on) return on;
+        if(on.crossing)remapOn(on.crossing);
         if (on.road != null && roadMap.has(on.road)) on.road = roadMap.get(on.road);
         if (on.intersection != null && interMap.has(on.intersection)) on.intersection = interMap.get(on.intersection);
         if (on.gore != null) on.gore = goreMap.get(on.gore) ?? on.gore;
@@ -596,6 +598,6 @@
     }).observe(panel, { attributes: true, attributeFilter: ['hidden'] });
     for (const event of ['sheetchange']) document.addEventListener(event, () => { KINDS.forEach(kind => selection.get(kind).clear()); refresh(); });
     document.addEventListener('sheethistory', refresh);
-    app.selection = { refresh, itemAt, edit, paste, copy: () => copy(), clear: () => setSelection([]) };
+    app.selection = { diagnostics: () => Object.fromEntries([...selection].map(([kind,ids])=>[kind,[...ids]])), refresh, itemAt, edit, paste, copy: () => copy(), clear: () => setSelection([]) };
   });
 })();

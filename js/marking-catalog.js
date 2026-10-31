@@ -54,7 +54,8 @@
   const PEDESTRIAN = { width: 6, length: 15, border: 3 * IN, feet: 4 + 8 / 12 };  // sheet 1, In Pavement Warning Marking
   // Crosswalks, sheet 9: 12" white transverse lines; special emphasis adds 24"
   // bars centered on each lane line and lane center (1/2 W), parallel to the lane
-  // lines even when the crosswalk is skewed (note 2). Width is measured inside
+  // lines even when the crosswalk is skewed (note 2).
+  // Width is measured inside
   // the transverse lines: at least 6' at intersections, 10' midblock (note 1).
   const CROSSWALK = { line: 12 * IN, bar: 24 * IN, width: 10, min: 6, max: 30 };
   // MUTCD 11th Edition Figure 3B-20, Yield Ahead Triangle Symbols.
@@ -363,8 +364,9 @@
           return [q.x + t.x * l, q.y + t.y * l];
         });
         const ring = e => { const [p0, p1] = corners(-e), [q0, q1] = corners(e); return [p0, p1, q1, q0]; };
-        white.push({ fill: WHITE, rule: 'nonzero', rings: [ring(CROSSWALK.bar / 2)] });
-        if (contrast) black.push({ fill: BLACK, rule: 'nonzero', contrast: true, rings: [ring(CROSSWALK.bar / 2 + CONTRAST.bar)] });
+        const barWidth=bar.width??CROSSWALK.bar;
+        white.push({ fill: WHITE, rule: 'nonzero', rings: [ring(barWidth / 2)] });
+        if (contrast) black.push({ fill: BLACK, rule: 'nonzero', contrast: true, rings: [ring(barWidth / 2 + CONTRAST.bar)] });
       }
     }
     return { parts: [...black, ...white], length: width + 2 * CROSSWALK.line };

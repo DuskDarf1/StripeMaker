@@ -1,0 +1,2107 @@
+[
+  {
+    "id": 1,
+    "name": "01 Straight bike lane [plain]",
+    "kind": "baseline",
+    "type": "bike",
+    "note": "Two travel lanes plus a bike lane. No crossing or dotted conflict is expected.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 774.9999999999997,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 2,
+    "name": "02 Straight bike lane [buffered]",
+    "kind": "baseline",
+    "type": "bufferedBike",
+    "note": "Two travel lanes plus a bike lane. No crossing or dotted conflict is expected.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 774.9999999999997,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 3,
+    "name": "03 Three connected segments [plain]",
+    "kind": "chain",
+    "type": "bike",
+    "note": "Bike lane continues through two joints. Follow lane 3 across both nodes; phase should not restart.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 250,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 250,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 275,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 4,
+    "name": "04 Three connected segments [buffered]",
+    "kind": "chain",
+    "type": "bufferedBike",
+    "note": "Bike lane continues through two joints. Follow lane 3 across both nodes; phase should not restart.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 250,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 250,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 275,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 5,
+    "name": "05 Outside turn lane - no taper [plain]",
+    "kind": "keyhole",
+    "type": "bike",
+    "note": "The downstream road adds lane 4 OUTSIDE bike lane 3. The bike lane is linked across the joint; crossing length defaults to 150 ft.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 225,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 550.0392675258948,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0,
+                  0.2727078026169073,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0,
+                  0.2727078026169073,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 6,
+    "name": "06 Outside turn lane - no taper [buffered]",
+    "kind": "keyhole",
+    "type": "bufferedBike",
+    "note": "The downstream road adds lane 4 OUTSIDE bike lane 3. The bike lane is linked across the joint; crossing length defaults to 150 ft.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 225,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 550.0392675258948,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0,
+                  0.2727078026169073,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0,
+                  0.2727078026169073,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 7,
+    "name": "07 Separate right-turn lane - 45 mph [plain]",
+    "kind": "separate",
+    "type": "bike",
+    "note": "Select the downstream road: Separate right-turn lane, design speed 45. Outside lane 4 has an 85-ft start taper.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 225,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 550.0392675258948,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0,
+                  0.15453442148291413,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0,
+                  0.15453442148291413,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 8,
+    "name": "08 Separate right-turn lane - 45 mph [buffered]",
+    "kind": "separate",
+    "type": "bufferedBike",
+    "note": "Select the downstream road: Separate right-turn lane, design speed 45. Outside lane 4 has an 85-ft start taper.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 225,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 550.0392675258948,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0,
+                  0.15453442148291413,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0,
+                  0.15453442148291413,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 9,
+    "name": "09 Right-turn drop - 3 to 2 [plain]",
+    "kind": "drop",
+    "type": "bike",
+    "note": "Three travel lanes become two. The right travel lane exits. Bike lane 4 connects to downstream bike lane 3; the move-over belongs before the joint.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0.7142857142857143,
+                  0.8571428571428571,
+                  "dotted"
+                ],
+                [
+                  0.8571428571428571,
+                  0.9428571428571428,
+                  "blank"
+                ],
+                [
+                  0.9428571428571428,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              4,
+              [
+                [
+                  0.7142857142857143,
+                  0.8571428571428571,
+                  "dotted"
+                ],
+                [
+                  0.8571428571428571,
+                  0.9428571428571428,
+                  "blank"
+                ],
+                [
+                  0.9428571428571428,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 2,
+          "feet": 425.05081223586427,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 443.1130397473883,
+          "ranges": []
+        }
+      ],
+      "transitions": [
+        {
+          "road": 1,
+          "entering": false,
+          "feet": 350,
+          "edgeMismatch": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": 10,
+    "name": "10 Right-turn drop - 3 to 2 [buffered]",
+    "kind": "drop",
+    "type": "bufferedBike",
+    "note": "Three travel lanes become two. The right travel lane exits. Bike lane 4 connects to downstream bike lane 3; the move-over belongs before the joint.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0.7142857142857143,
+                  0.8571428571428571,
+                  "dotted"
+                ],
+                [
+                  0.8571428571428571,
+                  0.9428571428571428,
+                  "blank"
+                ],
+                [
+                  0.9428571428571428,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              4,
+              [
+                [
+                  0.7142857142857143,
+                  0.8571428571428571,
+                  "dotted"
+                ],
+                [
+                  0.8571428571428571,
+                  0.9428571428571428,
+                  "blank"
+                ],
+                [
+                  0.9428571428571428,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 2,
+          "feet": 425.05081223586427,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 443.78751366138454,
+          "ranges": []
+        }
+      ],
+      "transitions": [
+        {
+          "road": 1,
+          "entering": false,
+          "feet": 350,
+          "edgeMismatch": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": 11,
+    "name": "11 Free-flow ramp ENTERS [plain]",
+    "kind": "entry",
+    "type": "bike",
+    "note": "Two travel lanes become three. Incoming ramp feeds lane 3; bike lane 3 connects to lane 4. Inspect the 200-ft receiving transition.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 425.05081223586427,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0,
+                  0.23526598966833442,
+                  "dotted"
+                ],
+                [
+                  0.23526598966833442,
+                  0.3528989845025016,
+                  "blank"
+                ],
+                [
+                  0.3528989845025016,
+                  0.47053197933666885,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              4,
+              [
+                [
+                  0,
+                  0.23526598966833442,
+                  "dotted"
+                ],
+                [
+                  0.23526598966833442,
+                  0.3528989845025016,
+                  "blank"
+                ],
+                [
+                  0.3528989845025016,
+                  0.47053197933666885,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 3,
+          "feet": 403.92065734926865,
+          "ranges": []
+        }
+      ],
+      "transitions": [
+        {
+          "road": 2,
+          "entering": true,
+          "feet": 425.05081223586427,
+          "edgeMismatch": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": 12,
+    "name": "12 Free-flow ramp ENTERS [buffered]",
+    "kind": "entry",
+    "type": "bufferedBike",
+    "note": "Two travel lanes become three. Incoming ramp feeds lane 3; bike lane 3 connects to lane 4. Inspect the 200-ft receiving transition.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 425.05081223586427,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0,
+                  0.23526598966833442,
+                  "dotted"
+                ],
+                [
+                  0.23526598966833442,
+                  0.3528989845025016,
+                  "blank"
+                ],
+                [
+                  0.3528989845025016,
+                  0.47053197933666885,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              4,
+              [
+                [
+                  0,
+                  0.23526598966833442,
+                  "dotted"
+                ],
+                [
+                  0.23526598966833442,
+                  0.3528989845025016,
+                  "blank"
+                ],
+                [
+                  0.3528989845025016,
+                  0.47053197933666885,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 3,
+          "feet": 404.6532645862591,
+          "ranges": []
+        }
+      ],
+      "transitions": [
+        {
+          "road": 2,
+          "entering": true,
+          "feet": 425.05081223586427,
+          "edgeMismatch": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": 13,
+    "name": "13 Free-flow ramp EXITS [plain]",
+    "kind": "exit",
+    "type": "bike",
+    "note": "Three travel lanes become two. Ramp splits off from travel lane 3; bike lane 4 connects to lane 3. Compare with the drop case.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0.7142857142857143,
+                  0.8571428571428571,
+                  "dotted"
+                ],
+                [
+                  0.8571428571428571,
+                  0.9428571428571428,
+                  "blank"
+                ],
+                [
+                  0.9428571428571428,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              4,
+              [
+                [
+                  0.7142857142857143,
+                  0.8571428571428571,
+                  "dotted"
+                ],
+                [
+                  0.8571428571428571,
+                  0.9428571428571428,
+                  "blank"
+                ],
+                [
+                  0.9428571428571428,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 2,
+          "feet": 425.05081223586427,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 443.1130397473883,
+          "ranges": []
+        }
+      ],
+      "transitions": [
+        {
+          "road": 1,
+          "entering": false,
+          "feet": 350,
+          "edgeMismatch": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": 14,
+    "name": "14 Free-flow ramp EXITS [buffered]",
+    "kind": "exit",
+    "type": "bufferedBike",
+    "note": "Three travel lanes become two. Ramp splits off from travel lane 3; bike lane 4 connects to lane 3. Compare with the drop case.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0.7142857142857143,
+                  0.8571428571428571,
+                  "dotted"
+                ],
+                [
+                  0.8571428571428571,
+                  0.9428571428571428,
+                  "blank"
+                ],
+                [
+                  0.9428571428571428,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              4,
+              [
+                [
+                  0.7142857142857143,
+                  0.8571428571428571,
+                  "dotted"
+                ],
+                [
+                  0.8571428571428571,
+                  0.9428571428571428,
+                  "blank"
+                ],
+                [
+                  0.9428571428571428,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 2,
+          "feet": 425.05081223586427,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 443.78751366138454,
+          "ranges": []
+        }
+      ],
+      "transitions": [
+        {
+          "road": 1,
+          "entering": false,
+          "feet": 350,
+          "edgeMismatch": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": 15,
+    "name": "15 Crossing ramp - no lane drop [plain]",
+    "kind": "cross-exit",
+    "type": "bike",
+    "note": "Through road keeps two travel lanes and its bike lane. A branch leaves travel lane 2 and crosses the bike lane. Dots follow pavement overlap.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 425,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0.04,
+                  0.12,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0.04,
+                  0.12,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 3,
+          "feet": 447.17958213347157,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 16,
+    "name": "16 Crossing ramp - no lane drop [buffered]",
+    "kind": "cross-exit",
+    "type": "bufferedBike",
+    "note": "Through road keeps two travel lanes and its bike lane. A branch leaves travel lane 2 and crosses the bike lane. Dots follow pavement overlap.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 425,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0.04941176470588235,
+                  0.12,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0.04941176470588235,
+                  0.12,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 3,
+          "feet": 447.861849135036,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 17,
+    "name": "17 Crossing ramp - no lane add [plain]",
+    "kind": "cross-entry",
+    "type": "bike",
+    "note": "Main road stays two travel lanes plus bike. Ramp merges into travel lane 2 across the bike lane; no new through lane.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0.8657142857142858,
+                  0.9571428571428572,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0.8657142857142858,
+                  0.9571428571428572,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 2,
+          "feet": 425,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 412.7914046833774,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 18,
+    "name": "18 Crossing ramp - no lane add [buffered]",
+    "kind": "cross-entry",
+    "type": "bufferedBike",
+    "note": "Main road stays two travel lanes plus bike. Ramp merges into travel lane 2 across the bike lane; no new through lane.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0.8657142857142858,
+                  0.9457142857142857,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0.8657142857142858,
+                  0.9457142857142857,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 2,
+          "feet": 425,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 413.5382290507885,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 19,
+    "name": "19 Ramp starts beside bike lane [plain]",
+    "kind": "beside",
+    "type": "bike",
+    "note": "Ramp attaches edge-to-edge OUTSIDE the bike lane. Compare with a head-on lane feed; these links are different.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 425,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0,
+                  0.35294117647058826,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 3,
+          "feet": 435.78227859154936,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 20,
+    "name": "20 Ramp starts beside bike lane [buffered]",
+    "kind": "beside",
+    "type": "bufferedBike",
+    "note": "Ramp attaches edge-to-edge OUTSIDE the bike lane. Compare with a head-on lane feed; these links are different.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 425,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0,
+                  0.35294117647058826,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 3,
+          "feet": 435.12396974290533,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 21,
+    "name": "21 Bus bay - entry and exit tapers [plain]",
+    "kind": "bus",
+    "type": "bike",
+    "note": "Outside lane 4 has 80-ft tapers at BOTH ends. Bike lane stays straight; dotted crossings at both tapers, solid between.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 774.9999999999997,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0,
+                  0.10322580645161293,
+                  "dotted"
+                ],
+                [
+                  0.896774193548387,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0,
+                  0.10322580645161293,
+                  "dotted"
+                ],
+                [
+                  0.896774193548387,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 22,
+    "name": "22 Bus bay - entry and exit tapers [buffered]",
+    "kind": "bus",
+    "type": "bufferedBike",
+    "note": "Outside lane 4 has 80-ft tapers at BOTH ends. Bike lane stays straight; dotted crossings at both tapers, solid between.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 774.9999999999997,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0,
+                  0.10322580645161293,
+                  "dotted"
+                ],
+                [
+                  0.896774193548387,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0,
+                  0.10322580645161293,
+                  "dotted"
+                ],
+                [
+                  0.896774193548387,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 23,
+    "name": "23 Attached intersection approach [plain]",
+    "kind": "approach",
+    "type": "bike",
+    "note": "Bike lane reaches an attached intersection mouth. Inspect the last 150 ft of its inside line/buffer. No intersection movements are assigned.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 524.9999999999999,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0.7142857142857142,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 2,
+          "feet": 125,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 75,
+          "ranges": []
+        },
+        {
+          "road": 4,
+          "feet": 150,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 24,
+    "name": "24 Attached intersection approach [buffered]",
+    "kind": "approach",
+    "type": "bufferedBike",
+    "note": "Bike lane reaches an attached intersection mouth. Inspect the last 150 ft of its inside line/buffer. No intersection movements are assigned.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 524.9999999999999,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0.7142857142857142,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 2,
+          "feet": 125,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 75,
+          "ranges": []
+        },
+        {
+          "road": 4,
+          "feet": 150,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 25,
+    "name": "25 Crosswalk - bike emphasis bars [plain]",
+    "kind": "crosswalk",
+    "type": "bike",
+    "note": "Bike lane lies between two vehicle lanes. Inspect the 12-inch bike boundary bars, 24-inch vehicle bars, and clear bike riding space.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 774.9999999999997,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 26,
+    "name": "26 Crosswalk - bike emphasis bars [buffered]",
+    "kind": "crosswalk",
+    "type": "bufferedBike",
+    "note": "Bike lane lies between two vehicle lanes. Inspect the 12-inch bike boundary bars, 24-inch vehicle bars, and clear bike riding space.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 774.9999999999997,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 27,
+    "name": "27 Skew crosswalk - bike emphasis bars [plain]",
+    "kind": "crosswalk-skew",
+    "type": "bike",
+    "note": "Same crosswalk at an angle. Bike-boundary bars stay 12 inches wide measured across the lane; buffered lines stop inside the crosswalk.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 774.9999999999997,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 28,
+    "name": "28 Skew crosswalk - bike emphasis bars [buffered]",
+    "kind": "crosswalk-skew",
+    "type": "bufferedBike",
+    "note": "Same crosswalk at an angle. Bike-boundary bars stay 12 inches wide measured across the lane; buffered lines stop inside the crosswalk.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 774.9999999999997,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 29,
+    "name": "29 Manual green at ramp entry [plain]",
+    "kind": "green-entry",
+    "type": "bike",
+    "note": "Explicit green pavement spans the connected bike lanes across a ramp entry. It follows the white dotted phase and leaves the weaving gap unpainted.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 425.05081223586427,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0,
+                  0.23526598966833442,
+                  "dotted"
+                ],
+                [
+                  0.23526598966833442,
+                  0.3528989845025016,
+                  "blank"
+                ],
+                [
+                  0.3528989845025016,
+                  0.47053197933666885,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              4,
+              [
+                [
+                  0,
+                  0.23526598966833442,
+                  "dotted"
+                ],
+                [
+                  0.23526598966833442,
+                  0.3528989845025016,
+                  "blank"
+                ],
+                [
+                  0.3528989845025016,
+                  0.47053197933666885,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 3,
+          "feet": 403.92065734926865,
+          "ranges": []
+        }
+      ],
+      "transitions": [
+        {
+          "road": 2,
+          "entering": true,
+          "feet": 425.05081223586427,
+          "edgeMismatch": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": 30,
+    "name": "30 Manual green at ramp entry [buffered]",
+    "kind": "green-entry",
+    "type": "bufferedBike",
+    "note": "Explicit green pavement spans the connected bike lanes across a ramp entry. It follows the white dotted phase and leaves the weaving gap unpainted.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 425.05081223586427,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0,
+                  0.23526598966833442,
+                  "dotted"
+                ],
+                [
+                  0.23526598966833442,
+                  0.3528989845025016,
+                  "blank"
+                ],
+                [
+                  0.3528989845025016,
+                  0.47053197933666885,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              4,
+              [
+                [
+                  0,
+                  0.23526598966833442,
+                  "dotted"
+                ],
+                [
+                  0.23526598966833442,
+                  0.3528989845025016,
+                  "blank"
+                ],
+                [
+                  0.3528989845025016,
+                  0.47053197933666885,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 3,
+          "feet": 404.6532645862591,
+          "ranges": []
+        }
+      ],
+      "transitions": [
+        {
+          "road": 2,
+          "entering": true,
+          "feet": 425.05081223586427,
+          "edgeMismatch": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": 31,
+    "name": "31 Manual green across three nodes [plain]",
+    "kind": "paint",
+    "type": "bike",
+    "note": "One manually placed colored-pavement span covers connected bike lanes. This is explicit marking-tool data, never automatic green.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 250,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 250,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 275,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 32,
+    "name": "32 Manual green across three nodes [buffered]",
+    "kind": "paint",
+    "type": "bufferedBike",
+    "note": "One manually placed colored-pavement span covers connected bike lanes. This is explicit marking-tool data, never automatic green.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 250,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 250,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 275,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 33,
+    "name": "33 Drop with skew and width change [plain]",
+    "kind": "curve",
+    "type": "bike",
+    "note": "Drop geometry with an independently turned receiving end and wider receiving bike lane. Check both white boundaries at the joint.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0.7142857142857143,
+                  0.8571428571428571,
+                  "dotted"
+                ],
+                [
+                  0.8571428571428571,
+                  0.9428571428571428,
+                  "blank"
+                ],
+                [
+                  0.9428571428571428,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              4,
+              [
+                [
+                  0.7142857142857143,
+                  0.8571428571428571,
+                  "dotted"
+                ],
+                [
+                  0.8571428571428571,
+                  0.9428571428571428,
+                  "blank"
+                ],
+                [
+                  0.9428571428571428,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 2,
+          "feet": 425.61057780973505,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 443.1130397473883,
+          "ranges": []
+        }
+      ],
+      "transitions": [
+        {
+          "road": 1,
+          "entering": false,
+          "feet": 350,
+          "edgeMismatch": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": 34,
+    "name": "34 Drop with skew and width change [buffered]",
+    "kind": "curve",
+    "type": "bufferedBike",
+    "note": "Drop geometry with an independently turned receiving end and wider receiving bike lane. Check both white boundaries at the joint.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0.7142857142857143,
+                  0.8571428571428571,
+                  "dotted"
+                ],
+                [
+                  0.8571428571428571,
+                  0.9428571428571428,
+                  "blank"
+                ],
+                [
+                  0.9428571428571428,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              4,
+              [
+                [
+                  0.7142857142857143,
+                  0.8571428571428571,
+                  "dotted"
+                ],
+                [
+                  0.8571428571428571,
+                  0.9428571428571428,
+                  "blank"
+                ],
+                [
+                  0.9428571428571428,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 2,
+          "feet": 425.5860215862669,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 443.78751366138454,
+          "ranges": []
+        }
+      ],
+      "transitions": [
+        {
+          "road": 1,
+          "entering": false,
+          "feet": 350,
+          "edgeMismatch": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": 35,
+    "name": "35 NEGATIVE - ramp not joined [plain]",
+    "kind": "unjoined",
+    "type": "bike",
+    "note": "Ramp visually touches the joint but uses a DIFFERENT joint ID. It is not connected. Matching position alone does not create a conflict.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 425,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 449.5730913527612,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 36,
+    "name": "36 NEGATIVE - ramp not joined [buffered]",
+    "kind": "unjoined",
+    "type": "bufferedBike",
+    "note": "Ramp visually touches the joint but uses a DIFFERENT joint ID. It is not connected. Matching position alone does not create a conflict.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 350,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 425,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 449.5730913527612,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 37,
+    "name": "37 NEGATIVE - drop approach too short [plain]",
+    "kind": "short",
+    "type": "bike",
+    "note": "Only 70 ft before the drop, less than the 100-ft move-over treatment. Select the approach and read the length warning.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 70,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0,
+                  0.2857142857142857,
+                  "dotted"
+                ],
+                [
+                  0.2857142857142857,
+                  0.7142857142857143,
+                  "blank"
+                ],
+                [
+                  0.7142857142857143,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              4,
+              [
+                [
+                  0,
+                  0.2857142857142857,
+                  "dotted"
+                ],
+                [
+                  0.2857142857142857,
+                  0.7142857142857143,
+                  "blank"
+                ],
+                [
+                  0.7142857142857143,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 2,
+          "feet": 425.05081223586427,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 443.1130397473883,
+          "ranges": []
+        }
+      ],
+      "transitions": [
+        {
+          "road": 1,
+          "entering": false,
+          "feet": 70,
+          "edgeMismatch": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": 38,
+    "name": "38 NEGATIVE - drop approach too short [buffered]",
+    "kind": "short",
+    "type": "bufferedBike",
+    "note": "Only 70 ft before the drop, less than the 100-ft move-over treatment. Select the approach and read the length warning.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 70,
+          "ranges": [
+            [
+              3,
+              [
+                [
+                  0,
+                  0.2857142857142857,
+                  "dotted"
+                ],
+                [
+                  0.2857142857142857,
+                  0.7142857142857143,
+                  "blank"
+                ],
+                [
+                  0.7142857142857143,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              4,
+              [
+                [
+                  0,
+                  0.2857142857142857,
+                  "dotted"
+                ],
+                [
+                  0.2857142857142857,
+                  0.7142857142857143,
+                  "blank"
+                ],
+                [
+                  0.7142857142857143,
+                  1,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        },
+        {
+          "road": 2,
+          "feet": 425.05081223586427,
+          "ranges": []
+        },
+        {
+          "road": 3,
+          "feet": 443.78751366138454,
+          "ranges": []
+        }
+      ],
+      "transitions": [
+        {
+          "road": 1,
+          "entering": false,
+          "feet": 70,
+          "edgeMismatch": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": 39,
+    "name": "39 Two-way road with bike lanes [plain]",
+    "kind": "two-way",
+    "type": "bike",
+    "note": "Opposite three-lane road groups paired at both ends: two travel lanes and one bike lane in each direction.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 774.9999999999997,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 775,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 40,
+    "name": "40 Two-way road with bike lanes [buffered]",
+    "kind": "two-way",
+    "type": "bufferedBike",
+    "note": "Opposite three-lane road groups paired at both ends: two travel lanes and one bike lane in each direction.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 774.9999999999997,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 775,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 41,
+    "name": "41 Separate turn - 35 mph [buffered]",
+    "kind": "speed-35",
+    "type": "bufferedBike",
+    "note": "Outside turn-lane start taper follows the design-speed table. Compare with the 45 mph case.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 225,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 550.0392675258948,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0,
+                  0.1272636412212234,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0,
+                  0.1272636412212234,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 42,
+    "name": "42 Separate turn - 40 mph [buffered]",
+    "kind": "speed-40",
+    "type": "bufferedBike",
+    "note": "Outside turn-lane start taper follows the design-speed table. Compare with the 45 mph case.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 225,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 550.0392675258948,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0,
+                  0.1454441613956839,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0,
+                  0.1454441613956839,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 43,
+    "name": "43 Separate turn - 50 mph [buffered]",
+    "kind": "speed-50",
+    "type": "bufferedBike",
+    "note": "Outside turn-lane start taper follows the design-speed table. Compare with the 45 mph case.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 225,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 550.0392675258948,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0,
+                  0.19089546183183512,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0,
+                  0.19089546183183512,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 44,
+    "name": "44 Separate turn - 55 mph [buffered]",
+    "kind": "speed-55",
+    "type": "bufferedBike",
+    "note": "Outside turn-lane start taper follows the design-speed table. Compare with the 45 mph case.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 225,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 550.0392675258948,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0,
+                  0.22725650218075608,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0,
+                  0.22725650218075608,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 45,
+    "name": "45 Separate turn - 60 mph [buffered]",
+    "kind": "speed-60",
+    "type": "bufferedBike",
+    "note": "Outside turn-lane start taper follows the design-speed table. Compare with the 45 mph case.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 225,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 550.0392675258948,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0,
+                  0.26361754252967706,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0,
+                  0.26361754252967706,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 46,
+    "name": "46 Separate turn - 65 mph [buffered]",
+    "kind": "speed-65",
+    "type": "bufferedBike",
+    "note": "Outside turn-lane start taper follows the design-speed table. Compare with the 45 mph case.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 225,
+          "ranges": []
+        },
+        {
+          "road": 2,
+          "feet": 550.0392675258948,
+          "ranges": [
+            [
+              2,
+              [
+                [
+                  0,
+                  0.30906884296582826,
+                  "dotted"
+                ]
+              ]
+            ],
+            [
+              3,
+              [
+                [
+                  0,
+                  0.30906884296582826,
+                  "dotted"
+                ]
+              ]
+            ]
+          ]
+        }
+      ],
+      "transitions": []
+    }
+  },
+  {
+    "id": 47,
+    "name": "47 Two-way bike track [track]",
+    "kind": "track",
+    "type": "bufferedBike",
+    "note": "A 12-ft two-way track beside travel lanes. It has a broken yellow centerline and is excluded from ordinary keyhole conflict logic.",
+    "audit": {
+      "conflicts": [
+        {
+          "road": 1,
+          "feet": 774.9999999999997,
+          "ranges": []
+        }
+      ],
+      "transitions": []
+    }
+  }
+]

@@ -1,0 +1,748 @@
+{
+  "roads": [
+    {
+      "id": 1,
+      "lanes": 2,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "ends": [
+        {
+          "joint": 1,
+          "sign": 1,
+          "length": null
+        },
+        {
+          "joint": 8,
+          "sign": 1,
+          "length": 43.88638598161806
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0,
+          "to": 0.047512366984192485
+        },
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0,
+          "to": 0.047512366984192485
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "lanes": 1,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "ends": [
+        {
+          "joint": 3,
+          "sign": 1,
+          "length": 0,
+          "dir": null
+        },
+        {
+          "joint": 10,
+          "sign": 1,
+          "length": 235.29997463905664,
+          "dir": {
+            "x": -0.9999641328500564,
+            "y": -0.008469534428468197
+          }
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0,
+          "to": 0.25993844900513297
+        }
+      ],
+      "medianEdges": {
+        "R": true
+      }
+    },
+    {
+      "id": 3,
+      "lanes": 2,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "ends": [
+        {
+          "joint": 5,
+          "sign": 1,
+          "length": null
+        },
+        {
+          "joint": 12,
+          "sign": 1,
+          "length": 270.880925739504
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0,
+          "to": 0.3125286895781669
+        },
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0,
+          "to": 0.3125286895781669
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "lanes": 2,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "laneWidths": {},
+      "laneEndWidths": {},
+      "laneTypes": {},
+      "ends": [
+        {
+          "joint": 7,
+          "sign": 1,
+          "length": 207.75100947783943
+        },
+        {
+          "joint": 2,
+          "sign": 1,
+          "length": null
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.7515273351221178,
+          "to": 1
+        },
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.7515273351221178,
+          "to": 1
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "lanes": 2,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "laneWidths": {},
+      "laneEndWidths": {},
+      "laneTypes": {},
+      "ends": [
+        {
+          "joint": 9,
+          "sign": 1,
+          "length": 283.82334292746776
+        },
+        {
+          "joint": 4,
+          "sign": 1,
+          "length": null
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.6764303977735399,
+          "to": 1
+        },
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.6764303977735399,
+          "to": 1
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "lanes": 2,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "laneWidths": {},
+      "laneEndWidths": {},
+      "laneTypes": {},
+      "ends": [
+        {
+          "joint": 11,
+          "sign": 1,
+          "length": 234.03342859476788
+        },
+        {
+          "joint": 6,
+          "sign": 1,
+          "length": null
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.7364100782498939,
+          "to": 1
+        },
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.7364100782498939,
+          "to": 1
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "lanes": 1,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "ends": [
+        {
+          "joint": 13,
+          "sign": 1,
+          "length": null,
+          "dir": null
+        },
+        {
+          "joint": 17,
+          "sign": 1,
+          "length": 181.251606477229
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0,
+          "to": 0.1795271281797425
+        }
+      ],
+      "medianEdges": {
+        "L": true
+      }
+    },
+    {
+      "id": 8,
+      "lanes": 1,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "ends": [
+        {
+          "joint": 15,
+          "sign": 1,
+          "length": null
+        },
+        {
+          "joint": 17,
+          "sign": 1,
+          "length": null
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "lanes": 1,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "laneWidths": {},
+      "laneEndWidths": {},
+      "laneTypes": {},
+      "ends": [
+        {
+          "joint": 17,
+          "sign": 1,
+          "length": 56.28176235197065
+        },
+        {
+          "joint": 14,
+          "sign": 1,
+          "length": 55.75257623522669,
+          "dir": {
+            "x": -0.9999641328500564,
+            "y": -0.008469534428468197
+          }
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.1795271281797425,
+          "to": 0.25993844900513297
+        }
+      ]
+    }
+  ],
+  "joints": [
+    {
+      "id": 1,
+      "x": 8794.116146125953,
+      "y": 4346.872152516827,
+      "dir": null,
+      "root": 1,
+      "links": []
+    },
+    {
+      "id": 2,
+      "x": 8802.835309503786,
+      "y": 5802.558109862473,
+      "root": 4,
+      "links": []
+    },
+    {
+      "id": 3,
+      "x": 9584.980195487738,
+      "y": 5086.161765026079,
+      "root": 2,
+      "links": []
+    },
+    {
+      "id": 4,
+      "x": 7953.792658619081,
+      "y": 4737.649094932072,
+      "dir": null,
+      "root": 5,
+      "links": []
+    },
+    {
+      "id": 5,
+      "x": 7982.062969918421,
+      "y": 5105.163141823493,
+      "dir": null,
+      "root": 3,
+      "links": []
+    },
+    {
+      "id": 6,
+      "x": 9583.415791520696,
+      "y": 5520.311816575667,
+      "root": 6,
+      "links": []
+    },
+    {
+      "id": 7,
+      "x": 8689.246288141012,
+      "y": 5648.697953933877,
+      "dir": {
+        "x": 0.005989620858816437,
+        "y": 0.9999820620600989
+      },
+      "root": 4,
+      "links": []
+    },
+    {
+      "id": 8,
+      "x": 8683.10770250124,
+      "y": 4623.845852126053,
+      "dir": {
+        "x": 0.005989620858801638,
+        "y": 0.9999820620601001
+      },
+      "root": 1,
+      "links": []
+    },
+    {
+      "id": 9,
+      "x": 8356.992811946187,
+      "y": 5024.021215227147,
+      "dir": {
+        "x": -0.9999641328500561,
+        "y": -0.008469534428472906
+      },
+      "root": 5,
+      "links": []
+    },
+    {
+      "id": 10,
+      "x": 9017.312654047597,
+      "y": 4993.160570172652,
+      "dir": {
+        "x": -0.9999641328500563,
+        "y": -0.008469534442758634
+      },
+      "root": 2,
+      "links": []
+    },
+    {
+      "id": 11,
+      "x": 9014.536224498954,
+      "y": 5320.962527821485,
+      "dir": {
+        "x": 0.9999641328500563,
+        "y": 0.0084695344284734
+      },
+      "root": 6,
+      "links": []
+    },
+    {
+      "id": 12,
+      "x": 8355.138750989816,
+      "y": 5242.922793837819,
+      "dir": {
+        "x": 0.9999641328500563,
+        "y": 0.008469534428472663
+      },
+      "root": 3,
+      "links": []
+    },
+    {
+      "id": 13,
+      "x": 9479.214791334229,
+      "y": 4627.028867851933,
+      "root": 7,
+      "links": []
+    },
+    {
+      "id": 14,
+      "x": 9018.22736376587,
+      "y": 4885.164443824846,
+      "dir": {
+        "x": -0.9999641328500563,
+        "y": -0.00846953444185994
+      },
+      "root": 9,
+      "links": []
+    },
+    {
+      "id": 15,
+      "x": 9772.021428753264,
+      "y": 4997.166996527001,
+      "dir": null,
+      "root": 8,
+      "links": []
+    },
+    {
+      "id": 17,
+      "x": 9180.988297743746,
+      "y": 4849.380331807363,
+      "dir": {
+        "x": -0.9203424892902295,
+        "y": 0.39111341373962566
+      },
+      "root": 7,
+      "links": [
+        {
+          "a": 7,
+          "ai": 0,
+          "b": 9,
+          "bi": 0
+        },
+        {
+          "a": 9,
+          "ai": 0,
+          "b": 8,
+          "bi": 0,
+          "pair": false,
+          "feed": true
+        }
+      ]
+    }
+  ],
+  "medians": [
+    {
+      "id": 2,
+      "type": "grass",
+      "spacing": 20,
+      "color": "yellow",
+      "lean": "right",
+      "points": [
+        {
+          "x": 9016.973872670458,
+          "y": 5033.159135486654,
+          "on": {
+            "road": 2,
+            "side": "L",
+            "f": 1
+          }
+        },
+        {
+          "x": 9015.179909115517,
+          "y": 5244.965253724881,
+          "on": {
+            "road": 6,
+            "side": "L",
+            "f": 0
+          }
+        },
+        {
+          "x": 9208.880905890668,
+          "y": 5275.847015450916,
+          "on": {
+            "road": 6,
+            "side": "L",
+            "f": 0.3036193068235166
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "grass",
+      "spacing": 20,
+      "color": "yellow",
+      "lean": "right",
+      "points": [
+        {
+          "x": 9017.888582388732,
+          "y": 4925.163009138848,
+          "on": {
+            "road": 9,
+            "side": "L",
+            "f": 1
+          }
+        },
+        {
+          "x": 9582.93829710893,
+          "y": 4950.9459941381165,
+          "on": {
+            "road": 8,
+            "side": "L",
+            "f": 0.31994814705313895
+          }
+        },
+        {
+          "x": 9595.497524653327,
+          "y": 5047.569203732189,
+          "on": {
+            "road": 2,
+            "side": "R",
+            "f": 0
+          }
+        },
+        {
+          "x": 9017.651435424736,
+          "y": 4953.16200485865,
+          "on": {
+            "road": 2,
+            "side": "R",
+            "f": 1
+          }
+        }
+      ]
+    }
+  ],
+  "intersections": [
+    {
+      "id": "5404a18b-fe3e-4c0f-828b-2e4715f2429c",
+      "name": "Intersection 1",
+      "x": 8686.176971897203,
+      "y": 5136.267992347731,
+      "rotation": 0,
+      "approaches": [
+        {
+          "id": "c30041ae-12d7-42bc-ab53-71b3e9b168b3",
+          "angle": 269.6568179519113,
+          "incoming": 2,
+          "outgoing": 0,
+          "width": 12,
+          "outWidth": 12,
+          "median": 0,
+          "radius": 20,
+          "nose": 60,
+          "surface": "grass",
+          "x": 11.488239845394066,
+          "y": -85.47556548725211,
+          "gap": 0,
+          "binding": {
+            "road": 1,
+            "e": 1,
+            "joint": 8
+          },
+          "inLanes": [
+            "5c7e947e-b76f-4097-b2a1-35ebe7e926fc",
+            "2cb1a99b-7e20-4db8-a41f-024911fb64b2"
+          ],
+          "outLanes": []
+        },
+        {
+          "id": "8f49adba-feeb-4c83-b2b5-d7d5bc789f65",
+          "angle": 89.65681795191085,
+          "incoming": 0,
+          "outgoing": 2,
+          "width": 12,
+          "outWidth": 12,
+          "median": 0,
+          "radius": 20,
+          "nose": 60,
+          "surface": "grass",
+          "x": 12.511337452022719,
+          "y": 85.33311814738529,
+          "gap": 0,
+          "binding": {
+            "road": 4,
+            "e": 0,
+            "joint": 7
+          },
+          "inLanes": [],
+          "outLanes": [
+            "8bc99302-d986-43c7-9677-fb0016168582",
+            "afa29b9d-4a33-47ad-a222-be3b36f1a4da"
+          ]
+        },
+        {
+          "id": "07a39272-7402-4fc5-9d2a-9de29ce8843d",
+          "angle": 0.48527437900901305,
+          "incoming": 2,
+          "outgoing": 2,
+          "width": 12,
+          "outWidth": 12,
+          "median": 35.802285898752714,
+          "radius": 20,
+          "nose": 22.08081233556385,
+          "surface": "grass",
+          "x": 54.98331983263081,
+          "y": 0.46570037633948047,
+          "gap": 36.63561923208605,
+          "inLanes": [
+            "22b6e8fc-3363-48c7-b515-61441daaba51",
+            "463b4737-ace8-4e91-9e26-528c0ccb06af"
+          ],
+          "outLanes": [
+            "94982f8e-a1d3-489b-989f-b2ac4aa60ddb",
+            "5b8058f1-2bd8-4573-9786-d754c8f7ca37"
+          ],
+          "links": [
+            {
+              "road": 2,
+              "e": 1,
+              "lane": 0,
+              "to": "22b6e8fc-3363-48c7-b515-61441daaba51"
+            },
+            {
+              "road": 9,
+              "e": 1,
+              "lane": 0,
+              "to": "463b4737-ace8-4e91-9e26-528c0ccb06af"
+            },
+            {
+              "road": 6,
+              "e": 0,
+              "lane": 0,
+              "to": "94982f8e-a1d3-489b-989f-b2ac4aa60ddb"
+            },
+            {
+              "road": 6,
+              "e": 0,
+              "lane": 1,
+              "to": "5b8058f1-2bd8-4573-9786-d754c8f7ca37"
+            }
+          ],
+          "splits": [
+            {
+              "id": "426d4171-7b2b-4dbe-b503-2d8c8380c38d",
+              "incoming": true,
+              "after": 1,
+              "width": 6,
+              "nose": 22.08081233556385,
+              "surface": "concrete"
+            }
+          ]
+        },
+        {
+          "id": "cca0c1d5-0ecd-422a-8dcb-f37b17b5f91a",
+          "angle": 180.4852743790091,
+          "incoming": 2,
+          "outgoing": 2,
+          "width": 12,
+          "outWidth": 12,
+          "median": 11.651571711338699,
+          "radius": 20,
+          "nose": 22.1136608913935,
+          "surface": "grass",
+          "x": -55.01853173820018,
+          "y": -0.46599796920797054,
+          "inLanes": [
+            "738bd9da-caa9-4141-b7af-4b4d37384883",
+            "701f4eae-bc3b-4fec-8611-9f0ef633f4b0"
+          ],
+          "outLanes": [
+            "a11c6c16-cfd5-44b9-86d4-f2022917224a",
+            "27d7fa2b-88ad-4bbe-b3ab-7752f6b54e9d"
+          ],
+          "links": [
+            {
+              "road": 3,
+              "e": 1,
+              "lane": 0,
+              "to": "738bd9da-caa9-4141-b7af-4b4d37384883"
+            },
+            {
+              "road": 3,
+              "e": 1,
+              "lane": 1,
+              "to": "701f4eae-bc3b-4fec-8611-9f0ef633f4b0"
+            },
+            {
+              "road": 5,
+              "e": 0,
+              "lane": 0,
+              "to": "a11c6c16-cfd5-44b9-86d4-f2022917224a"
+            },
+            {
+              "road": 5,
+              "e": 0,
+              "lane": 1,
+              "to": "27d7fa2b-88ad-4bbe-b3ab-7752f6b54e9d"
+            }
+          ]
+        }
+      ],
+      "movements": [
+        {
+          "id": "0ee1c505-f3d2-4450-824a-fdf737a39f43",
+          "from": "cca0c1d5-0ecd-422a-8dcb-f37b17b5f91a",
+          "input": "701f4eae-bc3b-4fec-8611-9f0ef633f4b0",
+          "to": "8f49adba-feeb-4c83-b2b5-d7d5bc789f65",
+          "output": "afa29b9d-4a33-47ad-a222-be3b36f1a4da",
+          "pullIn": 50,
+          "pullOut": 50,
+          "autoCurve": true
+        },
+        {
+          "id": "4921edfe-588b-462a-a1c5-78541fecdfbf",
+          "from": "cca0c1d5-0ecd-422a-8dcb-f37b17b5f91a",
+          "input": "738bd9da-caa9-4141-b7af-4b4d37384883",
+          "to": "8f49adba-feeb-4c83-b2b5-d7d5bc789f65",
+          "output": "8bc99302-d986-43c7-9677-fb0016168582",
+          "pullIn": 50,
+          "pullOut": 50,
+          "autoCurve": true
+        }
+      ]
+    }
+  ],
+  "inchesPerPixel": 2
+}

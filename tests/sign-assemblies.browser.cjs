@@ -1,3 +1,4 @@
+const selectChoice=require('./select-choice.cjs');
 /* Isolated browser; run with the environment variables used by signs.browser.cjs. */
 const assert=require('node:assert/strict'),path=require('node:path');
 const {pathToFileURL}=require('node:url');
@@ -25,7 +26,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await page.locator('#undoButton').click();assert.equal((await state())[0].rotation??0,0);
  await page.locator('#redoButton').click();assert.equal((await state())[0].rotation,35);
  await page.locator('#openAssemblyEditor').click();
- await page.locator('#assemblyPart').selectOption('0');assert.equal(await page.locator('#signValue-speed').count(),0);
+ await selectChoice(page.locator('#assemblyPart'),'0');assert.equal(await page.locator('#signValue-speed').count(),0);
  await page.screenshot({path:'/tmp/stripemaker-warning-assembly.png'});
  // Add a second plaque by dragging the candidate into a new column, then remove it by dragging.
  await page.locator('#addAssemblySign').click();await page.locator('#signSearch').fill('W13-1P');await page.locator('#signGrid button').first().click();await page.locator('#signPicker').waitFor({state:'hidden'});

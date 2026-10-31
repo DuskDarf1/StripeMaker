@@ -119,6 +119,8 @@
       } else {
         tell("");
         moveBindings(sheets.selected, item);
+        separateMedianRoads(sheets.selected,item);
+        moveBindings(sheets.selected,item);
         sheets.save(sheets.selected);
         app.history.record();
         refreshList();
@@ -194,20 +196,34 @@
         : `${where.incoming ? "incoming" : "outgoing"} lanes ${where.after} and ${where.after + 1}`;
     const boundaryKey = (where) =>
       where === "center" ? "center" : `${where.incoming ? "in" : "out"}-${where.after}`;
+    // Start new islands at the approach throat, outside the crossing lanes.
+    // This is an editable geometric default, not a prescribed design length.
+    const initialMedianNose=(item,a,width)=>Math.max(width/2,Math.min(G.length(a)-5,G.dot(a,G.axes(a).u)-G.throat(item,a)));
+    const connectedApproach = a => Boolean(a.binding || a.links?.length);
+    function setMedianWidth(a,width) {
+      delete a.gap;delete a.medianInset;delete a.medianMouth;
+      if(a.binding)a.medianOverride=true;
+      a.median=width;
+    }
+    function syncBoundMedian(sheet,a){
+      if(!a.binding||!a.medianOverride)return;
+      const road=sheet.roads.find(r=>r.id===a.binding.road);if(!road)return;
+      for(const joint of sheet.joints)for(const link of joint.links)if(link.pair&&(link.a===road.id||link.b===road.id))link.median=a.median;
+    }
     function addMedian(approachId, where) {
       change((item) => {
         const a = item.approaches.find((a) => a.id === approachId);
-        if (!a || a.binding) return;
+        if (!a || !where) return;
         if (where === "center") {
-          a.median = NEW_MEDIAN_FEET;
-          delete a.gap;
+          setMedianWidth(a, NEW_MEDIAN_FEET);
+          if(connectedApproach(a))a.nose=initialMedianNose(item,a,NEW_MEDIAN_FEET);
         } else
           (a.splits ??= []).push({
             id: G.id(),
             incoming: where.incoming,
             after: where.after,
             width: NEW_MEDIAN_FEET,
-            nose: 50,
+            nose: connectedApproach(a)?initialMedianNose(item,a,NEW_MEDIAN_FEET):50,
             surface: "concrete",
           });
         chosen = a.id;
@@ -255,6 +271,7 @@
           fields,
         );
       }
+      if(connectedApproach(a))hint("Adding a median splits the connected road into separate, independently editable roads. Lane widths stay unchanged.");
       field(
         "Angle (°)",
         G.degrees(a.angle),
@@ -296,10 +313,11 @@
         (v) =>
           change(() => {
             a.width = v;
+            for(const id of a.inLanes)if(a.laneDetails?.[id])a.laneDetails[id].width=v;
           }),
         { min: 8, max: 20, step: 0.5, disabled: bound },
       );
-      field("Outgoing width (ft)", a.outWidth, v => change(() => { a.outWidth = v; }), { min: 8, max: 20, step: 0.5, disabled: bound });
+      field("Outgoing width (ft)", a.outWidth, v => change(() => { a.outWidth = v; for(const id of a.outLanes)if(a.laneDetails?.[id])a.laneDetails[id].width=v; }), { min: 8, max: 20, step: 0.5, disabled: bound });
       field("Corner radius (ft)", a.radius, (v) => change(() => (a.radius = v)), { max: 200, step: 0.5 });
       hint(
         "Radius rounds the corner clockwise from this approach; it is limited by the available space. Zero is square.",
@@ -329,7 +347,7 @@
       heading("Medians");
       hint(
         bound
-          ? "The center median follows the connected road."
+          ? "Medians split the connected road into separate roads. Width and nose settings remain editable."
           : "Click a + at the approach opening to add a median between those lanes. Drag a median's edge to widen it, or to zero to remove it; drag its nose to lengthen it.",
       );
       const surface = (value, set, key) =>
@@ -346,10 +364,9 @@
           a.median,
           (v) =>
             change(() => {
-              a.median = v;
-              delete a.gap;
+              setMedianWidth(a,v);
             }),
-          { key: "median", max: 200, step: 0.5, disabled: bound },
+          { key: "median", max: 200, step: 0.5 },
         );
         if (a.median > 0) {
           surface(a.surface, (v) => change(() => (a.surface = v)), "median-surface");
@@ -386,7 +403,7 @@
           for (const input of rows) group.append(input.parentElement);
           button("Remove Median", () => removeSplit(a.id, s.id), group);
         }
-      const free = bound ? [] : freeBoundaries(a);
+      const free = freeBoundaries(a);
       if (free.length) {
         const where = field("Add median between", boundaryKey(free[0]), () => {}, {
           key: "median-add",
@@ -497,7 +514,7 @@
         : { d: path(G.outline(item, margin).map(convert)), class: "roadBand" }, parent);
       for (const a of item.approaches)
         for (const median of G.medians(a)) {
-          const d = path(median.points.map(convert));
+          const d = path(G.medianSurface(a, median, margin).map(convert));
           svg("path", { d, fill: roads.medianStyle[median.surface] ?? roads.medianStyle.grass }, parent);
           if (median.surface !== "concrete") continue;
           // Reuse the existing median renderer's cited curb dimension and its
@@ -570,19 +587,22 @@
       // the nose on the island's own center, and back down the other side.
       // `center` is the island's center offset, `half` its half width, `ring` the
       // line's distance from that center.
-      const around = (a, center, half, nose, ring) => {
-        const tip = G.reach(a, half, nose) - half,
-          points = [G.local(a, center - ring), G.local(a, center - ring, -tip)];
+      const around = (a, center, half, nose, ring, mouthRing=ring) => {
+        const tip = G.reach(a, half, nose) - half,bend=Math.min(tip/2,Math.max(half,6)),
+          points = [G.local(a, center - mouthRing)];
+        if(mouthRing!==ring)points.push(G.local(a,center-ring,-bend));
+        points.push(G.local(a, center - ring, -tip));
         for (let i = 0; i <= 24; i++) {
           const t = (Math.PI * i) / 24;
           points.push(G.local(a, center - Math.cos(t) * ring, -tip - Math.sin(t) * ring));
         }
-        points.push(G.local(a, center + ring));
+        if(mouthRing!==ring)points.push(G.local(a,center+ring,-bend));
+        points.push(G.local(a, center + mouthRing));
         return points;
       };
       for (const a of item.approaches) {
         if (a.incoming && a.outgoing) {
-          if (a.median > 0) stroke(around(a, 0, a.median / 2, a.nose, G.gap(a) / 2), style.yellow);
+          if (a.median > 0) stroke(around(a, 0, a.median / 2, a.nose,a.medianInset?a.median/2+5/12:G.gap(a)/2,G.gap(a)/2), style.yellow);
           else {
             const reach = G.dot(a, G.axes(a).u) - G.throat(item, a);
             if (reach > 0)
@@ -595,7 +615,7 @@
         }
         for (const incoming of [true, false])
           for (const s of G.splits(a, incoming))
-            stroke(around(a, G.splitCenter(a, s), s.width / 2, s.nose, s.width / 2), style.white);
+            stroke(around(a, G.splitCenter(a, s), s.width / 2, s.nose, s.width / 2,s.inset?0:s.width/2), style.white);
       }
     }
 
@@ -826,7 +846,7 @@
         for (const incoming of [true, false]) {
           const lanes = incoming ? a.inLanes : a.outLanes;
           for (const [j, id] of lanes.entries()) {
-            const p = G.lane(a, incoming, j),
+            const p = G.ridingLane(a, incoming, j),
               u = G.axes(a).u,
               q = G.sub(p, G.mul(u, ARROW_FEET));
             const picked = incoming && id === inputLane;
@@ -961,7 +981,7 @@
       if (dragging?.type !== "link" || dragging.item !== item || !dragging.cursor) return;
       const parent = feetGroup(convert);
       const a = item.approaches.find((a) => a.id === dragging.approach),
-        p = G.lane(a, true, a.inLanes.indexOf(dragging.input));
+        p = G.ridingLane(a, true, a.inLanes.indexOf(dragging.input));
       let points = [p, dragging.cursor];
       if (dragging.target) {
         const b = item.approaches.find((a) => a.id === dragging.target.approach),
@@ -999,7 +1019,7 @@
         if (a.median > 0 && a.incoming && a.outgoing) {
           for (const incoming of [true, false])
             control(
-              convert(G.local(a, ((incoming ? -1 : 1) * a.median) / 2)),
+              convert(G.local(a, ((incoming ? -1 : 1) * a.median) / 2,a.medianInset?-Math.min((G.reach(a,a.median/2,a.nose)-a.median/2)/2,Math.max(a.median/2,6)):0)),
               `Approach ${i + 1} median ${incoming ? "incoming" : "outgoing"} edge`,
               `median-${a.id}-${incoming}`,
               pick,
@@ -1016,7 +1036,7 @@
             const remove = () => removeSplit(a.id, s.id);
             const outer = G.splitCenter(a, s) + ((incoming ? -1 : 1) * s.width) / 2;
             control(
-              convert(G.local(a, outer)),
+              convert(G.local(a, outer,s.inset?-Math.min((G.reach(a,s.width/2,s.nose)-s.width/2)/2,Math.max(s.width/2,6)):0)),
               `Approach ${i + 1} median between ${boundaryName(s)}, outer edge`,
               `split-${s.id}`,
               pick,
@@ -1031,8 +1051,7 @@
               { type: "splitNose", approach: a.id, split: s.id, remove },
             );
           }
-        if (!a.binding)
-          for (const where of freeBoundaries(a)) {
+        for (const where of freeBoundaries(a)) {
             const offset = where === "center" ? 0 : G.boundary(a, where.incoming, where.after);
             addControl(
               convert(G.local(a, offset, 6)),
@@ -1068,7 +1087,8 @@
     }
     // A road's cross section has no lane-splitting medians, so adopting one
     // drops them.
-    function adopt(sheet, item, a, end) {
+    function adopt(sheet, item, a, end, preserveMedians=false) {
+      const medians=preserveMedians?{splits:a.splits,...(a.medianOverride?{median:a.median,medianOverride:true}: {})}:{};
       Object.assign(a, {
         ...local(sheet, item, end),
         angle: G.degrees(end.angle),
@@ -1081,19 +1101,29 @@
         binding: end.binding,
       });
       delete a.splits;
+      if(preserveMedians)Object.assign(a,medians);
+      else {delete a.medianInset;delete a.medianMouth;}
       G.normalize(item);
+      G.normalize({...item,approaches:[a],movements:[]});
+      a.laneDetails={};
+      for(const [ids,details] of [[a.inLanes,end.inDetails],[a.outLanes,end.outDetails]])
+        ids.forEach((id,i)=>{if(details?.[i])a.laneDetails[id]={...details[i]};});
     }
     function reconcile(sheet, item, solved) {
       G.normalize(item);
       if (dragging?.item === item) return;
       for (const a of item.approaches) {
+        // Upgrade earlier inset islands to actual lane separators.
+        for(const split of a.splits??[])delete split.inset;
+        if(a.medianInset)setMedianWidth(a,a.median);
+        syncBoundMedian(sheet,a);
         if (!a.binding) continue;
         const end = roads.intersectionEnd(sheet, a.binding, solved);
         if (!end?.terminal) {
           delete a.binding;
           continue;
         }
-        adopt(sheet, item, a, end);
+        adopt(sheet, item, a, end,true);
       }
       for (const a of item.approaches) {
         if (!a.links) continue;
@@ -1102,6 +1132,10 @@
           return end?.terminal && !a.binding && laneOf(a, link) >= 0 && link.lane < roadLanes(sheet, link);
         });
         if (!a.links.length) delete a.links;
+        for(const link of a.links??[]) {
+          const end=roads.intersectionEnd(sheet,link,solved),detail=(link.e?end?.inDetails:end?.outDetails)?.[link.lane];
+          if(detail)(a.laneDetails??={})[link.to]={...detail};
+        }
       }
     }
     // Lane links pin one lane of a road end to one lane of an approach without
@@ -1137,9 +1171,50 @@
       }
       return best;
     }
+    function boundToLaneLinks(sheet,a){
+      if(!a.binding)return;
+      const end=roads.intersectionEnd(sheet,a.binding);if(!end)return;
+      a.links=end.ends.flatMap(ref=>{
+        const road=sheet.roads.find(r=>r.id===ref.road),ids=ref.e?a.inLanes:a.outLanes;
+        return Array.from({length:Math.min(road.lanes,ids.length)},(_,lane)=>({...ref,lane,to:ids[lane]}));
+      });
+      delete a.binding;delete a.medianOverride;
+    }
+    function separateMedianRoads(sheet,item){
+      sheet.medians=(sheet.medians??[]).filter(m=>{
+        const owner=m.intersectionMedian;if(owner?.intersection!==item.id)return true;
+        const split=item.approaches.find(a=>a.id===owner.approach)?.splits?.find(s=>s.id===owner.split);
+        if(!split||m.points.some(p=>p.on?.road&&!sheet.roads.some(r=>r.id===p.on.road)))return false;
+        m.type=split.surface??'concrete';return true;
+      });
+      for(const a of item.approaches){
+        if(!a.splits?.length)continue;
+        boundToLaneLinks(sheet,a);
+        const requests=new Map();
+        for(const split of a.splits){
+          const e=split.incoming?1:0,ids=e?a.inLanes:a.outLanes;
+          for(const link of a.links??[]){
+            if(link.e!==e)continue;
+            const road=sheet.roads.find(r=>r.id===link.road);if(!road)continue;
+            const base=ids.indexOf(link.to)-link.lane,at=split.after-base;
+            if(at<=0||at>=road.lanes)continue;
+            const cuts=requests.get(road)??new Map();cuts.set(at,{surface:split.surface??'concrete',owner:{intersection:item.id,approach:a.id,split:split.id}});requests.set(road,cuts);
+          }
+        }
+        for(const [road,cuts] of requests){
+          // Convert attachments at either end before remapping the lane IDs.
+          for(const other of sheet.intersections??[])for(const approach of other.approaches){
+            const end=approach.binding&&roads.intersectionEnd(sheet,approach.binding);
+            if(end?.ends.some(ref=>ref.road===road.id))boundToLaneLinks(sheet,approach);
+          }
+          roads.splitLaneGroups(sheet,road,[...cuts].map(([at,details])=>({at,...details})));
+        }
+      }
+    }
     function moveBindings(sheet, item) {
       const seen = new Set();
       for (const a of item.approaches) {
+        syncBoundMedian(sheet,a);
         if (!a.binding) continue;
         const end = roads.intersectionEnd(sheet, a.binding);
         if (!end || seen.has(end.joint)) continue;
@@ -1199,7 +1274,7 @@
         d.changed = G.length(delta) > 2;
         for (const a of item.approaches)
           for (const [i, output] of a.outLanes.entries()) {
-            const p = G.lane(a, false, i),
+            const p = G.ridingLane(a, false, i),
               v = G.sub(point, p),
               axes = G.axes(a);
             if (
@@ -1257,14 +1332,9 @@
           }
         }
       } else if (d.type === "median") {
-        if (a.binding) {
-          tell("Detach the approach to change its median width.");
-          return;
-        }
         const oldEdge = G.local(old, ((d.incoming ? -1 : 1) * old.median) / 2),
           wanted = G.add(oldEdge, delta);
-        a.median = G.clamp(2 * Math.abs(G.dot(G.sub(wanted, a), G.axes(a).n)), 0, 200);
-        delete a.gap;
+        setMedianWidth(a,G.clamp(2 * Math.abs(G.dot(G.sub(wanted, a), G.axes(a).n)), 0, 200));
       } else if (d.type === "nose")
         a.nose = G.clamp(old.nose - G.dot(delta, G.axes(a).u), 1, Math.max(1, G.length(a) - 5));
       else if (d.type === "split" || d.type === "splitNose") {
@@ -1275,9 +1345,9 @@
         else {
           // The inner edge stays on its lane boundary; the outer edge follows.
           const inner = G.boundary(old, oldS.incoming, oldS.after),
-            outer = inner + (oldS.incoming ? -1 : 1) * oldS.width,
+            outer = inner + (oldS.incoming ? -1 : 1) * oldS.width/(oldS.inset?2:1),
             wanted = outer + G.dot(delta, G.axes(a).n);
-          s.width = G.clamp((oldS.incoming ? -1 : 1) * (wanted - inner), 0, 100);
+          s.width = G.clamp((oldS.incoming ? -1 : 1) * (wanted - inner)*(oldS.inset?2:1), 0, 100);
         }
       } else if (d.type === "radius") {
         const next = G.ordered(item),
@@ -1603,6 +1673,7 @@
           a[key] = a[key].map((id) => {
             const next = G.id();
             map.set(id, next);
+            if(a.laneDetails?.[id]){a.laneDetails[next]=a.laneDetails[id];delete a.laneDetails[id];}
             return next;
           });
       }
@@ -1666,13 +1737,14 @@
     document.addEventListener("sheetview", refreshOverlay);
     window.addEventListener("resize", refreshOverlay);
     app.intersections = {
+      diagnostics: () => structuredClone({selected,chosen,inputLane,chosenMovement}),
       // For selection: an intersection's pavement outline (sheet pixels).
       outlineOf(sheet, item) {
         return G.outline(item, margin).map((p) => world(sheet, item, p));
       },
       // An intersection on free road ends (right-click Make Intersection): one
       // approach per end, each adopting that road's cross section.
-      makeAt(sheet, point, joints) {
+      makeAt(sheet, point, joints, { combineDivided = false } = {}) {
         const ends = roads.intersectionEnds(sheet).filter((end) => joints.includes(end.joint));
         if (ends.length < 2) return null;
         const item = G.create();
@@ -1685,6 +1757,43 @@
           adopt(sheet, item, a, end);
           return a;
         });
+        G.normalize(item);
+        if(combineDivided) {
+          // Separate one-way carriageways from a grouped crossing belong to
+          // one divided approach. Their facing left edges define the median;
+          // use explicit lane links rather than pairing the external roads.
+          // Nearby mouths are aligned to their common approach during creation. The existing median renderer supplies
+          // the rounded nose; grass is editable starting geometry.
+          const used=new Set(),merged=[];
+          for(const incoming of item.approaches) {
+            if(used.has(incoming.id))continue;
+            if(!incoming.incoming||incoming.outgoing){continue;}
+            const {u,n}=G.axes(incoming);
+            const candidates=item.approaches.filter(a=>!used.has(a.id)&&a.outgoing&&!a.incoming).map(a=>({a,
+              gap:G.dot(G.sub(a,incoming),n),along:Math.abs(G.dot(G.sub(a,incoming),u)),
+              parallel:G.dot(G.axes(a).u,u)}))
+              // Hand-drawn divided roads are rarely mathematically parallel.
+              // Allow up to 5 degrees and one lane width of mouth stagger;
+              // choose the nearest facing carriageway, never a crossing arm.
+              .filter(c=>c.gap>1&&c.gap<=200&&c.along<=Math.max(incoming.width,c.a.outWidth)&&c.parallel>=Math.cos(5*Math.PI/180)).sort((a,b)=>a.gap-b.gap);
+            const match=candidates[0];if(!match)continue;
+            const outgoing=match.a, direction=G.unit(G.add(u,G.axes(outgoing).u));
+            const angle=G.degrees(Math.atan2(direction.y,direction.x)*180/Math.PI);
+            const gap=G.dot(G.sub(outgoing,incoming),{x:-direction.y,y:direction.x});
+            const a={...incoming,x:(incoming.x+outgoing.x)/2,y:(incoming.y+outgoing.y)/2,angle,
+              outgoing:outgoing.outgoing,outWidth:outgoing.outWidth,outLanes:[...outgoing.outLanes],laneDetails:{...incoming.laneDetails,...outgoing.laneDetails},
+              gap,median:Math.max(0,gap-10/12),surface:"grass"};
+            // 10 inches is the double-yellow centerline spacing already used
+            // by G.gap and road pairing (FDOT 711-001, double solid lines).
+            a.links=[...incoming.inLanes.map((to,lane)=>({road:incoming.binding.road,e:1,lane,to})),
+              ...outgoing.outLanes.map((to,lane)=>({road:outgoing.binding.road,e:0,lane,to}))];
+            delete a.binding;
+            used.add(incoming.id);used.add(outgoing.id);merged.push(a);
+          }
+          item.approaches=[...item.approaches.filter(a=>!used.has(a.id)),...merged];
+          G.normalize(item);
+        }
+        for(const a of item.approaches)if(a.median>0){a.surface="grass";a.nose=initialMedianNose(item,a,a.median);}
         (sheet.intersections ??= []).push(item);
         selected = item.id;
         selectedSheet = sheet;
@@ -1702,7 +1811,7 @@
         for (const item of sheet.intersections ?? []) {
           reconcile(sheet, item, solved);
           paved.push(G.outline(item, margin).map((p) => world(sheet, item, p)));
-          for (const a of item.approaches) for (const median of G.medians(a)) holes.push(median.points.map((p) => world(sheet, item, p)));
+          for (const a of item.approaches) for (const median of G.medians(a)) holes.push(G.medianSurface(a,median,margin).map((p) => world(sheet, item, p)));
           const ordered = G.ordered(item);
           for (const a of item.approaches) {
             const b = ordered[(ordered.indexOf(a) + 1) % ordered.length];
@@ -1710,7 +1819,7 @@
               mouth: [G.edge(a, true, margin), G.edge(a, false, margin)],
               corner: G.corner(a, b, margin).points,
             };
-            for (const median of G.medians(a)) sides[median.key] = median.points;
+            for (const median of G.medians(a)) sides[median.key] = G.medianSurface(a,median,margin);
             for (const [side, points] of Object.entries(sides)) {
               const edge = points.map((p) => world(sheet, item, p));
               edge.on = { intersection: item.id, approach: a.id, side };
@@ -1771,12 +1880,14 @@
             const along = [0];
             for (let i = 1; i < route.length; i++) along.push(along[i - 1] + G.length(G.sub(route[i], route[i - 1])));
             const total = along.at(-1) || 1;
+            const startShift=a.laneDetails?.[m.input]?.centerShift??0,endShift=b.laneDetails?.[m.output]?.centerShift??0;
             for (const side of ["L", "R"]) {
               const points = route.map((p, i) => {
                 const prev = route[Math.max(0, i - 1)],
                   next = route[Math.min(route.length - 1, i + 1)],
                   t = G.unit(G.sub(next, prev)),
-                  half = (G.width(a, true) + (G.width(b, false) - G.width(a, true)) * (along[i] / total)) / 2,
+                  half = (G.width(a, true,a.inLanes.indexOf(m.input)) + (G.width(b, false,b.outLanes.indexOf(m.output)) - G.width(a, true,a.inLanes.indexOf(m.input))) * (along[i] / total)) / 2 +
+                    (side==="R"?-1:1)*(startShift+(endShift-startShift)*(along[i]/total)),
                   // Right of travel on the sheet (y down) is (-t.y, t.x).
                   n = side === "R" ? { x: -t.y, y: t.x } : { x: t.y, y: -t.x };
                 return world(sheet, item, G.add(p, G.mul(n, half)));
@@ -1801,16 +1912,17 @@
             for (const incoming of [true, false]) {
               const ids = incoming ? a.inLanes : a.outLanes;
               if (!ids?.length) continue;
-              const width = G.width(a, incoming);
               const edges = ids.map((_, j) => {
                 const left = incoming ? -G.boundary(a, true, j) : G.boundary(a, false, j);
-                return [left * k, (left + width) * k];
+                return [left * k, (left + G.width(a,incoming,j)) * k];
               });
               const ends = [world(sheet, item, G.local(a, 0, 0)), world(sheet, item, G.local(a, 0, -length))];
               tracks.push({
                 key: `i:${item.id}:${a.id}:${incoming ? "in" : "out"}`,
                 on: { intersection: item.id, approach: a.id, incoming },
                 lanes: ids,
+                laneDetails:ids.map(id=>a.laneDetails?.[id]??{}),
+                bikeLanes:ids.map(id=>["bike","bufferedBike","twoWayBike"].includes(a.laneDetails?.[id]?.type)),
                 line: incoming ? ends : ends.reverse(),
                 bounds: [edges, edges],
               });
@@ -1828,6 +1940,7 @@
             if (j >= 0) roads.alignLaneEnd(sheet, link, link.lane,
               world(sheet, item, G.lane(a, link.e === 1, j)), a.angle);
           }
+          separateMedianRoads(sheet,item);
         }
       },
       releaseRoad(sheet, road, e) {
@@ -1880,6 +1993,10 @@
             if (!a.links) continue;
             a.links = a.links.filter((link) => link.road !== road || link.e !== e);
             if (!a.links.length) delete a.links;
+        for(const link of a.links??[]) {
+          const end=roads.intersectionEnd(sheet,link,solved),detail=(link.e?end?.inDetails:end?.outDetails)?.[link.lane];
+          if(detail)(a.laneDetails??={})[link.to]={...detail};
+        }
           }
       },
       rehomeRoad(sheet, from, e, to, f) {

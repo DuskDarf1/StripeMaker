@@ -7,6 +7,7 @@
   <title>StripeMaker</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='86' font-size='86' text-anchor='middle'%3E%F0%9F%9B%A3%EF%B8%8F%3C/text%3E%3C/svg%3E" />
   <script src="js/vendor/geotiff.js"></script>
+  <script src="js/select-picker.js"></script>
   <script src="js/history.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/shortcuts.js"></script>
@@ -30,6 +31,7 @@
   <script src="js/markings.js"></script>
   <script src="js/surfaces.js"></script>
   <script src="js/download.js"></script>
+  <script src="js/project-json.js"></script>
   <script src="js/selection.js"></script>
   <script src="js/main.js"></script>
   <link href="css/page.css" rel="stylesheet" />
@@ -37,6 +39,7 @@
   <link href="css/menus.css" rel="stylesheet" />
   <link href="css/signs.css" rel="stylesheet" />
   <link href="css/markings.css" rel="stylesheet" />
+  <link href="css/select-picker.css" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
 </head>
 <body>
@@ -64,6 +67,8 @@
           <div id="bikeSetupLaneRow" class="fieldRow"><label for="bikeSetupLane">Bike lane</label><select id="bikeSetupLane"></select></div>
           <div id="bikeConflictRow" class="fieldRow"><label for="bikeConflict">Situation</label><select id="bikeConflict" aria-describedby="bikeConflictHelp bikeConflictStatus"><option value="auto">Automatic</option><option value="drop">Lane drops to right turn</option><option value="separate">Right-turn lane added</option><option value="freeflow">Free-flow ramp crossing</option><option value="channelized">Curbed turn crossing</option></select></div>
           <div id="bikeSpeedRow" class="fieldRow"><label for="bikeSpeed">Design speed (mph)</label><select id="bikeSpeed"><option value="0">Use drawn taper</option><option>35</option><option>40</option><option>45</option><option>50</option><option>55</option><option>60</option><option>65</option></select></div>
+          <div id="bikeCrossoverRow" class="fieldRow" hidden><label for="bikeCrossover">Continue markings through crossover</label><input id="bikeCrossover" type="checkbox" aria-describedby="bikeCrossoverHelp" /></div>
+          <p id="bikeCrossoverHelp" class="fieldHint" hidden>Continues both dotted edges and any colored pavement you placed through the crossover gap.</p>
           <p id="bikeConflictHelp" class="fieldHint"></p>
           <div class="headActions"><button id="bikeAddTurn" type="button">Add Outside Turn Lane</button></div>
           <p class="fieldHint">Add green pavement with the Markings tool. Its placement can span connected road segments.</p>
@@ -463,6 +468,11 @@
       <button type="button" id="downloadSheet" disabled>Download Sheet</button>
     </div>
     <p id="downloadStatus" role="status" aria-live="polite"></p>
+    <hr />
+    <div class="fieldRow"><label for="projectExportScope">JSON sheets</label><select id="projectExportScope"><option value="all">All sheets</option><option value="selected">Selected sheet</option></select></div>
+    <p class="headPopoverHint">Editable project, including original images, geometry, links, markings, and settings.</p>
+    <div class="headActions"><button type="button" id="exportProject">Export Project JSON</button></div>
+    <p id="projectExportStatus" role="status" aria-live="polite"></p>
   </section>
 
   <section id="settingsMenu" class="headsMenu" aria-labelledby="settingsTitle" hidden>
@@ -510,6 +520,11 @@
       <button type="button" id="setScale" disabled>Set Scale</button>
       <button type="button" id="removeSheet" disabled>Remove</button>
     </div>
+    <div class="headActions"><button type="button" id="importProject">Import Project JSON</button></div>
+    <input id="projectFile" type="file" accept=".json,application/json" hidden aria-label="Import project JSON" />
+    <div class="fieldRow"><label for="projectImportSettings">Use imported app settings</label><input id="projectImportSettings" type="checkbox" /></div>
+    <p class="headPopoverHint">Imports as new sheets. Existing sheets stay in place.</p>
+    <p id="projectImportStatus" role="status" aria-live="polite"></p>
     <input id="sheetFile" type="file" accept=".tif,.tiff,.jpg,.jpeg,.png,image/tiff,image/jpeg,image/png" multiple hidden aria-label="Upload sheet images" />
     <p id="sheetsEmpty">No sheets yet.</p>
     <ul id="sheetList" aria-label="Sheets"></ul>

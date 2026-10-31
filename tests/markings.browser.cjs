@@ -1,3 +1,4 @@
+const selectChoice=require('./select-choice.cjs');
 /* Same isolated Chromium setup as intersections.browser.cjs:
    PLAYWRIGHT_MODULE=/path/to/playwright node tests/markings.browser.cjs
    (STRIPEMAKER_URL optional; defaults to opening index.html directly). */
@@ -83,7 +84,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.locator('#markingContrast').check();
     assert.equal((await state())[0].contrast, 'border');
     assert(await page.evaluate(() => [...StripeMaker.sheets.selected.roadLayer.querySelectorAll('.laneMarkings path')].some(p => p.getAttribute('stroke') === '#000000')));
-    await page.locator('#markingContrastStyle').selectOption('block');
+    await selectChoice(page.locator('#markingContrastStyle'),'block');
     assert.equal((await state())[0].contrast, 'block');
 
     // Escape deselects; choose a stop line and Shift-click to span both lanes.
@@ -125,7 +126,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
     // A route shield.
     await page.locator('.markingHandle').focus(); await page.keyboard.press('Escape');
-    await page.locator('#chooseMarking').click(); await page.locator('#markingCategory').selectOption('Route shields');
+    await page.locator('#chooseMarking').click(); await selectChoice(page.locator('#markingCategory'),'Route shields');
     await page.locator('#markingGrid button').first().click();
     await page.locator('#markingRoute').fill('275');
     at = await client(await lane(end - 120, 0));

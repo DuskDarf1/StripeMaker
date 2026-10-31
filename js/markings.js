@@ -63,8 +63,8 @@
     function collect(sheet, solved) {
       const list = [];
       for (const t of app.roadEditor.laneTracks(sheet, solved)) {
-        list.push(prepare({ key: `r:${t.road}`, on: { road: t.road }, line: t.line,
-          bounds: t.bounds.map(b => b.slice(0, -1).map((left, k) => [left, b[k + 1]])) }));
+        list.push(prepare({ key: `r:${t.road}`, on: { road: t.road }, line: t.line, markingEdges:t.markingEdges,bikeLanes:t.bikeLanes,placementBounds:t.placementBounds,
+          bounds: t.laneBounds ?? t.bounds.map(b => b.slice(0, -1).map((left, k) => [left, b[k + 1]])) }));
       }
       for (const t of app.intersections?.laneTracks?.(sheet) ?? []) list.push(prepare(t));
       return new Map(list.map(t => [t.key, t]));
@@ -127,22 +127,26 @@
       const k = ppf(sheet);
       const line = kindOf(marking) === 'line';
       // Bike lanes are marked as such (one yield triangle instead of five).
-      const road = marking.on?.road != null ? sheets.selected?.roads.find(r => r.id === marking.on.road) : null;
+      const road = marking.on?.road != null ? sheet.roads.find(r => r.id === marking.on.road) : null;
+      const laneType=i=>road?.laneTypes?.[i]?.type??track.laneDetails?.[i]?.type;
+      const placementTrack=track.placementBounds?{...track,bounds:track.placementBounds}:track;
       // A buffered bike lane's riding space starts past its double line (6",
       // 8" gap, 6": 17" from the lane line's center) on the through-lane side,
       // so its markings center there.
       const riding = edges => edges.map(([l, r], i) => {
-        if (road?.laneTypes?.[i]?.type !== 'bufferedBike') return [l, r];
+        if (laneType(i) !== 'bufferedBike') return [l, r];
         const buffer = 17 / 12 * k;
-        return i > 0 || edges.length === 1 ? [l + buffer, r] : [l, r - buffer];
+        const halfStripe = 3 / 12 * k; // 6-inch edge stripe, measured to its center (711-001).
+        const bufferOnLeft=track.laneDetails?.[i]?.centerShift!=null?track.laneDetails[i].centerShift>=0:i>0||edges.length===1;
+        return bufferOnLeft ? [l + buffer, r - halfStripe] : [l + halfStripe, r - buffer];
       });
       const lanes = all => {
         const edges = riding(all), center = (edges[lane][0] + edges[lane][1]) / 2;
         return (line && marking.all ? edges.map((e, i) => [e, i]) : [[edges[lane], lane]])
-          .map(([[l, r], i]) => ({ left: (l - center) / k, right: (r - center) / k, bike: ['bike', 'bufferedBike', 'twoWayBike'].includes(road?.laneTypes?.[i]?.type) }));
+          .map(([[l, r], i]) => ({ left: (l - center) / k, right: (r - center) / k, bike: ['bike', 'bufferedBike', 'twoWayBike'].includes(laneType(i)) }));
       };
       const frame = d => {
-        const p = at(track, d), edges = riding(p.edges), c = (edges[lane][0] + edges[lane][1]) / 2;
+        const p = at(placementTrack, d), edges = riding(p.edges), c = (edges[lane][0] + edges[lane][1]) / 2;
         return { x: p.x + p.n.x * c, y: p.y + p.n.y * c, t: p.t, n: p.n, edges: p.edges };
       };
       const back = marking.back ?? 0;
@@ -217,7 +221,9 @@
           edges.push({ points, on: { road: track.on.road, side } });
         }
       }
-      for (const edge of app.intersections?.boundaries(sheet).edges ?? []) if (edge.on.side === 'corner') edges.push({ points: edge });
+      for (const edge of app.intersections?.boundaries(sheet).edges ?? [])
+        if (edge.on.side === 'corner' || edge.on.side === 'median' || edge.on.side.startsWith('split-'))
+          edges.push({ points: edge, on: { ...edge.on } });
       return edges;
     }
     const lengthOf = points => points.reduce((sum, p, i) => sum + (i ? Math.hypot(p.x - points[i - 1].x, p.y - points[i - 1].y) : 0), 0);
@@ -253,7 +259,8 @@
     }
     function endPoint(sheet, end) {
       if (!end?.on) return end;
-      const edge = pavementEdges(sheet).find(e => e.on?.road === end.on.road && e.on.side === end.on.side);
+      const key=on=>on?.intersection!=null?`i:${on.intersection}:${on.approach}:${on.side}`:on?.road!=null?`r:${on.road}:${on.side}`:null;
+      const edge = pavementEdges(sheet).find(e => key(e.on) === key(end.on));
       return edge ? alongEdge(edge.points, end.on.f) : end;
     }
     // Where the crosswalk's centerline crosses each lane line and lane center, with
@@ -270,15 +277,17 @@
       for (const track of tracks.values()) {
         const at = [];
         for (let k = 0; k <= track.count; k++) {
-          const line = boundaryLine(track, k);
+          const line = track.markingEdges?.[k] ?? boundaryLine(track, k);
           for (let i = 1; i < line.length && !at[k]; i++) {
             const p = hit(line[i - 1], line[i]);
-            if (p) at[k] = { ...p, t: track.tangents[i] };
+            if (p) at[k] = { ...p, t: unitVector(line[i-1],line[i]) };
           }
         }
         for (let k = 0; k < track.count; k++) {
+          // Use one full-size emphasis bar across each bike lane, including
+          // its buffer. Its two edge stripes must not become two narrow bars.
           if (at[k] && at[k + 1]) bars.push({ x: (at[k].x + at[k + 1].x) / 2, y: (at[k].y + at[k + 1].y) / 2, t: at[k].t });
-          if (k > 0 && at[k]) bars.push(at[k]);
+          if (k > 0 && at[k] && !track.bikeLanes?.[k] && !track.bikeLanes?.[k-1]) bars.push({...at[k],width:C.CROSSWALK.bar});
         }
         if (at[0]) centers.push({ ...at[0], key: track.key });
       }
@@ -294,13 +303,31 @@
       const a = endPoint(sheet, marking.a), b = endPoint(sheet, marking.b), k = ppf(sheet);
       if (!a || !b || Math.hypot(b.x - a.x, b.y - a.y) < k) return null;
       const feet = p => ({ x: p.x / k, y: p.y / k });
-      const g = C.crosswalk(marking, { ...feet(a), t: a.t }, { ...feet(b), t: b.t }, barsAcross(a, b).map(bar => ({ ...feet(bar), t: bar.t })));
+      const g = C.crosswalk(marking, { ...feet(a), t: a.t }, { ...feet(b), t: b.t }, barsAcross(a, b).map(bar => ({ ...feet(bar), t: bar.t, width:bar.width })));
       const parts = g.parts.map(part => ({ ...part, rings: part.rings.map(r => r.map(([x, y]) => ({ x: x * k, y: y * k }))) }));
       return { crosswalk: true, a, b, length: g.length, copies: [{ parts, hit: box(parts.flatMap(p => p.rings.flat()), unitVector(a, b)), center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }] };
     }
 
     // Drawn into the road layer's markings group (vector in PDF downloads). With
     // bridges, `place(point, road)` gives the group on the level each unit sits
+    // 711-001 sheet 9: longitudinal lane striping stops at the transverse
+    // crosswalk lines. Otherwise the second buffer stripe adds paint beside
+    // the emphasis bar, making the combined marking wider.
+    function crosswalkCuts(sheet, solved) {
+      const crossings=(sheet.markings??[]).filter(marking=>kindOf(marking)==='crosswalk');
+      if(!crossings.length)return [];
+      tracks=collect(sheet,solved);
+      const scale=ppf(sheet),cuts=[];
+      for(const marking of crossings) {
+        const a=endPoint(sheet,marking.a),b=endPoint(sheet,marking.b);
+        if(!a||!b)continue;
+        const toFeet=p=>({...p,x:p.x/scale,y:p.y/scale});
+        const parts=C.crosswalk({...marking,type:'crosswalk',contrast:false},toFeet(a),toFeet(b)).parts;
+        const first=parts[0].rings[0],second=parts[1].rings[0];
+        cuts.push([first[0],first[1],second[1],second[0]].map(([x,y])=>({x:x*scale,y:y*scale})));
+      }
+      return cuts;
+    }
     // on (null when that level is hidden).
     function draw(sheet, parent, solved, place = null) {
       tracks = collect(sheet, solved);
@@ -954,7 +981,7 @@
       return found && { on: laneRef(found.track, found.lane), back: (found.track.length - found.d) / ppf(sheets.selected) };
     };
     const outlines = id => drawn.get(id)?.copies.map(copy => copy.hit) ?? [];
-    app.markings = { draw, refreshOverlay, capture, rehome, openPicker, focusAt, hitAt, anchorAt, outlines, showTab, draftType: () => draft.type, tab: () => tab };
+    app.markings = { diagnostics: () => structuredClone({selected,tab,draft,crosswalkStart}), draw, crosswalkCuts, refreshOverlay, capture, rehome, openPicker, focusAt, hitAt, anchorAt, outlines, showTab, draftType: () => draft.type, tab: () => tab };
     showTab('lateral');
     updatePanel();
     app.roadEditor.render();

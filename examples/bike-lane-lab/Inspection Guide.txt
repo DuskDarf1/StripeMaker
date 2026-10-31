@@ -1,0 +1,428 @@
+BIKE LANE INSPECTION LIBRARY — 47 EDITABLE EXAMPLES
+
+IMPORT
+Refresh StripeMaker, open Sheets > Import Project JSON, and select Bike Lane Inspection Library.json. Leave Use imported app settings unchecked. These examples append to your existing sheets. Each sheet has a title and instructions on its background. All road geometry and markings are editable. Zoom into the crossing to inspect individual stripes.
+
+START HERE
+08: separate outside turn lane; 10: 3-to-2 drop; 12: ramp enters; 14: ramp exits; 16/18: crossing without a change in main-road lane count; 22: bus bay; 24: intersection approach; 26/28: straight/skew crosswalk; 30: manual green at entry.
+
+WHAT MAKES THE SITUATIONS ACTIVATE
+1. A Situation choice does not construct roads or connect bike lanes. The actual lane-to-lane links, receiving lane count, and tapers determine the crossing.
+2. Lane counts INCLUDE the bike lane. A 3-to-2 vehicle-lane drop here has FOUR total lanes upstream and THREE downstream.
+3. In the drop examples, upstream bike lane 4 connects to downstream bike lane 3. Upstream travel lane 3 feeds the ramp. Do not connect that travel lane to the receiving bike lane.
+4. In the entry examples, upstream bike lane 3 connects to downstream bike lane 4. The ramp feeds receiving travel lane 3.
+5. Use Add Outside Turn Lane in Bike Lane Setup, or right-click the right + triangle > Add Turn Lane on Right of Bike Lane. An ordinary + click adds a travel lane INSIDE the bike lane instead.
+6. Join END to START nodes in the direction of traffic. Road edges merely touching on the screen are not a connection. Cases 35/36 deliberately demonstrate this.
+7. An edge-to-edge branch is different from a lane-center feed. Cases 19/20 use edge links. Cases 15–18 use travel-lane feeds.
+8. Keep enough segment length for the treatment: these drop examples use 100 ft before the joint; entering lane-add examples use 200 ft after it. Cases 37/38 deliberately provide only 70 ft before the drop.
+9. No automatic green is used. Cases 29–32 contain explicit manual surfaces. The other cases contain none.
+10. Use Download > JSON sheets: Selected sheet > Export Project JSON to send a changed case back for diagnosis. Include its case number and what differs from your intended result.
+
+SCOPE AND VERIFICATION
+This is a reproducible library of the current app’s modeled bike-lane families and useful edge cases, not every conceivable road geometry. The curbed-turn setting is exercised by crossing ramp geometry; the fixtures do not add a physical raised island. Intersection examples demonstrate approach striping only, with no assigned movements or automatic bike path through the intersection. Two-way tracks are intentionally excluded from ordinary keyhole conflict rules.
+All 47 final sheets were imported into a clean browser and selected/rendered again. Editable model data matched after re-import. Expected conflict families activated; baseline and unjoined cases did not. Computed transition edges matched at connected ends, no NaN geometry occurred, and repeated cleanup did not change the geometry. Representative sheets were visually inspected. These checks establish reproducibility, not that every rendered detail is a standards-approved design.
+
+CASE INDEX AND EXACT CONNECTIONS
+Lane numbers below start at 1 from the left in the direction of travel. JSON lane indexes start at 0. L/R mean the entire road edge. Road IDs are local to each sheet.
+
+01 Straight bike lane [plain]
+Two travel lanes plus a bike lane. No crossing or dotted conflict is expected.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation auto
+
+02 Straight bike lane [buffered]
+Two travel lanes plus a bike lane. No crossing or dotted conflict is expected.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+
+03 Three connected segments [plain]
+Bike lane continues through two joints. Follow lane 3 across both nodes; phase should not restart.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation auto
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bike, 5 ft, situation auto
+  Road 3: 3 total lanes; joint 3 -> 4. lane 3: bike, 5 ft, situation auto
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+  Joint 3: road 2 lane 1 <-> road 3 lane 1
+  Joint 3: road 2 lane 2 <-> road 3 lane 2
+  Joint 3: road 2 lane 3 <-> road 3 lane 3
+
+04 Three connected segments [buffered]
+Bike lane continues through two joints. Follow lane 3 across both nodes; phase should not restart.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation auto
+  Road 3: 3 total lanes; joint 3 -> 4. lane 3: bufferedBike, 7 ft, situation auto
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+  Joint 3: road 2 lane 1 <-> road 3 lane 1
+  Joint 3: road 2 lane 2 <-> road 3 lane 2
+  Joint 3: road 2 lane 3 <-> road 3 lane 3
+
+05 Outside turn lane - no taper [plain]
+The downstream road adds lane 4 OUTSIDE bike lane 3. The bike lane is linked across the joint; crossing length defaults to 150 ft.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation auto
+  Road 2: 4 total lanes; joint 2 -> 3. lane 3: bike, 5 ft, situation auto
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+
+06 Outside turn lane - no taper [buffered]
+The downstream road adds lane 4 OUTSIDE bike lane 3. The bike lane is linked across the joint; crossing length defaults to 150 ft.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 4 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation auto
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+
+07 Separate right-turn lane - 45 mph [plain]
+Select the downstream road: Separate right-turn lane, design speed 45. Outside lane 4 has an 85-ft start taper.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation auto
+  Road 2: 4 total lanes; joint 2 -> 3. lane 3: bike, 5 ft, situation separate, design speed 45 mph
+    Lane 4 start: taper, 85 ft.
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+
+08 Separate right-turn lane - 45 mph [buffered]
+Select the downstream road: Separate right-turn lane, design speed 45. Outside lane 4 has an 85-ft start taper.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 4 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation separate, design speed 45 mph
+    Lane 4 start: taper, 85 ft.
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+
+09 Right-turn drop - 3 to 2 [plain]
+Three travel lanes become two. The right travel lane exits. Bike lane 4 connects to downstream bike lane 3; the move-over belongs before the joint.
+  Road 1: 4 total lanes; joint 1 -> 2. lane 4: bike, 5 ft, situation drop
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bike, 5 ft, situation drop
+  Road 3: 1 total lanes; joint 2 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 4 <-> road 2 lane 3
+  Joint 2: road 1 lane 3 <-> road 3 lane 1 (feed)
+
+10 Right-turn drop - 3 to 2 [buffered]
+Three travel lanes become two. The right travel lane exits. Bike lane 4 connects to downstream bike lane 3; the move-over belongs before the joint.
+  Road 1: 4 total lanes; joint 1 -> 2. lane 4: bufferedBike, 7 ft, situation drop
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation drop
+  Road 3: 1 total lanes; joint 2 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 4 <-> road 2 lane 3
+  Joint 2: road 1 lane 3 <-> road 3 lane 1 (feed)
+
+11 Free-flow ramp ENTERS [plain]
+Two travel lanes become three. Incoming ramp feeds lane 3; bike lane 3 connects to lane 4. Inspect the 200-ft receiving transition.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation freeflow
+  Road 2: 4 total lanes; joint 2 -> 3. lane 4: bike, 5 ft, situation freeflow
+  Road 3: 1 total lanes; joint 4 -> 2. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 4
+  Joint 2: road 3 lane 1 <-> road 2 lane 3 (feed)
+
+12 Free-flow ramp ENTERS [buffered]
+Two travel lanes become three. Incoming ramp feeds lane 3; bike lane 3 connects to lane 4. Inspect the 200-ft receiving transition.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation freeflow
+  Road 2: 4 total lanes; joint 2 -> 3. lane 4: bufferedBike, 7 ft, situation freeflow
+  Road 3: 1 total lanes; joint 4 -> 2. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 4
+  Joint 2: road 3 lane 1 <-> road 2 lane 3 (feed)
+
+13 Free-flow ramp EXITS [plain]
+Three travel lanes become two. Ramp splits off from travel lane 3; bike lane 4 connects to lane 3. Compare with the drop case.
+  Road 1: 4 total lanes; joint 1 -> 2. lane 4: bike, 5 ft, situation freeflow
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bike, 5 ft, situation freeflow
+  Road 3: 1 total lanes; joint 2 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 4 <-> road 2 lane 3
+  Joint 2: road 1 lane 3 <-> road 3 lane 1 (feed)
+
+14 Free-flow ramp EXITS [buffered]
+Three travel lanes become two. Ramp splits off from travel lane 3; bike lane 4 connects to lane 3. Compare with the drop case.
+  Road 1: 4 total lanes; joint 1 -> 2. lane 4: bufferedBike, 7 ft, situation freeflow
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation freeflow
+  Road 3: 1 total lanes; joint 2 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 4 <-> road 2 lane 3
+  Joint 2: road 1 lane 3 <-> road 3 lane 1 (feed)
+
+15 Crossing ramp - no lane drop [plain]
+Through road keeps two travel lanes and its bike lane. A branch leaves travel lane 2 and crosses the bike lane. Dots follow pavement overlap.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation channelized
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bike, 5 ft, situation channelized
+  Road 3: 1 total lanes; joint 2 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+  Joint 2: road 1 lane 2 <-> road 3 lane 1 (feed)
+
+16 Crossing ramp - no lane drop [buffered]
+Through road keeps two travel lanes and its bike lane. A branch leaves travel lane 2 and crosses the bike lane. Dots follow pavement overlap.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation channelized
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation channelized
+  Road 3: 1 total lanes; joint 2 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+  Joint 2: road 1 lane 2 <-> road 3 lane 1 (feed)
+
+17 Crossing ramp - no lane add [plain]
+Main road stays two travel lanes plus bike. Ramp merges into travel lane 2 across the bike lane; no new through lane.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation channelized
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bike, 5 ft, situation channelized
+  Road 3: 1 total lanes; joint 4 -> 2. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+  Joint 2: road 3 lane 1 <-> road 2 lane 2 (feed)
+
+18 Crossing ramp - no lane add [buffered]
+Main road stays two travel lanes plus bike. Ramp merges into travel lane 2 across the bike lane; no new through lane.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation channelized
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation channelized
+  Road 3: 1 total lanes; joint 4 -> 2. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+  Joint 2: road 3 lane 1 <-> road 2 lane 2 (feed)
+
+19 Ramp starts beside bike lane [plain]
+Ramp attaches edge-to-edge OUTSIDE the bike lane. Compare with a head-on lane feed; these links are different.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation freeflow
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bike, 5 ft, situation freeflow
+  Road 3: 1 total lanes; joint 2 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+  Joint 2: road 2 lane R edge <-> road 3 lane L edge
+
+20 Ramp starts beside bike lane [buffered]
+Ramp attaches edge-to-edge OUTSIDE the bike lane. Compare with a head-on lane feed; these links are different.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation freeflow
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation freeflow
+  Road 3: 1 total lanes; joint 2 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+  Joint 2: road 2 lane R edge <-> road 3 lane L edge
+
+21 Bus bay - entry and exit tapers [plain]
+Outside lane 4 has 80-ft tapers at BOTH ends. Bike lane stays straight; dotted crossings at both tapers, solid between.
+  Road 1: 4 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation auto
+    Lane 4 start: taper, 80 ft.
+    Lane 4 end: taper, 80 ft.
+
+22 Bus bay - entry and exit tapers [buffered]
+Outside lane 4 has 80-ft tapers at BOTH ends. Bike lane stays straight; dotted crossings at both tapers, solid between.
+  Road 1: 4 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+    Lane 4 start: taper, 80 ft.
+    Lane 4 end: taper, 80 ft.
+
+23 Attached intersection approach [plain]
+Bike lane reaches an attached intersection mouth. Inspect the last 150 ft of its inside line/buffer. No intersection movements are assigned.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation auto
+  Road 2: 2 total lanes; joint 3 -> 4. 
+  Road 3: 2 total lanes; joint 5 -> 6. 
+  Road 4: 2 total lanes; joint 7 -> 8. 
+
+24 Attached intersection approach [buffered]
+Bike lane reaches an attached intersection mouth. Inspect the last 150 ft of its inside line/buffer. No intersection movements are assigned.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 2 total lanes; joint 3 -> 4. 
+  Road 3: 2 total lanes; joint 5 -> 6. 
+  Road 4: 2 total lanes; joint 7 -> 8. 
+
+25 Crosswalk - bike emphasis bars [plain]
+Bike lane lies between two vehicle lanes. Inspect the 12-inch bike boundary bars, 24-inch vehicle bars, and clear bike riding space.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 2: bike, 5 ft, situation auto
+
+26 Crosswalk - bike emphasis bars [buffered]
+Bike lane lies between two vehicle lanes. Inspect the 12-inch bike boundary bars, 24-inch vehicle bars, and clear bike riding space.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 2: bufferedBike, 7 ft, situation auto
+
+27 Skew crosswalk - bike emphasis bars [plain]
+Same crosswalk at an angle. Bike-boundary bars stay 12 inches wide measured across the lane; buffered lines stop inside the crosswalk.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 2: bike, 5 ft, situation auto
+
+28 Skew crosswalk - bike emphasis bars [buffered]
+Same crosswalk at an angle. Bike-boundary bars stay 12 inches wide measured across the lane; buffered lines stop inside the crosswalk.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 2: bufferedBike, 7 ft, situation auto
+
+29 Manual green at ramp entry [plain]
+Explicit green pavement spans the connected bike lanes across a ramp entry. It follows the white dotted phase and leaves the weaving gap unpainted.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation freeflow
+  Road 2: 4 total lanes; joint 2 -> 3. lane 4: bike, 5 ft, situation freeflow
+  Road 3: 1 total lanes; joint 4 -> 2. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 4
+  Joint 2: road 3 lane 1 <-> road 2 lane 3 (feed)
+
+30 Manual green at ramp entry [buffered]
+Explicit green pavement spans the connected bike lanes across a ramp entry. It follows the white dotted phase and leaves the weaving gap unpainted.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation freeflow
+  Road 2: 4 total lanes; joint 2 -> 3. lane 4: bufferedBike, 7 ft, situation freeflow
+  Road 3: 1 total lanes; joint 4 -> 2. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 4
+  Joint 2: road 3 lane 1 <-> road 2 lane 3 (feed)
+
+31 Manual green across three nodes [plain]
+One manually placed colored-pavement span covers connected bike lanes. This is explicit marking-tool data, never automatic green.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation auto
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bike, 5 ft, situation auto
+  Road 3: 3 total lanes; joint 3 -> 4. lane 3: bike, 5 ft, situation auto
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+  Joint 3: road 2 lane 1 <-> road 3 lane 1
+  Joint 3: road 2 lane 2 <-> road 3 lane 2
+  Joint 3: road 2 lane 3 <-> road 3 lane 3
+
+32 Manual green across three nodes [buffered]
+One manually placed colored-pavement span covers connected bike lanes. This is explicit marking-tool data, never automatic green.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation auto
+  Road 3: 3 total lanes; joint 3 -> 4. lane 3: bufferedBike, 7 ft, situation auto
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+  Joint 3: road 2 lane 1 <-> road 3 lane 1
+  Joint 3: road 2 lane 2 <-> road 3 lane 2
+  Joint 3: road 2 lane 3 <-> road 3 lane 3
+
+33 Drop with skew and width change [plain]
+Drop geometry with an independently turned receiving end and wider receiving bike lane. Check both white boundaries at the joint.
+  Road 1: 4 total lanes; joint 1 -> 2. lane 4: bike, 5 ft, situation drop
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bike, 6 ft, situation drop
+  Road 3: 1 total lanes; joint 2 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 4 <-> road 2 lane 3
+  Joint 2: road 1 lane 3 <-> road 3 lane 1 (feed)
+
+34 Drop with skew and width change [buffered]
+Drop geometry with an independently turned receiving end and wider receiving bike lane. Check both white boundaries at the joint.
+  Road 1: 4 total lanes; joint 1 -> 2. lane 4: bufferedBike, 7 ft, situation drop
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bufferedBike, 9 ft, situation drop
+  Road 3: 1 total lanes; joint 2 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 4 <-> road 2 lane 3
+  Joint 2: road 1 lane 3 <-> road 3 lane 1 (feed)
+
+35 NEGATIVE - ramp not joined [plain]
+Ramp visually touches the joint but uses a DIFFERENT joint ID. It is not connected. Matching position alone does not create a conflict.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation auto
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bike, 5 ft, situation auto
+  Road 3: 1 total lanes; joint 5 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+
+36 NEGATIVE - ramp not joined [buffered]
+Ramp visually touches the joint but uses a DIFFERENT joint ID. It is not connected. Matching position alone does not create a conflict.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation auto
+  Road 3: 1 total lanes; joint 5 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+
+37 NEGATIVE - drop approach too short [plain]
+Only 70 ft before the drop, less than the 100-ft move-over treatment. Select the approach and read the length warning.
+  Road 1: 4 total lanes; joint 1 -> 2. lane 4: bike, 5 ft, situation drop
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bike, 5 ft, situation drop
+  Road 3: 1 total lanes; joint 2 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 4 <-> road 2 lane 3
+  Joint 2: road 1 lane 3 <-> road 3 lane 1 (feed)
+
+38 NEGATIVE - drop approach too short [buffered]
+Only 70 ft before the drop, less than the 100-ft move-over treatment. Select the approach and read the length warning.
+  Road 1: 4 total lanes; joint 1 -> 2. lane 4: bufferedBike, 7 ft, situation drop
+  Road 2: 3 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation drop
+  Road 3: 1 total lanes; joint 2 -> 4. 
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 4 <-> road 2 lane 3
+  Joint 2: road 1 lane 3 <-> road 3 lane 1 (feed)
+
+39 Two-way road with bike lanes [plain]
+Opposite three-lane road groups paired at both ends: two travel lanes and one bike lane in each direction.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bike, 5 ft, situation auto
+  Road 2: 3 total lanes; joint 2 -> 1. lane 3: bike, 5 ft, situation auto
+  Joint 1: road 1 lane 1 <-> road 2 lane 1 (pair)
+  Joint 2: road 1 lane 1 <-> road 2 lane 1 (pair)
+
+40 Two-way road with bike lanes [buffered]
+Opposite three-lane road groups paired at both ends: two travel lanes and one bike lane in each direction.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 3 total lanes; joint 2 -> 1. lane 3: bufferedBike, 7 ft, situation auto
+  Joint 1: road 1 lane 1 <-> road 2 lane 1 (pair)
+  Joint 2: road 1 lane 1 <-> road 2 lane 1 (pair)
+
+41 Separate turn - 35 mph [buffered]
+Outside turn-lane start taper follows the design-speed table. Compare with the 45 mph case.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 4 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation separate, design speed 35 mph
+    Lane 4 start: taper, 70 ft.
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+
+42 Separate turn - 40 mph [buffered]
+Outside turn-lane start taper follows the design-speed table. Compare with the 45 mph case.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 4 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation separate, design speed 40 mph
+    Lane 4 start: taper, 80 ft.
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+
+43 Separate turn - 50 mph [buffered]
+Outside turn-lane start taper follows the design-speed table. Compare with the 45 mph case.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 4 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation separate, design speed 50 mph
+    Lane 4 start: taper, 105 ft.
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+
+44 Separate turn - 55 mph [buffered]
+Outside turn-lane start taper follows the design-speed table. Compare with the 45 mph case.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 4 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation separate, design speed 55 mph
+    Lane 4 start: taper, 125 ft.
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+
+45 Separate turn - 60 mph [buffered]
+Outside turn-lane start taper follows the design-speed table. Compare with the 45 mph case.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 4 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation separate, design speed 60 mph
+    Lane 4 start: taper, 145 ft.
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+
+46 Separate turn - 65 mph [buffered]
+Outside turn-lane start taper follows the design-speed table. Compare with the 45 mph case.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: bufferedBike, 7 ft, situation auto
+  Road 2: 4 total lanes; joint 2 -> 3. lane 3: bufferedBike, 7 ft, situation separate, design speed 65 mph
+    Lane 4 start: taper, 170 ft.
+  Joint 2: road 1 lane 1 <-> road 2 lane 1
+  Joint 2: road 1 lane 2 <-> road 2 lane 2
+  Joint 2: road 1 lane 3 <-> road 2 lane 3
+
+47 Two-way bike track [track]
+A 12-ft two-way track beside travel lanes. It has a broken yellow centerline and is excluded from ordinary keyhole conflict logic.
+  Road 1: 3 total lanes; joint 1 -> 2. lane 3: twoWayBike, 12 ft, situation auto

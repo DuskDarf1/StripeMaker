@@ -91,3 +91,20 @@ test('bike widths survive vehicle feeds and generic intersection mouths',()=>{
  a.laneTypes[1]={type:'bike',width:5};assert.equal(endWidth(s,a,1,1),5);
  a.perLaneWidths=true;a.laneEndWidths={'1:1':6};assert.equal(endWidth(s,a,1,1),6);
 });
+test('connected split medians add space without changing lane widths and preserve their profile across cuts',()=>{
+ const W=require('../js/road-widths.js');
+ const r={...road(1,12,1,2),lanes:2};
+ const a={incoming:2,outgoing:0,width:12,inLanes:['a','b'],outLanes:[],links:[{road:1,e:1,lane:0,to:'a'},{road:1,e:1,lane:1,to:'b'}],splits:[{incoming:true,after:1,width:6,surface:'concrete'}]};
+ const s={roads:[r],joints:[{id:1,links:[]},{id:2,links:[]}],intersections:[{approaches:[a]}]};
+ assert.equal(W.endGaps(s,r,0)[1].width,0);assert.equal(W.endGaps(s,r,1)[1].width,6);
+ assert.equal(W.endWidth(s,r,1,0),12);assert.equal(W.endWidth(s,r,1,1),12);
+ assert.equal(W.gapAt(r,1,.5,0,6),3);
+ const [first,last]=W.splitGaps(s,r,.4);
+ const left={...r,gapProfiles:first},right={...r,gapProfiles:last};
+ const loose={...s,intersections:[]};
+ for(const [part,from,to] of [[left,0,.4],[right,.4,1]])for(const f of [0,.2,.7,1]){
+  const ends=[0,1].map(e=>W.endGaps(loose,part,e)[1].width);
+  assert(Math.abs(W.gapAt(part,1,f,...ends)-W.gapAt(r,1,from+(to-from)*f,0,6))<1e-9);
+ }
+ assert.doesNotThrow(()=>W.endGaps(s,{lanes:2,laneWidth:12},0),'drawing previews have no road ends yet');
+});

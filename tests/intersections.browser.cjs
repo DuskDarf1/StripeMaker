@@ -1,3 +1,4 @@
+const selectChoice=require('./select-choice.cjs');
 /* Run against a local server in an isolated browser profile:
    PLAYWRIGHT_MODULE=/path/to/playwright CHROME_PATH=/path/to/chrome \
    STRIPEMAKER_URL=http://127.0.0.1:8876 node tests/intersections.browser.cjs */
@@ -114,9 +115,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
     assert.equal(JSON.stringify(await state()), original, "adding an approach is one undo step");
     await fill("Center median (ft)", 12);
-    await panel.locator("#intersection-median-surface").selectOption("concrete");
+    await selectChoice(panel.locator("#intersection-median-surface"),"concrete");
     await fill("Corner radius (ft)", 0);
-    await panel.getByLabel("Edit curve", { exact: true }).selectOption({ index: 1 });
+    await selectChoice(panel.getByLabel("Edit curve", { exact: true }),{ index: 1 });
     await fill("Entry pull (ft)", 77);
     let first = (await state())[0].approaches[0];
     assert.equal(first.median, 12);
@@ -192,7 +193,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.locator("#redoButton").click();
     assert.ok((await state())[0].approaches[0].binding);
     await open();
-    await panel.getByLabel("Approach", { exact: true }).selectOption({ index: 0 });
+    await selectChoice(panel.getByLabel("Approach", { exact: true }),{ index: 0 });
     assert.ok(await panel.getByLabel("Incoming width (ft)", { exact: true }).isDisabled());
     console.log("attachment history passed");
     // Moving the road updates the attached opening without changing another mouth.
@@ -412,7 +413,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     await page.mouse.click(emptyPoint.x + 40, emptyPoint.y - 20);
     assert.ok(await sheetPanel.isVisible(), "panning and empty clicks keep the panel open");
     assert.equal(await page.locator(".intersectionOutline").count(), 1, "intersection stays selected");
-    await sheetPanel.getByLabel("Approach", { exact: true }).selectOption({ index: 1 });
+    await selectChoice(sheetPanel.getByLabel("Approach", { exact: true }),{ index: 1 });
     const panelBefore = JSON.stringify(await state());
     await sheetPanel.getByLabel("Corner radius (ft)", { exact: true }).fill("33");
     await sheetPanel.getByLabel("Corner radius (ft)", { exact: true }).press("Tab");
@@ -447,7 +448,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     console.log("sheet panel and movement editing passed");
     // A + at a lane boundary adds a median between those lanes; its edge drags
     // its width, the Delete key removes it, and the center median has a + too.
-    await panel.getByLabel("Approach", { exact: true }).selectOption({ index: 1 });
+    await selectChoice(panel.getByLabel("Approach", { exact: true }),{ index: 1 });
     await fill("Incoming lanes", 2);
     const splitBefore = JSON.stringify(await state());
     await page

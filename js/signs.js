@@ -553,7 +553,7 @@
     const box = sign => { const { width, height } = dimensions(sign); return { x: sign.x, y: sign.y, width, height, rotation: sign.rotation ?? 0 }; };
     // Opens a sign in the Signs panel, selected (right-click Edit).
     const focus = id => { app.showEditor?.('signsEditor'); selected=id; selectedSheet=sheets.selected; partIndex=0; refreshOverlay(); updatePanel(); };
-    app.signs={draw,refreshOverlay,ready,box,focus};
+    app.signs={diagnostics:()=>structuredClone({selected,draft:draft(),partIndex,appendPanel}),draw,refreshOverlay,ready,box,focus};
     loadCatalog().then(async()=>{await loadArt(choice);updatePanel();if(sheets.selected)return ready(sheets.selected);}).catch(error=>tell(error.message));
     updatePanel();
   });

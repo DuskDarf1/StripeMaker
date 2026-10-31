@@ -173,13 +173,14 @@
       const widths = Array.from({ length: road.lanes }, (_, i) => e == null
         ? window.StripeMaker.roadWidths.laneWidth(road, i) : window.StripeMaker.roadWidths.endWidth(sheet, road, e, i));
       const index = Math.min(lane, road.lanes - 1);
-      const before = widths.slice(0, Math.max(0, Math.ceil(index))).reduce((a, b) => a + b, 0);
-      return feetToPixels(sheet, before + (index < 0 ? 0 : widths[index] / 2) - widths.reduce((a,b) => a+b, 0) / 2);
+      const gaps=e==null?widths.map(()=>0):window.StripeMaker.roadWidths.endGaps(sheet,road,e).map(g=>g.width);
+      const before = widths.slice(0, Math.max(0, Math.ceil(index))).reduce((a, b) => a + b, 0)+gaps.slice(0,Math.max(0,index+1)).reduce((a,b)=>a+b,0);
+      return feetToPixels(sheet, before + (index < 0 ? 0 : widths[index] / 2) - (widths.reduce((a,b) => a+b, 0)+gaps.reduce((a,b)=>a+b,0)) / 2);
     };
     // A link names a lane by index, or a road's left ("L") or right ("R") edge line,
     // so roads can be joined edge to edge as well as lane to lane.
     const linkLateral = (sheet, road, index, e) => (index === "L" || index === "R"
-      ? (index === "R" ? 1 : -1) * road.lanes * feetToPixels(sheet, endWidth(sheet, road, e)) / 2
+      ? (index === "R" ? 1 : -1) * feetToPixels(sheet,road.lanes*endWidth(sheet,road,e)+window.StripeMaker.roadWidths.endGaps(sheet,road,e).reduce((sum,g)=>sum+g.width,0))/2
       : laneLateral(sheet, road, index, e));
     const pairOf = (sheet, road) => road && sheet.roads.find(other => other !== road
       && other.ends[0].joint === road.ends[1].joint && other.ends[1].joint === road.ends[0].joint);
@@ -209,14 +210,14 @@
     // links place the rest sideways so their linked lanes coincide.
     function solve(sheet) {
       layerFor(sheet);
-      const solved = Object.assign(new Map(), { auto: new Set(), shapes: new Map() });
+      const solved = Object.assign(new Map(), { auto: new Set(), shapes: new Map(), dropLaneEnds: new Map(), dropLaneTargets: new Map(), dropPavementEnds: new Map() });
       const separation = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES);
       for (const joint of sheet.joints) {
         const here = attachments(sheet, joint);
         if (!here.length) continue;
         const byRoad = new Map(here.map(item => [item.road.id, item]));
         const root = byRoad.has(joint.root) ? joint.root : here[0].road.id;
-        const offsets = new Map([[root, 0]]);
+        const offsets = new Map([[root, 0]]), dropBranches=[];
         for (let grew = true; grew;) {
           grew = false;
           for (const link of joint.links) {
@@ -232,6 +233,40 @@
             }
           }
         }
+        // FDM 2027 Exhibit 223-3 B: after cyclists cross inward, the
+        // dropped vehicle lane occupies the OUTSIDE slot. Its ramp must meet
+        // the receiving bike lane's outside edge, not the old vehicle center
+        // (which is now occupied by the bike lane). Keep stored lane links.
+        // https://www.fdot.gov/roadway/fdm/default.shtm (223, Exhibit 223-3 B)
+        const connected = laneLinks(sheet, joint);
+        for (const bikeLink of connected) {
+          const {from,to,fromLane,toLane}=bikeLink;
+          if(!["bike","bufferedBike"].includes(bikeType(from,fromLane)) || !bikeType(to,toLane) || fromLane!==from.lanes-1 || toLane!==to.lanes-1 || toLane>=fromLane)continue;
+          if([from.laneTypes[fromLane],to.laneTypes[toLane]].some(t=>["separate","channelized"].includes(t?.conflict)))continue;
+          const incoming=byRoad.get(from.id),through=byRoad.get(to.id);
+          if(!incoming||!through||!offsets.has(from.id)||!offsets.has(to.id))continue;
+          const center=(r,l,e)=>laneLateral(sheet,r,l,e);
+          const half=(r,l,e)=>feetToPixels(sheet,window.StripeMaker.roadWidths.endWidth(sheet,r,e,l))/2;
+          // Only an actual inward move with a separate departing vehicle feed.
+          const oldBike=offsets.get(from.id)+incoming.end.sign*center(from,fromLane,1);
+          const newBike=offsets.get(to.id)+through.end.sign*center(to,toLane,0);
+          if((newBike-oldBike)*incoming.end.sign>=-feetToPixels(sheet,from.laneWidth)/2)continue;
+          for(const turn of connected.filter(l=>l.from===from&&l.to!==to&&l.fromLane>=toLane&&l.fromLane<fromLane&&!bikeType(l.to,l.toLane))) {
+            const branch=byRoad.get(turn.to.id);if(!branch||!offsets.has(turn.to.id))continue;
+            const outside=offsets.get(to.id)+through.end.sign*(center(to,toLane,0)+half(to,toLane,0));
+            // Several dropped lanes retain their order outside the bike lane.
+            let preceding=0;for(let k=toLane;k<turn.fromLane;k++)preceding+=2*half(from,k,1);
+            const target=outside+incoming.end.sign*(preceding+half(from,turn.fromLane,1));
+            const next=target-branch.end.sign*center(turn.to,turn.toLane,0);
+            const delta=next-offsets.get(turn.to.id);
+            if(turn.to.id===root){for(const [id,value] of offsets)if(id!==root)offsets.set(id,value-delta);}
+            else offsets.set(turn.to.id,next);
+            const actual=offsets.get(turn.to.id)+branch.end.sign*center(turn.to,turn.toLane,0);
+            const original=offsets.get(from.id)+incoming.end.sign*center(from,turn.fromLane,1);
+            solved.dropLaneEnds.set(`${from.id}:1:${turn.fromLane}`,(actual-original)*incoming.end.sign);
+            dropBranches.push({from,to,turn});
+          }
+        }
         // A two-way road's joint sits on its centerline: midway between the two
         // yellow lines (across the median, if any).
         const pairLink = joint.links.find(link => link.pair && offsets.has(link.a) && offsets.has(link.b));
@@ -243,7 +278,7 @@
         }
         // Lanes that don't continue across a joint taper automatically: ending
         // lanes drop, starting lanes are added.
-        const lateral = (item, lane) => (offsets.get(item.road.id) ?? 0) + item.end.sign * laneLateral(sheet, item.road, lane, item.e);
+        const lateral = (item, lane) => (offsets.get(item.road.id) ?? 0) + item.end.sign * (laneLateral(sheet, item.road, lane, item.e) + (solved.dropLaneEnds.get(`${item.road.id}:${item.e}:${lane}`)??0));
         for (const item of here) {
           const across = here.filter(other => other.e !== item.e && other.end.sign === item.end.sign);
           if (!across.length) continue;
@@ -263,6 +298,24 @@
             // its road's travel); otherwise it leaves along the joint's.
             travel: end.dir ?? (joint.dir && { x: joint.dir.x * end.sign, y: joint.dir.y * end.sign }),
           });
+        }
+        // Match world-space edges too when the receiving end was turned
+        // independently. A scalar lateral shift alone misses its tilted edge.
+        for(const {from,to,turn} of dropBranches) {
+          const through=solved.get(`${to.id}:0`),branch=solved.get(`${turn.to.id}:0`);
+          const normal=at=>rightOf(at.travel??joint.dir??{x:0,y:-1});
+          const edge=(r,k,e)=>linkLateral(sheet,r,k,e);
+          const tr=normal(through),br=normal(branch);
+          const target={x:through.x+tr.x*edge(to,"R",0),y:through.y+tr.y*edge(to,"R",0)};
+          const branchLeft=laneLateral(sheet,turn.to,turn.toLane,0)-feetToPixels(sheet,window.StripeMaker.roadWidths.endWidth(sheet,turn.to,0,turn.toLane))/2;
+          let preceding=0;for(let k=to.lanes-1;k<turn.fromLane;k++)preceding+=feetToPixels(sheet,window.StripeMaker.roadWidths.endWidth(sheet,from,1,k));
+          const dx=target.x+br.x*(preceding-branchLeft)-branch.x,dy=target.y+br.y*(preceding-branchLeft)-branch.y;
+          if(turn.to.id===root){for(const item of here)if(item.road.id!==root){const at=solved.get(`${item.road.id}:${item.e}`);at.x-=dx;at.y-=dy;}}
+          else {branch.x+=dx;branch.y+=dy;}
+          const center=laneLateral(sheet,turn.to,turn.toLane,0);
+          solved.dropLaneTargets.set(`${from.id}:1:${turn.fromLane}`,{x:branch.x+br.x*center,y:branch.y+br.y*center});
+          if(turn.fromLane===from.lanes-2){const outer=center+feetToPixels(sheet,window.StripeMaker.roadWidths.endWidth(sheet,turn.to,0,turn.toLane))/2;
+            solved.dropPavementEnds.set(from.id,{x:branch.x+br.x*outer,y:branch.y+br.y*outer});}
         }
       }
       return solved;
@@ -337,10 +390,12 @@
       while (anchor < road.lanes - 1 && tapered(anchor)) anchor++;
       const roadWidths = window.StripeMaker.roadWidths;
       const ends = Array.from({ length: road.lanes }, (_, lane) => [0, 1].map(e => roadWidths.endWidth(sheet, road, e, lane)));
+      const gapEnds=[0,1].map(e=>roadWidths.endGaps(sheet,road,e)),laneBounds=[];
       const bounds = along.map(s => {
         const full = Array.from({length: road.lanes}, (_, lane) => feetToPixels(sheet,
           roadWidths.laneAt(sheet, road, lane, total ? s / total : 0, ends[lane])));
-        const totalWidth = full.reduce((a,b) => a+b, 0);
+        const gaps=gapEnds[0].map((g,k)=>feetToPixels(sheet,roadWidths.gapAt(road,k,total?s/total:0,g.width,gapEnds[1][k].width)));
+        const totalWidth = full.reduce((a,b) => a+b, 0)+gaps.reduce((a,b)=>a+b,0);
         const anchorLeft = full.slice(0, anchor).reduce((a,b) => a+b, 0) - totalWidth / 2
           + (typeof shift === "function" ? shift(totalWidth / road.lanes) : shift);
         const widths = Array.from({ length: road.lanes }, (_, lane) => {
@@ -351,14 +406,15 @@
           if (end) fraction = Math.min(fraction, (total - s) / Math.min(end, total));
           return full[lane] * Math.max(0, Math.min(1, fraction || 0));
         });
-        const b = [];
-        b[anchor] = anchorLeft + (full[anchor] - widths[anchor]) / 2;
-        b[anchor + 1] = b[anchor] + widths[anchor];
-        for (let k = anchor + 1; k < road.lanes; k++) b[k + 1] = b[k] + widths[k];
-        for (let k = anchor - 1; k >= 0; k--) b[k] = b[k + 1] - widths[k];
-        return b;
+        const lanes=Array.from({length:road.lanes},()=>[]);
+        lanes[anchor][0]=anchorLeft+(full[anchor]-widths[anchor])/2;
+        lanes[anchor][1]=lanes[anchor][0]+widths[anchor];
+        for(let k=anchor+1;k<road.lanes;k++){lanes[k][0]=lanes[k-1][1]+gaps[k];lanes[k][1]=lanes[k][0]+widths[k];}
+        for(let k=anchor-1;k>=0;k--){lanes[k][1]=lanes[k+1][0]-gaps[k+1];lanes[k][0]=lanes[k][1]-widths[k];}
+        laneBounds.push(lanes);
+        return [lanes[0][0],...lanes.slice(1).map((l,k)=>(lanes[k][1]+l[0])/2),lanes.at(-1)[1]];
       });
-      return { line, bounds, tapers };
+      return { line, bounds, laneBounds, gapEnds, tapers };
     }
     // Taper settings per lane end: Auto (only where a lane doesn't continue across
     // a joint), Taper, or None.
@@ -394,6 +450,13 @@
         const { a, c0, c1, b } = sharedControls(road, partner, solved, shift);
         shape = buildShape(sheet, road, bezier(a, c0, c1, b), tapers, width => gap / 2 + road.lanes * width / 2);
       } else shape = buildShape(sheet, road, centerline(road, solved), tapers);
+      const pavementEnd=solved.dropPavementEnds?.get(road.id);
+      if(pavementEnd){
+        const edge=offset(shape.line,i=>shape.bounds[i][road.lanes]),end=edge.at(-1),total=polylineLength(shape.line);
+        const begin=total-feetToPixels(sheet,50),finish=total-feetToPixels(sheet,20);let along=0;
+        shape.pavementEdges={[road.lanes]:edge.map((p,i)=>{if(i)along+=Math.hypot(shape.line[i].x-shape.line[i-1].x,shape.line[i].y-shape.line[i-1].y);
+          const f=Math.max(0,Math.min(1,(along-begin)/(finish-begin)));return {x:p.x+f*(pavementEnd.x-end.x),y:p.y+f*(pavementEnd.y-end.y)};})};
+      }
       solved.shapes.set(road, shape);
       return shape;
     }
@@ -453,13 +516,14 @@
       const inset = (NODE_INSET_PIXELS + nodeStack(sheet, road, e, lane, solved) * NODE_STACK_PIXELS) / sheet.view.scale;
       return { x: at.x + inward.x * inset, y: at.y + inward.y * inset };
     }
-    const boundary = (shape, k, extra = 0) => shape.bikeEdges?.[k]
-      ? (extra ? offset(shape.bikeEdges[k],extra) : shape.bikeEdges[k])
+    const boundary = (shape, k, extra = 0) => (shape.bikeEdges?.[k]??shape.pavementEdges?.[k])
+      ? (extra ? offset(shape.bikeEdges?.[k]??shape.pavementEdges[k],extra) : shape.bikeEdges?.[k]??shape.pavementEdges[k])
       : offset(shape.line, i => shape.bounds[i][k] + extra);
     function lanePoint(sheet, road, e, lane, solved) {
-      const { line, bounds } = shapeOf(sheet, road, solved);
+      const target=solved.dropLaneTargets?.get(`${road.id}:${e}:${lane}`);if(target)return target;
+      const { line, bounds, laneBounds } = shapeOf(sheet, road, solved);
       const i = e ? line.length - 1 : 0;
-      return offset([line[e ? i - 1 : 0], line[e ? i : 1]], (bounds[i][lane] + bounds[i][lane + 1]) / 2)[e];
+      return offset([line[e ? i - 1 : 0], line[e ? i : 1]], (laneBounds[i][lane][0] + laneBounds[i][lane][1]) / 2 + (solved.dropLaneEnds?.get(`${road.id}:${e}:${lane}`)??0))[e];
     }
     const pathData = points => `M${points.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join("L")}`;
 
@@ -495,6 +559,7 @@
       const group = document.createElementNS(SVG, "g");
       if (className) group.setAttribute("class", className);
       const polygons = solved ? joinedPolygons(sheet, road, solved) : [];
+      const crosswalkCuts=solved?(solved.crosswalkCuts??=window.StripeMaker.markings?.crosswalkCuts(sheet,solved)??[]):[];
       // Each boundary's line (and a two-way road's centerline) draws through the
       // longitudinal markings, which apply user lines over the defaults and keep
       // dash patterns in step from one joined line to the next.
@@ -549,8 +614,8 @@
           // Exhibit 223-3 skip detail: green occupies the riding space, not
           // the 8-inch clear space between the buffered lane's white lines.
           const buffer=surface.color==="green"&&bikeType(road,lane)==="bufferedBike"?inchesToPixels(sheet,BIKE_BUFFER_INCHES):0;
-          const strip=[...stationSlice(paintShape,boundary(paintShape,lane,lane>0?buffer:0),start,finish),
-            ...stationSlice(paintShape,boundary(paintShape,lane+1,lane===0?-buffer:0),start,finish).reverse()];
+          const strip=[...stationSlice(paintShape,laneBoundary(paintShape,lane,0,lane>0?buffer:0),start,finish),
+            ...stationSlice(paintShape,laneBoundary(paintShape,lane,1,lane===0?-buffer:0),start,finish).reverse()];
           const path = document.createElementNS(SVG, "path");
           path.setAttribute("d", `${pathData(strip)}Z`);
           path.setAttribute("fill", C.SURFACE[surface.color] ?? C.SURFACE.green);
@@ -581,7 +646,7 @@
         const connectedBike=solved&&bikeTransitions(sheet,solved).some(t=>
           (t.from===road&&(k===t.fromLane||k===t.fromLane+1)) ||
           (t.to===road&&(k===t.toLane||k===t.toLane+1)));
-        const clips=connectedBike?[]:[...polygons,...bikePolygons];
+        const clips=[...(connectedBike?[]:[...polygons,...bikePolygons]),...crosswalkCuts];
         const ranges = dotted.get(k);
         if (!ranges?.length) return lines.drawTarget(sheet, key, points, base, group, clips, options);
         const total = polylineLength(shape.line);
@@ -598,7 +663,7 @@
             const phase = lanePhase(sheet,road,lane,solved)/scale + start;
             for (const [a,b] of window.StripeMaker.markingCatalog.stretches("dotted",length,phase)) {
               const p0 = f0+(a*scale/centerLength), p1 = f0+(b*scale/centerLength);
-              lines.drawTarget(sheet,null,stationSlice(shape,points,p0*centerLength,p1*centerLength),{style:"solid",color:"white"},group,[],options);
+              lines.drawTarget(sheet,null,stationSlice(shape,points,p0*centerLength,p1*centerLength),{style:"solid",color:"white"},group,crosswalkCuts,options);
             }
           }
           at = f1 * total;
@@ -606,17 +671,37 @@
         if (base && at < total) lines.drawTarget(sheet, null, stationSlice(shape, points, at, total), base, group, clips, options);
       };
       for (let k = 0; k <= road.lanes; k++) {
+        const gap=shape.gapEnds?.some(ends=>ends[k]?.width>0);
+        if(k>0&&k<road.lanes&&gap){
+          const left=offset(shape.line,i=>shape.laneBounds[i][k-1][1]),right=offset(shape.line,i=>shape.laneBounds[i][k][0]);
+          const total=polylineLength(shape.line),island=[...left,...right.slice().reverse()];
+          for(const e of [0,1]){
+            const a=e?total/2:0,b=e?total:total/2;
+            const l=stationSlice(shape,left,a,b),r=stationSlice(shape,right,a,b);
+            const fill=document.createElementNS(SVG,"path");fill.setAttribute("d",`${pathData([...l,...r.slice().reverse()])}Z`);
+            fill.setAttribute("fill",(shape.gapEnds[e][k].width?shape.gapEnds[e][k].surface:shape.gapEnds[1-e][k].surface)==="concrete"?CONCRETE:GRASS);group.append(fill);
+            for(const edge of [l,r])lines.drawTarget(sheet,null,edge,{style:"solid",color:"white"},group,[...polygons,...crosswalkCuts],{edge:true});
+          }
+          lines.drawTarget(sheet,`r:${road.id}:${k}`,boundary(shape,k),{style:"skip",color:"white"},group,[...polygons,island,...crosswalkCuts]);
+          continue;
+        }
         const split = k > 0 && k < road.lanes && bike(k - 1) !== bike(k);
-        let line = k === 0 ? (bike(0) ? null : { style: "solid", color: "yellow" })
+        let line = k === 0 ? (bike(0) ? null : { style: "solid", color: road.medianEdges?.L?"white":"yellow" })
           : k === road.lanes ? (bike(k - 1) ? null : { style: "solid", color: "white" })
           : split ? { style: "solid", color: "white" } : { style: "skip", color: "white" };
         // Exhibit 223-3 B and 711-001: the vehicle lane becoming turn-only
         // has a 12-inch 3'-9' lane-drop line, not the normal 6-inch 10'-30'.
-        if(solved&&bikeTransitions(sheet,solved).some(t=>!t.entering&&t.road===road&&k===(t.lane>0?t.lane-1:t.lane+2)))
-          line={style:"dottedLaneDrop",color:"white"};
+        const drop=solved&&bikeTransitions(sheet,solved).find(t=>!t.entering&&t.road===road&&k===(t.lane>0?t.lane-1:t.lane+2));
+        if(drop)line={style:"dottedLaneDrop",color:"white"};
         const bikeLane=bike(k)?k:bike(k-1)?k-1:null;
         const markingShape=solved&&bikeLane!=null?bikeMarkingShape(sheet,road,bikeLane,shape,solved):shape;
-        drawLine(k, boundary(markingShape, k), line, solved ? `r:${road.id}:${k}` : null, { edge: k === 0 || k === road.lanes || split });
+        if(drop) {
+          // The 12-inch vehicle divider ends where the unmarked weave begins;
+          // beyond it the relocated bike lane separates through/turn traffic.
+          const points=boundary(shape,k),key=`r:${road.id}:${k}`;
+          lines.drawTarget(sheet,key,points,null,group,polygons);
+          if(drop.gapStart>0)lines.drawTarget(sheet,null,stationSlice(shape,points,0,drop.gapStart),line,group,[...polygons,...crosswalkCuts]);
+        } else drawLine(k, boundary(markingShape, k), line, solved ? `r:${road.id}:${k}` : null, { edge: k === 0 || k === road.lanes || split });
         // The buffer goes on the bike lane's through-lane side: its left, or its
         // right for a bike lane on the road's left edge. A keyhole (a bike lane
         // with a turn lane outside it) keeps a single 6" line on the turn side
@@ -627,6 +712,13 @@
           const offset = inchesToPixels(sheet, BIKE_BUFFER_INCHES) * (into === k ? 1 : -1);
           drawLine(k, boundary(markingShape, k, offset), { style: "solid", color: "white" }, null, { edge: true });
         }
+      }
+      // Once the bike lane crosses inward, the pavement's outside edge
+      // belongs to the departing vehicle lane. Carry its white edge into the
+      // ramp; the bike route's shifted outer dots are not a pavement edge.
+      for(const t of solved?bikeTransitions(sheet,solved):[])if(!t.entering&&t.road===road&&solved.dropLaneEnds.has(`${road.id}:1:${t.lane-1}`)) {
+        const points=boundary(shape,road.lanes);
+        lines.drawTarget(sheet,null,stationSlice(shape,points,Math.max(0,t.gapStart),t.total),{style:"solid",color:"white"},group,[...polygons,...crosswalkCuts],{edge:true});
       }
       // A two-way bike track's yellow center line runs down its middle.
       for (let lane = 0; lane < road.lanes; lane++) {
@@ -763,7 +855,8 @@
           if(t.road!==road)continue;
           for(const k of [inner,outer]) {
             add(k,t.start/total,t.gapStart/total);
-            blank(k,t.gapStart/total,t.gapEnd/total);
+            // Optional continuous crossing; default retains the exhibit weaving gap.
+            (road.laneTypes[lane].continueCrossover ? add : blank)(k,t.gapStart/total,t.gapEnd/total);
             add(k,t.gapEnd/total,(t.entering?t.gapEnd+feetToPixels(sheet,50):total)/total);
           }
         }
@@ -858,8 +951,13 @@
       };
       return [at(a), ...edge.filter((_, i) => along[i] > a && along[i] < b), at(b)];
     }
+    function laneBoundary(shape,lane,side,extra=0){
+      const k=lane+side;
+      if(shape.bikeEdges?.[k]||!shape.laneBounds)return boundary(shape,k,extra);
+      return offset(shape.line,i=>shape.laneBounds[i][lane][side]+extra);
+    }
     function laneStrip(shape, lane, a, b) {
-      return [...stationSlice(shape,boundary(shape,lane),a,b), ...stationSlice(shape,boundary(shape,lane+1),a,b).reverse()];
+      return [...stationSlice(shape,laneBoundary(shape,lane,0),a,b), ...stationSlice(shape,laneBoundary(shape,lane,1),a,b).reverse()];
     }
     // Colored pavement split at a cut (`fraction` along `first`): the part past it
     // moves to `second`.
@@ -1188,31 +1286,65 @@
       const [, at] = resample(points, 1, polylineLength(points) * Math.max(0, Math.min(1, f)));
       return at;
     }
+    // A pinch point belongs to both crossing pavement edges. Its arc-length
+    // fractions identify the crossing branch; they are not fixed positions.
+    function edgeCrossings(a,b) {
+      const result=[];
+      for(let i=1;i<a.length;i++)for(let j=1;j<b.length;j++){
+        const p=a[i-1],q=b[j-1],u={x:a[i].x-p.x,y:a[i].y-p.y},v={x:b[j].x-q.x,y:b[j].y-q.y};
+        if(Math.max(p.x,a[i].x)<Math.min(q.x,b[j].x)||Math.min(p.x,a[i].x)>Math.max(q.x,b[j].x)||Math.max(p.y,a[i].y)<Math.min(q.y,b[j].y)||Math.min(p.y,a[i].y)>Math.max(q.y,b[j].y))continue;
+        const den=u.x*v.y-u.y*v.x;if(Math.abs(den)<1e-9)continue;
+        const x=q.x-p.x,y=q.y-p.y,t=(x*v.y-y*v.x)/den,f=(x*u.y-y*u.x)/den;
+        if(t<0||t>1||f<0||f>1)continue;
+        result.push({x:p.x+t*u.x,y:p.y+t*u.y,a:fractionAt(a,i-1+t),b:fractionAt(b,j-1+f)});
+      }
+      return result;
+    }
     // Median points anchored to a road edge move with the road; an anchor to a
     // road that's gone is dropped and the point stays where it was.
     function anchorMedians(sheet, solved) {
       if (!sheet.medians.some(median => median.points.some(p => p.on))) return;
-      const { byKey } = pavementEdges(sheet, solved);
+      const { byKey,edges } = pavementEdges(sheet, solved);
       for (const p of sheet.medians.flatMap(median => median.points)) {
         if (!p.on) continue;
-        const edge = byKey.get(medianAnchorKey(p.on));
-        if (!edge) delete p.on;
-        else Object.assign(p, pointAtFraction(edge, p.on.f));
+        let edge = byKey.get(medianAnchorKey(p.on));
+        if(!edge&&p.on.crossing){p.on={...p.on.crossing};edge=byKey.get(medianAnchorKey(p.on));}
+        if (!edge) {delete p.on;continue;}
+        // Upgrade old single-edge pinch anchors while their saved location
+        // still identifies the crossing. Ordinary edge points stay single.
+        if(!p.on.crossing&&Math.hypot(pointAtFraction(edge,p.on.f).x-p.x,pointAtFraction(edge,p.on.f).y-p.y)<.5){
+          for(const other of edges){
+            if(!other.on||medianAnchorKey(other.on)===medianAnchorKey(p.on)||other.on.road!=null&&other.on.road===p.on.road)continue;
+            const near=nearestOn(other,p);if(!near||near.distance>.5)continue;
+            const hit=edgeCrossings(edge,other).find(hit=>Math.hypot(hit.x-p.x,hit.y-p.y)<.5);
+            if(hit){p.on.crossing={...other.on,f:hit.b};break;}
+          }
+        }
+        const other=p.on.crossing&&byKey.get(medianAnchorKey(p.on.crossing));
+        if(other){
+          const hits=edgeCrossings(edge,other).sort((a,b)=>Math.abs(a.a-p.on.f)+Math.abs(a.b-p.on.crossing.f)-Math.abs(b.a-p.on.f)-Math.abs(b.b-p.on.crossing.f));
+          if(hits.length){const hit=hits[0];p.x=hit.x;p.y=hit.y;p.on.f=hit.a;p.on.crossing.f=hit.b;continue;}
+          // Temporarily separated edges can meet again; retain both references.
+        }else if(p.on.crossing)delete p.on.crossing;
+        Object.assign(p, pointAtFraction(edge, p.on.f));
       }
     }
+
     // After a road is cut, points anchored to it re-anchor to whichever piece
     // they lie on.
     function rehomeMedians(sheet, roads) {
       const ids = roads.map(road => road.id);
       const edges = pavementEdges(sheet, solve(sheet)).edges.filter(edge => ids.includes(edge.on?.road));
       for (const p of (sheet.medians ?? []).flatMap(median => median.points)) {
-        if (!p.on || !ids.includes(p.on.road)) continue;
-        let best = null;
-        for (const edge of edges) {
-          const at = nearestOn(edge, p);
-          if (at && (!best || at.distance < best.at.distance)) best = { edge, at };
+        for(const on of [p.on,p.on?.crossing]) {
+          if (!on || !ids.includes(on.road)) continue;
+          let best = null;
+          for (const edge of edges) {
+            const at = nearestOn(edge, p);
+            if (at && (!best || at.distance < best.at.distance)) best = { edge, at };
+          }
+          if (best) Object.assign(on,best.edge.on,{f:fractionAt(best.edge,best.at.s)});
         }
-        if (best) p.on = { ...best.edge.on, f: fractionAt(best.edge, best.at.s) };
       }
     }
     // A median's drawn outline: between two points on the same pavement edge it
@@ -1224,29 +1356,49 @@
     // one's leg closes back to the first).
     function medianLegs(sheet, solved, points) {
       const { edges: pavement } = pavementEdges(sheet, solved);
-      // Join longitudinal edges across segment boundaries before tracing the
-      // median. End caps must not become shortcuts across the traveled way.
       const edges = pavement.map(edge => [...edge]);
-      const chains = pavement.filter(edge => edge.on && ["L", "R"].includes(edge.on.side)).map(edge => [...edge]);
-      for (let i = 0; i < chains.length; i++) {
-        let joined = true;
-        while (joined) {
-          joined = false;
-          for (let j = i + 1; j < chains.length; j++) {
-            const a = chains[i], b = chains[j];
-            const close = (p, q) => Math.hypot(p.x - q.x, p.y - q.y) <= 0.5;
-            if (close(a.at(-1), b[0])) a.push(...b.slice(1));
-            else if (close(a.at(-1), b.at(-1))) a.push(...b.slice(0, -1).reverse());
-            else if (close(a[0], b.at(-1))) a.unshift(...b.slice(0, -1));
-            else if (close(a[0], b[0])) a.unshift(...b.slice(1).reverse());
-            else continue;
-            chains.splice(j, 1);
-            joined = true;
-            break;
+      // Keep branches in a graph rather than greedily joining the first two
+      // coincident edges. At a merge, that would consume the shared edge into
+      // the wrong branch and leave a median on the other branch straight.
+      const longitudinal = pavement.filter(edge => edge.on && ["L", "R"].includes(edge.on.side));
+      const slice = (edge, from, to, first, last) => {
+        const result=[first];
+        if(from<to)for(let n=Math.floor(from)+1;n<to;n++)result.push(edge[n]);
+        else for(let n=Math.ceil(from)-1;n>to;n--)result.push(edge[n]);
+        result.push(last);return result;
+      };
+      const follow = (p,q) => {
+        const nodes=longitudinal.flatMap(edge=>[edge[0],edge.at(-1)]), start=nodes.length, finish=start+1;
+        nodes.push(p,q);
+        const graph=nodes.map(()=>[]);
+        const arc=(a,b,path)=>graph[a].push({to:b,path,length:polylineLength(path)});
+        longitudinal.forEach((edge,i)=>{
+          const a=i*2,b=a+1;
+          arc(a,b,edge);arc(b,a,[...edge].reverse());
+          for(const [point,node,starting] of [[p,start,true],[q,finish,false]]) {
+            if(point.on&&medianAnchorKey(point.on)!==medianAnchorKey(edge.on)&&(!point.on.crossing||medianAnchorKey(point.on.crossing)!==medianAnchorKey(edge.on)))continue;
+            const at=nearestOn(edge,point);if(!at||at.distance>.5)continue;
+            for(const [end,index] of [[a,0],[b,edge.length-1]]) {
+              const path=slice(edge,at.s,index,point,nodes[end]);
+              starting?arc(node,end,path):arc(end,node,path.reverse());
+            }
+          }
+        });
+        for(let a=0;a<start;a++)for(let b=a+1;b<start;b++)
+          if(Math.hypot(nodes[a].x-nodes[b].x,nodes[a].y-nodes[b].y)<=.5){arc(a,b,[nodes[a],nodes[b]]);arc(b,a,[nodes[b],nodes[a]]);}
+        const distances=nodes.map(()=>Infinity),previous=[],pending=new Set(nodes.map((_,i)=>i));distances[start]=0;
+        while(pending.size){
+          let at=null;for(const n of pending)if(at===null||distances[n]<distances[at])at=n;
+          if(!Number.isFinite(distances[at]))return null;
+          if(at===finish)break;
+          pending.delete(at);
+          for(const link of graph[at])if(distances[at]+link.length<distances[link.to]){
+            distances[link.to]=distances[at]+link.length;previous[link.to]={from:at,path:link.path};
           }
         }
-      }
-      edges.push(...chains);
+        const parts=[];for(let at=finish;at!==start;){const step=previous[at];if(!step)return null;parts.unshift(step.path.slice(0,-1));at=step.from;}
+        return parts.flat();
+      };
       const tolerance = 0.5;
       const on = points.map(p => edges.map(edge => {
         const at = nearestOn(edge, p);
@@ -1255,7 +1407,7 @@
       return points.map((p, i) => {
         const j = (i + 1) % points.length;
         const k = edges.findIndex((edge, n) => on[i][n] != null && on[j][n] != null && edge.length > 2);
-        if (k < 0) return [p];
+        if (k < 0) return follow(p,points[j]) ?? [p];
         const [from, to] = [on[i][k], on[j][k]];
         const between = [];
         if (from < to) for (let n = Math.floor(from) + 1; n < to; n++) between.push(edges[k][n]);
@@ -1312,7 +1464,9 @@
         const t = (x * v.y - y * v.x) / d, f = (x * u.y - y * u.x) / d;
         if (t < 0 || t > 1 || f < 0 || f > 1) continue;
         const crossing = { x: a.a.x + t * u.x, y: a.a.y + t * u.y,
-          on: a.edge.on && { ...a.edge.on, f: fractionAt(a.edge, a.i - 1 + t) } };
+          on: a.edge.on ? { ...a.edge.on, f: fractionAt(a.edge, a.i - 1 + t),
+            ...(b.edge.on&&medianAnchorKey(a.edge.on)!==medianAnchorKey(b.edge.on)?{crossing:{...b.edge.on,f:fractionAt(b.edge,b.i-1+f)}}:{}) }
+            : b.edge.on && {...b.edge.on,f:fractionAt(b.edge,b.i-1+f)} };
         if (own.has(a.edge) && own.has(b.edge)) own.add(crossing);
         corners.push(crossing);
       }
@@ -1719,7 +1873,7 @@
     // one before it), so a lane splitting off another points where it goes, not
     // along the road it leaves.
     function laneHeading(sheet, shape, e, lane) {
-      const center = offset(shape.line, i => (shape.bounds[i][lane] + shape.bounds[i][lane + 1]) / 2);
+      const center = offset(shape.line, i => (shape.laneBounds[i][lane][0] + shape.laneBounds[i][lane][1]) / 2);
       const points = e ? [...center].reverse() : center, reach = Math.min(feetToPixels(sheet, AIM_FEET), polylineLength(points) / 3);
       let walked = 0, target = points.at(-1);
       for (let i = 1; i < points.length; i++) {
@@ -2072,7 +2226,7 @@
       for (const field of ["tapers", "laneEndWidths"]) {
         if (road[field]) road[field] = Object.fromEntries(Object.entries(road[field]).map(([key, value]) => [bump(key), value]));
       }
-      for (const field of ["laneWidths", "laneTypes"]) {
+      for (const field of ["laneWidths", "laneTypes", "gapProfiles"]) {
         if (road[field]) road[field] = Object.fromEntries(Object.entries(road[field]).map(([lane, value]) => [up(lane), value]));
       }
       if (road.widthProfiles) road.widthProfiles = [...road.widthProfiles.slice(0, from), null, ...road.widthProfiles.slice(from)];
@@ -2272,6 +2426,33 @@
       overlay.append(button);
       return button;
     }
+    function insertMedianPoint(sheet, point) {
+      const solved=solve(sheet),tolerance=8/sheet.view.scale;
+      let best=null;
+      for(const median of [...sheet.medians].reverse()) {
+        if(median.points.some(p=>Math.hypot(p.x-point.x,p.y-point.y)<=tolerance))continue;
+        const legs=medianLegs(sheet,solved,median.points);
+        legs.forEach((leg,index)=>{
+          const at=nearestOn([...leg,median.points[(index+1)%median.points.length]],point);
+          if(at&&at.distance<=tolerance&&(!best||at.distance<best.at.distance))best={median,index,at};
+        });
+      }
+      if(!best)return false;
+      const next={x:best.at.x,y:best.at.y};
+      // A point on a curved road boundary keeps its anchor, so inserting it
+      // cannot straighten the outline and it continues to follow road edits.
+      let anchor=null;
+      for(const edge of pavementEdges(sheet,solved).edges){
+        const at=nearestOn(edge,next);
+        if(edge.on&&at&&at.distance<=.5&&(!anchor||at.distance<anchor.at.distance))anchor={edge,at};
+      }
+      if(anchor)next.on={...anchor.edge.on,f:fractionAt(anchor.edge,anchor.at.s)};
+      best.median.points.splice(best.index+1,0,next);
+      window.StripeMaker.showEditor("elementsEditor");
+      selectMedian(best.median.id);changed();
+      medianPoints[best.index+1]?.focus();
+      return true;
+    }
     // A median keeps at least three points.
     function removeMedianPoint(index) {
       const median = medianOf(sheets.selected, selectedMedian);
@@ -2352,9 +2533,14 @@
       add.textContent=lane===selectedRoad.lanes-1?"Add Outside Turn Lane":"Outside Lane Already Present";
       const ranges=bikeConflicts(sheet,selectedRoad,shapeOf(sheet,selectedRoad,solved),solved);
       const detected=[...(ranges.get(lane)??[]),...(ranges.get(lane+1)??[])].some(r=>r[2]==="dotted");
-      const short=bikeTransitions(sheet,solved).find(t=>t.road===selectedRoad&&t.lane===lane&&t.total<feetToPixels(sheet,t.entering?200:100));
+      const transition=bikeTransitions(sheet,solved).find(t=>t.road===selectedRoad&&t.lane===lane);
+      const showCrossover=Boolean(transition)||["drop","freeflow"].includes(layout);
+      document.getElementById("bikeCrossoverRow").hidden=!showCrossover;
+      document.getElementById("bikeCrossoverHelp").hidden=!showCrossover;
+      document.getElementById("bikeCrossover").checked=Boolean(config.continueCrossover);
+      const short=transition&&transition.total<feetToPixels(sheet,transition.entering?200:100);
       document.getElementById("bikeConflictStatus").textContent=short
-        ? `This segment is too short for the ${short.entering?200:100}-ft crossing treatment. Lengthen it to provide the full transition.`
+        ? `This segment is too short for the ${transition.entering?200:100}-ft crossing treatment. Lengthen it to provide the full transition.`
         : detected
         ? `Conflict striping active on lane ${lane+1}. Changes apply immediately.`
         : `No crossing detected on lane ${lane+1} yet. ${layout==="separate"?"Add an outside turn lane and taper its start.":"Connect the crossing or continuing roads to activate the markings."}`;
@@ -2468,6 +2654,9 @@
       else if (medianDraw) hint.textContent = medianDraw.points.length < 3
         ? "Click the median's corners. Points snap to the outer edges and corners of the pavement, and to other medians' points."
         : "Keep clicking corners. Click the first point, double-click, or press Esc to close the median."
+      else if(drawing&&snapTarget?.edge)hint.textContent=snapTarget.direct
+        ? "Direct lane connection. Click to join the edge lane; release Shift to add beside it."
+        : "Click to add beside this road. Hold Shift to connect directly to its edge lane.";
       else if (drawing?.end && !drawing.start) hint.textContent = "Click where the new road starts; it ends at the chosen lane's start. Esc cancels.";
       else if (drawing && !drawing.start) hint.textContent = defaults.opposite
         ? "Click the start of the two-way road's centerline." : "Click the road's start point, a lane's end node to continue from it, or a road's edge line to branch off it.";
@@ -2512,6 +2701,7 @@
     }
     // Drawing can begin from a lane's end (`start`) or toward a lane's start (`end`).
     function startDrawing({ start = null, end = null } = {}) {
+      drawingPointer=null;
       drawing = { start, end, cursor: null };
       medianDraw = null;
       selectedMedian = null;
@@ -2817,6 +3007,83 @@
       reanchor(sheet, before, keep ? joints : shared);
       return opposite;
     }
+    // Split a lane group lengthwise at median boundaries. This changes road
+    // identity, not lane width: each resulting road gets its own editable ends.
+    function splitLaneGroups(sheet,road,cuts){
+      cuts=cuts.filter(c=>Number.isInteger(c.at)&&c.at>0&&c.at<road.lanes).sort((a,b)=>a.at-b.at);
+      if(!cuts.length)return [road];
+      const before=solve(sheet),shape=shapeOf(sheet,road,before),curve=curveOf(sheet,road,before);
+      const original=structuredClone(road),oldJoints=road.ends.map(e=>jointOf(sheet,e.joint));
+      const ranges=[0,...cuts.map(c=>c.at),road.lanes],groups=[];
+      let id=nextId(sheet.roads);
+      for(let n=0;n<ranges.length-1;n++){
+        const from=ranges[n],to=ranges[n+1],part=n?structuredClone(original):road;
+        if(n)part.id=id++;
+        part.lanes=to-from;part.ends=structuredClone(original.ends);
+        for(const field of ['laneTypes','laneWidths'])if(original[field])part[field]=Object.fromEntries(Object.entries(original[field]).filter(([k])=>+k>=from&&+k<to).map(([k,v])=>[+k-from,structuredClone(v)]));
+        for(const field of ['tapers','laneEndWidths'])if(original[field])part[field]=Object.fromEntries(Object.entries(original[field]).filter(([k])=>{const lane=+k.split(':')[1];return lane>=from&&lane<to;}).map(([k,v])=>{const [e,lane]=k.split(':');return [`${e}:${+lane-from}`,structuredClone(v)];}));
+        if(original.widthProfiles)part.widthProfiles=structuredClone(original.widthProfiles.slice(from,to));
+        if(original.gapProfiles)part.gapProfiles=Object.fromEntries(Object.entries(original.gapProfiles).filter(([k])=>+k>from&&+k<to).map(([k,v])=>[+k-from,structuredClone(v)]));
+        part.medianEdges={...original.medianEdges,...(n?{L:true}:{}),...(n<ranges.length-2?{R:true}:{})};
+        for(const e of [0,1]){
+          const i=e?shape.line.length-1:0,point=shape.line[i],normal=rightOf(point.tangent??travelAt(road,e,before));
+          const lateral=(shape.laneBounds[i][from][0]+shape.laneBounds[i][to-1][1])/2;
+          const at={x:point.x+normal.x*lateral,y:point.y+normal.y*lateral,travel:point.tangent??before.get(`${original.id}:${e}`).travel};
+          before.set(`${part.id}:${e}`,at);
+          part.ends[e].length=e?Math.hypot(curve.b.x-curve.c1.x,curve.b.y-curve.c1.y):Math.hypot(curve.c0.x-curve.a.x,curve.c0.y-curve.a.y);
+          part.ends[e].dir=at.travel;
+        }
+        if(n)sheet.roads.push(part);
+        groups.push({road:part,from,to});
+      }
+      const owner=lane=>groups.find(g=>lane>=g.from&&lane<g.to)??groups.at(-1);
+      // Each separated group must position independently, including from its
+      // former opposite-direction partner; preserve their solved positions.
+      for(const joint of oldJoints)joint.links=joint.links.filter(link=>!(link.pair&&(link.a===original.id||link.b===original.id)));
+      // Remap all lane connections, including other intersections at the far end.
+      for(const joint of sheet.joints)for(const link of joint.links)for(const [ref,index] of [['a','ai'],['b','bi']])if(link[ref]===original.id){
+        const k=link[index],g=typeof k==='number'?owner(k):k==='R'?groups.at(-1):groups[0];
+        link[ref]=g.road.id;if(typeof k==='number')link[index]=k-g.from;
+      }
+      for(const item of sheet.intersections??[])for(const a of item.approaches)for(const link of a.links??[])if(link.road===original.id){const g=owner(link.lane);link.road=g.road.id;link.lane-=g.from;}
+      for(const collection of [sheet.markings??[],sheet.surfaces??[]])for(const mark of collection)if(mark.on?.road===original.id&&Number.isInteger(mark.on.lane)){const g=owner(mark.on.lane);mark.on.road=g.road.id;mark.on.lane-=g.from;}
+      for(const line of [...sheet.lines??[]])if(line.on?.road===original.id){
+        const k=line.on.k;
+        const matches=typeof k==='number'?groups.filter(g=>k>=g.from&&k<=g.to):[groups[0]];
+        const saved=structuredClone(line);
+        matches.forEach((g,n)=>{const next=n?structuredClone(saved):line;if(n){next.id=crypto.randomUUID();sheet.lines.push(next);}next.on={...next.on,road:g.road.id,k:typeof k==='number'?k-g.from:0};});
+      }
+      const reanchorPoint=point=>{
+        const on=point?.on;if(on?.crossing)reanchorPoint({on:on.crossing});if(on?.road!==original.id)return;
+        let g=on.side==='R'?groups.at(-1):groups[0];
+        if(on.side==='S'||on.side==='E'){
+          const i=on.side==='E'?shape.line.length-1:0,b=shape.laneBounds[i];
+          const lateral=b[0][0]+(b.at(-1)[1]-b[0][0])*(on.f??0);
+          g=groups.reduce((best,next)=>Math.abs(lateral-(b[next.from][0]+b[next.to-1][1])/2)<Math.abs(lateral-(b[best.from][0]+b[best.to-1][1])/2)?next:best,groups[0]);
+          on.f=Math.max(0,Math.min(1,(lateral-b[g.from][0])/(b[g.to-1][1]-b[g.from][0])));
+        }
+        on.road=g.road.id;
+      };
+      for(const mark of sheet.markings??[]){reanchorPoint(mark.a);reanchorPoint(mark.b);}
+      for(const median of sheet.medians??[])for(const point of median.points)reanchorPoint(point);
+      for(const bridge of [...sheet.bridges??[]])if(bridge.road===original.id)for(const g of groups.slice(1))sheet.bridges.push({...structuredClone(bridge),id:crypto.randomUUID(),road:g.road.id});
+      for(const gore of sheet.gores??[])gore.key=gore.key.split('|').map(key=>{
+        const [id,e]=key.split(':').map(Number);if(id!==original.id)return key;
+        const otherKey=gore.key.split('|').find(k=>!k.startsWith(`${original.id}:`)),other=otherKey&&before.get(otherKey),at=before.get(`${original.id}:${e}`);
+        const right=other&&dot({x:other.x-at.x,y:other.y-at.y},rightOf(at.travel??{x:0,y:-1}))>0;
+        return `${(right?groups.at(-1):groups[0]).road.id}:${e}`;
+      }).sort().join('|');
+      for(const joint of oldJoints)regroup(sheet,joint,before);
+      // Keep the strip between the independent roads as an ordinary anchored
+      // median, so it follows their edges and remains editable/removable.
+      for(let n=0;n<groups.length-1;n++){
+        const left=groups[n],right=groups[n+1],at=cuts[n].at;
+        const point=(g,side,e)=>{const i=e?shape.line.length-1:0,p=shape.line[i],normal=rightOf(p.tangent??{x:0,y:-1}),d=side==='R'?shape.laneBounds[i][at-1][1]:shape.laneBounds[i][at][0];
+          return {x:p.x+normal.x*d,y:p.y+normal.y*d,on:{road:g.road.id,side,f:e}};};
+        (sheet.medians??=[]).push({id:nextId(sheet.medians),type:cuts[n].surface,color:'white',intersectionMedian:cuts[n].owner,points:[point(left,'R',0),point(left,'R',1),point(right,'L',1),point(right,'L',0)]});
+      }
+      return groups.map(g=>g.road);
+    }
     // Separates a two-way road into two one-way roads, left in place.
     function splitRoad() {
       const sheet = sheets.selected;
@@ -2916,6 +3183,11 @@
         changed();
       });
     }
+    document.getElementById("bikeCrossover").addEventListener("change",event=>{
+      const lane=selectedRoad?.laneTypes?.[setupBikeLane()];
+      if(!lane)return;
+      lane.continueCrossover=event.target.checked;lane.inherited=false;changed();
+    });
     bikeWidthInput.addEventListener("input", () => {
       const lane = selectedRoad && selectedLane && selectedRoad.laneTypes?.[selectedLane.lane];
       const width = Number(bikeWidthInput.value);
@@ -2987,7 +3259,7 @@
             if (distance > radius || along < clear || along > total - clear || (best && distance >= best.distance)) continue;
             // The center of the lane along this edge, for lanes fed straight into it.
             const lane = side === "R" ? road.lanes - 1 : 0;
-            const centers = offset(shape.line, n => (shape.bounds[n][lane] + shape.bounds[n][lane + 1]) / 2);
+            const centers = offset(shape.line, n => (shape.laneBounds[n][lane][0] + shape.laneBounds[n][lane][1]) / 2);
             const center = { x: centers[i].x + (centers[i + 1].x - centers[i].x) * f,
               y: centers[i].y + (centers[i + 1].y - centers[i].y) * f };
             best = { road, side, t: (i + f) / (edge.length - 1), x: at.x, y: at.y, center, distance, edge: true };
@@ -3012,6 +3284,8 @@
       const pos = t * (line.length - 1), lo = Math.floor(pos), hi = Math.min(line.length - 1, lo + 1);
       const fraction = lengths.at(-1) ? (lengths[lo] + (lengths[hi]-lengths[lo]) * (pos-lo)) / lengths.at(-1) : t;
       const widths = window.StripeMaker.roadWidths.splitWidths(sheet, road, fraction);
+      const gaps=window.StripeMaker.roadWidths.splitGaps(sheet,road,fraction);
+      const oppositeGaps=partner&&window.StripeMaker.roadWidths.splitGaps(sheet,partner,1-fraction);
       const oppositeWidths = partner && window.StripeMaker.roadWidths.splitWidths(sheet, partner, 1-fraction);
       const { a, c0, c1, b } = curveOf(sheet, road, solved);
       const lerp = (p, q) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
@@ -3049,6 +3323,7 @@
       rename(road.ends[1].joint, road.id, after.id);
       split(road, after);
       [road.widthProfiles, after.widthProfiles] = widths;
+      if(Object.keys(gaps[0]).length)[road.gapProfiles,after.gapProfiles]=gaps;
       road.ends[0].length = pulls.start;
       road.ends[1] = { joint: joint.id, sign: 1, length: pulls.before };
       joint.links.push({ a: road.id, ai: 0, b: after.id, bi: 0 });
@@ -3059,6 +3334,7 @@
         rename(partner.ends[1].joint, partner.id, back.id);
         split(partner, back);
         [partner.widthProfiles, back.widthProfiles] = oppositeWidths;
+        if(Object.keys(oppositeGaps[0]).length)[partner.gapProfiles,back.gapProfiles]=oppositeGaps;
         partner.ends[0].length = pulls.end;
         partner.ends[1] = { joint: joint.id, sign: -1, length: pulls.after };
         joint.links.push({ a: partner.id, ai: 0, b: back.id, bi: 0 }, { a: road.id, ai: 0, b: back.id, bi: 0, pair: true, median });
@@ -3108,7 +3384,9 @@
 
     // While drawing, points snap to lane nodes so the new road joins them, or to a
     // road's edge line to branch off it (one-way roads only).
-    function drawingPoint(sheet, clientX, clientY) {
+    let drawingPointer=null;
+    function drawingPoint(sheet, clientX, clientY, direct=false) {
+      drawingPointer={clientX,clientY};
       const point = sheets.toImage(clientX, clientY);
       const solved = solve(sheet);
       const e = drawing.start ? 1 : 0;
@@ -3116,8 +3394,17 @@
       const approach = !snapTarget && window.StripeMaker.intersections?.laneAt(sheet, { e }, point);
       if (approach) snapTarget = { ...approach.point, approach };
       snapTarget ??= defaults.opposite ? null : snapEdge(sheet, solved, point, SNAP_PIXELS / sheet.view.scale);
+      if(snapTarget?.edge&&direct)snapTarget={...snapTarget,direct:true,
+        edgePoint:{x:snapTarget.x,y:snapTarget.y},x:snapTarget.center.x,y:snapTarget.center.y};
       return snapTarget ? { x: snapTarget.x, y: snapTarget.y, target: snapTarget } : point;
     }
+
+    for(const type of ["keydown","keyup"])window.addEventListener(type,event=>{
+      if(event.key!=="Shift"||!drawing||!drawingPointer||!active()||!sheets.selected?.inchesPerPixel)return;
+      const point=drawingPoint(sheets.selected,drawingPointer.clientX,drawingPointer.clientY,type==="keydown");
+      if(drawing.start||drawing.end)drawing.cursor=point;
+      render();
+    });
 
     // A click (not a pan) places road points while drawing, otherwise selects a road.
     let press = null;
@@ -3131,7 +3418,7 @@
         return drawOverlay();
       }
       if (!drawing || event.buttons || !sheet?.inchesPerPixel || !active()) return;
-      const point = drawingPoint(sheet, event.clientX, event.clientY);
+      const point = drawingPoint(sheet, event.clientX, event.clientY, event.shiftKey);
       if (drawing.start || drawing.end) drawing.cursor = point;
       renderSoon({});
     });
@@ -3167,7 +3454,7 @@
         return gore ? selectGore(gore) : selectRoad(road);
       }
       layerFor(sheet);
-      const point = drawingPoint(sheet, event.clientX, event.clientY);
+      const point = drawingPoint(sheet, event.clientX, event.clientY, event.shiftKey);
       if (!drawing.start && !drawing.end) {
         drawing.start = point;
         drawing.cursor = point;
@@ -3181,7 +3468,9 @@
       // A new road lines its matching lane up with the lane it was drawn from or to.
       [start, end].forEach((p, e) => {
         if (p.target?.approach) return; // Align after creating the opposite side, if any.
-        if (p.target?.edge) attachToEdge(sheet, road, e, p);
+        if(p.target?.edge&&p.target.direct)feedEdge(sheet,road,e,
+          Math.min(p.target.side==="R"?p.target.road.lanes-1:0,road.lanes-1),p.target.edgePoint);
+        else if (p.target?.edge) attachToEdge(sheet, road, e, p);
         else if (p.target) connect(sheet, road, e, Math.min(p.target.lane, road.lanes - 1), p.target);
       });
       if (defaults.opposite) addOpposite(sheet, road, defaults.opposite, defaults.median, false);
@@ -3227,6 +3516,7 @@
       if (event.target.closest("button, .roadOverlay *, .markingOverlay *, .signOverlay *")) return;
       if (!document.getElementById("markingsEditor").hidden) return;  // the Markings tabs handle their own
       const point = sheets.toImage(event.clientX, event.clientY);
+      if(insertMedianPoint(sheet,point)){event.preventDefault();return;}
       const small = window.StripeMaker.selection?.itemAt(point);
       if (small && !["roads", "medians"].includes(small.kind)) {
         event.preventDefault();
@@ -3414,15 +3704,16 @@
       detach(sheet, road, 0);
       detach(sheet, road, 1);
       road.ends.reverse();
+      if(road.gapProfiles)road.gapProfiles=Object.fromEntries(Object.entries(road.gapProfiles).map(([k,p])=>[road.lanes-Number(k),{...p,start:p.end,end:p.start,from:1-p.to,to:1-p.from}]));
       road.ends.forEach(end => { end.sign *= -1; });
       road.tapers = Object.fromEntries(Object.entries(road.tapers ?? {}).map(([key, value]) => {
         const [e, lane] = key.split(":").map(Number);
         return [`${1 - e}:${road.lanes - 1 - lane}`, value];
       }));
-      for (const median of sheet.medians) for (const p of median.points) {
-        if (p.on?.road !== road.id) continue;
-        p.on.side = { L: "R", R: "L", S: "E", E: "S" }[p.on.side];
-        p.on.f = 1 - p.on.f;
+      for (const median of sheet.medians) for (const p of median.points) for(const on of [p.on,p.on?.crossing]){
+        if (on?.road !== road.id) continue;
+        on.side = { L: "R", R: "L", S: "E", E: "S" }[on.side];
+        on.f = 1 - on.f;
       }
       openCurves.delete(`${road.id}:0`);
       openCurves.delete(`${road.id}:1`);
@@ -3555,7 +3846,7 @@
         joints.push(road.ends[1].joint, tail.ends[0].joint);
       }
       const center = { x: found.reduce((t, c) => t + c.x, 0) / found.length, y: found.reduce((t, c) => t + c.y, 0) / found.length };
-      const item = window.StripeMaker.intersections?.makeAt(sheet, center, joints);
+      const item = window.StripeMaker.intersections?.makeAt(sheet, center, joints, { combineDivided: found.length > 1 });
       selectedRoad = null;
       selectedLane = null;
       changed();
@@ -3829,12 +4120,20 @@
       const inWidth = incoming ? endWidth(sheet, incoming, 1) : endWidth(sheet, outgoing, 0);
       const outWidth = outgoing ? endWidth(sheet, outgoing, 0) : endWidth(sheet, incoming, 1);
       const center = partner ? { x: joint.x, y: joint.y }
-        : { x: at.x - normal.x * (e ? -1 : 1) * feetToPixels(sheet, road.lanes * endWidth(sheet, road, e) / 2),
-            y: at.y - normal.y * (e ? -1 : 1) * feetToPixels(sheet, road.lanes * endWidth(sheet, road, e) / 2) };
+        : { x: at.x - normal.x * (e ? -1 : 1) * linkLateral(sheet,road,"R",e),
+            y: at.y - normal.y * (e ? -1 : 1) * linkLateral(sheet,road,"R",e) };
       const tapered = here.some(item => [...shapeOf(sheet, item.road, solved).tapers.keys()].some(key => key.startsWith(`${item.e}:`)));
+      const details=(r,end)=>r?Array.from({length:r.lanes},(_,lane)=>({
+        width:window.StripeMaker.roadWidths.endWidth(sheet,r,end,lane),
+        type:r.laneTypes?.[lane]?.type??'travel',
+        // Same riding-space center used by lateral markings: exclude the
+        // double stripe and clear buffer (17 inches), and the outer half
+        // stripe (3 inches): the riding center shifts by (17 - 3) / 2.
+        centerShift:r.laneTypes?.[lane]?.type==='bufferedBike'?(lane===0&&r.lanes>1?-1:1)*14/24:0,
+      })):[];
       return { ...center, angle: Math.atan2(outward.y, outward.x) * 180 / Math.PI,
         incoming: incoming?.lanes ?? 0, outgoing: outgoing?.lanes ?? 0,
-        width: inWidth, outWidth, median, gap, joint: joint.id, terminal: terminal && !tapered,
+        width: inWidth, outWidth, inDetails:details(incoming,1), outDetails:details(outgoing,0), median, gap, joint: joint.id, terminal: terminal && !tapered,
         binding: { road: road.id, e, joint: joint.id },
         ends: here.map(item => ({ road: item.road.id, e: item.e })),
       };
@@ -3876,10 +4175,22 @@
     function laneTracks(sheet, solved = solve(sheet)) {
       return sheet.roads.map(road => {
         const shape = shapeOf(sheet, road, solved);
-        return { road: road.id, line: shape.line, bounds: shape.bounds };
+        // Crosswalk bars follow the marked bike path, which can move across
+        // physical lane boundaries at a drop/added-lane transition.
+        const markingEdges=Array.from({length:road.lanes+1},(_,k)=>{
+          const lane=bikeType(road,k)?k:bikeType(road,k-1)?k-1:null;
+          return boundary(lane==null?shape:bikeMarkingShape(sheet,road,lane,shape,solved),k);
+        });
+        const placementBounds=shape.line.map((p,i)=>shape.laneBounds[i].map((bounds,lane)=>{
+          if(!bikeType(road,lane))return bounds;
+          const n=rightOf(p.tangent),project=q=>(q.x-p.x)*n.x+(q.y-p.y)*n.y;
+          return [project(markingEdges[lane][i]),project(markingEdges[lane+1][i])];
+        }));
+        return { road: road.id, line: shape.line, bounds: shape.bounds, laneBounds:shape.laneBounds, placementBounds, markingEdges,
+          bikeLanes:Array.from({length:road.lanes},(_,lane)=>Boolean(bikeType(road,lane))) };
       });
     }
-    window.StripeMaker.roadEditor = { render, renderLater: (change = {}) => renderSoon(change),
+    window.StripeMaker.roadEditor = { splitLaneGroups, diagnostics: () => structuredClone({selectedRoad,selectedLane,selectedGore,selectedMedian,defaults,openCurves:[...openCurves],medianPoints}), render, renderLater: (change = {}) => renderSoon(change),
       roadAt: (sheet, point) => roadAt(sheet, point), medianAt: (sheet, point) => medianAt(sheet, point),
       removeRoads: (sheet, roads) => removeRoads(sheet, roads),
       // A colored pavement record's outline, or a lane stretch (fractions), in sheet pixels.

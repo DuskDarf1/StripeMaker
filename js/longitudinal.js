@@ -219,6 +219,7 @@
 
     const draft = { style: 'skip', color: 'white', width: 8, side: 'left', contrast: false };
     let selected = null, selectedSheet = null, hover = null, drag = null;
+    app.longitudinal.diagnostics = () => structuredClone({selected,draft});
 
     const active = () => !panel.hidden && app.markings?.tab() === 'longitudinal';
     const current = () => sheets.selected?.lines?.find(l => l.id === selected) ?? null;

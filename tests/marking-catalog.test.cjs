@@ -255,3 +255,13 @@ test('colored pavement preserves the common 2-4 phase across clipped segments',(
  const a=C.stretches('dotted',7,1),b=C.stretches('dotted',5,8).map(([x,y])=>[x+7,y+7]);
  assert.deepEqual([...a,...b],C.stretches('dotted',12,1));
 });
+
+// White paint and optional black contrast are separate dimensions.
+test('emphasis bar is 24 inches, with 4-inch contrast on each side',()=>{
+ const g=C.crosswalk({type:'crosswalkSpecial',width:10,contrast:true},{x:0,y:0},{x:20,y:0},[{x:10,y:0,t:{x:0,y:1},width:C.CROSSWALK.bar}]);
+ const white=g.parts.filter(p=>p.fill==='#ffffff').at(-1);
+ const black=g.parts.filter(p=>p.fill==='#000000').at(-1);
+ const span=part=>Math.max(...part.rings[0].map(p=>p[0]))-Math.min(...part.rings[0].map(p=>p[0]));
+ near(span(white)*12,24,1e-9,'white width');
+ near(span(black)*12,32,1e-9,'white plus black surround');
+});
