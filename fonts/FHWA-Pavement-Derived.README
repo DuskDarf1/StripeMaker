@@ -1,0 +1,8 @@
+FHWA Pavement Derived (FHWA-Pavement-Derived.ttf), version 1.000
+
+Supplied by the StripeMaker project owner for pavement word messages. From the
+font's name table: "Derived from public FDOT and FHWA pavement marking vector
+diagrams. Independently assembled; not an agency-issued font."
+
+scripts/import-markings.py converts its outlines to assets/markings/font.js,
+which the app uses; the TTF is kept here as the source.

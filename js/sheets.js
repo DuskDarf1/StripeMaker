@@ -13,6 +13,8 @@
     const stage = document.getElementById("previewStage");
     const fileInput = document.getElementById("sheetFile");
     const uploadButton = document.getElementById("uploadSheet");
+    const blankButton = document.getElementById("blankSheet");
+    const nameInput = document.getElementById("sheetName");
     const scaleButton = document.getElementById("setScale");
     const removeButton = document.getElementById("removeSheet");
     const list = document.getElementById("sheetList");
@@ -91,10 +93,15 @@
       sheet.content.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
       sheet.content.style.setProperty("--zoom", scale);
       scheduleSave(sheet);
-      if (sheet === selected) {
-        drawScaleLine();
-        document.dispatchEvent(new CustomEvent("sheetview"));
-      }
+      // Wheel and pointer events can come several to a frame; the overlays
+      // only need to follow once per frame.
+      if (sheet === selected) viewFrame ||= requestAnimationFrame(viewChanged);
+    }
+    let viewFrame = 0;
+    function viewChanged() {
+      viewFrame = 0;
+      drawScaleLine();
+      document.dispatchEvent(new CustomEvent("sheetview"));
     }
     function zoomAt(sheet, factor, clientX, clientY) {
       const box = stage.getBoundingClientRect();
@@ -156,6 +163,8 @@
       });
       removeButton.disabled = !selected;
       scaleButton.disabled = !selected;
+      nameInput.disabled = !selected;
+      if (document.activeElement !== nameInput) nameInput.value = selected?.name ?? "";
     }
 
     function select(sheet) {
@@ -200,6 +209,8 @@
       name: sheet.name, inchesPerPixel: sheet.inchesPerPixel, view: sheet.view,
       roads: sheet.roads ?? [], joints: sheet.joints ?? [], gores: sheet.gores ?? [], medians: sheet.medians ?? [],
       autoTapers: Boolean(sheet.autoTapers), intersections: sheet.intersections ?? [], signs: sheet.signs ?? [],
+      markings: sheet.markings ?? [], lines: sheet.lines ?? [], bridges: sheet.bridges ?? [], surfaces: sheet.surfaces ?? [], blank: Boolean(sheet.blank),
+      ...(sheet.blank ? { width: sheet.width, height: sheet.height } : {}),
     });
     function saveFailed(error) {
       status.textContent = `Couldn't save sheets for next time: ${error?.message || "storage unavailable"}.`;
@@ -259,6 +270,7 @@
           const decoded = await decode(file);
           const view = data.view?.fitted ? null : data.view;
           const sheet = { ...decoded, ...data, id, file, view, content: decoded.content };
+          blankSize(sheet);
           nextId = Math.max(nextId, id + 1);
           sheets.push(sheet);
           renderList();
@@ -274,6 +286,13 @@
       history.rebase();
     }
 
+    // A blank sheet's stretched pixel takes the sheet's own (saved) size.
+    function blankSize(sheet) {
+      sheet.content.classList.toggle("blankSheet", Boolean(sheet.blank));
+      if (!sheet.blank) return;
+      sheet.content.style.width = `${sheet.width}px`;
+      sheet.content.style.height = `${sheet.height}px`;
+    }
     async function decode(file) {
       const decoded = /\.tiff?$/i.test(file.name) ? await decodeTiff(file) : await decodeImage(file);
       decoded.content.className = "sheetImage";
@@ -282,7 +301,8 @@
       return decoded;
     }
 
-    async function addFiles(files) {
+    // `extra` overrides what's read from the file (a blank sheet's name and scale).
+    async function addFiles(files, extra = {}) {
       for (const file of files) {
         if (!SUPPORTED.test(file.name)) {
           status.textContent = `${file.name} isn't supported. Use GeoTIFF, JPEG, or PNG.`;
@@ -292,7 +312,8 @@
         uploadButton.disabled = true;
         try {
           const decoded = await decode(file);
-          const sheet = { id: nextId++, name: file.name.replace(/\.[^.]+$/, ""), file, ...decoded };
+          const sheet = { id: nextId++, name: file.name.replace(/\.[^.]+$/, ""), file, ...decoded, ...extra };
+          blankSize(sheet);
           sheets.push(sheet);
           renderList();
           select(sheet);
@@ -308,6 +329,30 @@
     }
 
     uploadButton.addEventListener("click", () => fileInput.click());
+    // A blank sheet for scratch work and demos: 30000 px square at 2 in/px
+    // (5,000 ft, about a mile each way), so roads draw true size right away (Set
+    // Scale still applies). Its image is a single white pixel stretched to that
+    // size, so it costs nothing to keep; it's saved like an upload, with its size.
+    const BLANK = { width: 30000, height: 30000, inchesPerPixel: 2 };
+    blankButton.addEventListener("click", async () => {
+      const canvas = Object.assign(document.createElement("canvas"), { width: 1, height: 1 });
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, 1, 1);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+      const used = sheets.map(sheet => Number(sheet.name.match(/^Blank sheet (\d+)$/)?.[1] ?? 0));
+      const name = `Blank sheet ${Math.max(0, ...used) + 1}`;
+      await addFiles([new File([blob], `${name}.png`, { type: "image/png" })], { name, inchesPerPixel: BLANK.inchesPerPixel, blank: true, width: BLANK.width, height: BLANK.height });
+    });
+    // Renaming: the list, downloads, and saved sheets take the new name. Not an undo step.
+    nameInput.addEventListener("input", () => {
+      const name = nameInput.value.trim();
+      if (!selected || !name) return;
+      selected.name = name;
+      renderList();
+      scheduleSave(selected);
+    });
+    nameInput.addEventListener("change", () => { nameInput.value = selected?.name ?? ""; });
     fileInput.addEventListener("change", () => {
       const files = [...fileInput.files];
       fileInput.value = "";
@@ -624,9 +669,6 @@
     }
     workspace.addEventListener("pointerup", endPointer);
     workspace.addEventListener("pointercancel", endPointer);
-    workspace.addEventListener("dblclick", event => {
-      if (selected && !event.defaultPrevented && !event.target.closest(".scaleHandle, .roadNode, .roadControl, .medianPoint")) fitSheet(selected);
-    });
     window.addEventListener("resize", () => { if (selected?.view.fitted) fitSheet(selected); });
 
     // Other tools draw on the selected sheet through this API and the sheetview
@@ -634,6 +676,12 @@
     const overlays = [];
     (window.StripeMaker ??= {}).sheets = {
       get selected() { return selected; },
+      // Zooms about the middle of the stage (the Zoom In/Out shortcuts).
+      zoomBy(factor) {
+        if (!selected) return;
+        const box = stage.getBoundingClientRect();
+        zoomAt(selected, factor, box.left + box.width / 2, box.top + box.height / 2);
+      },
       get all() { return sheets; },
       save: scheduleSave,
       addOverlay(element) {
@@ -675,9 +723,9 @@
         report("Upload a sheet first.");
         return;
       }
-      if (!window.confirm(`Clear all roads, medians, gores, intersections, and signs on “${selected.name}”? You can undo this.`)) return;
+      if (!window.confirm(`Clear all roads, medians, gores, intersections, signs, and markings on “${selected.name}”? You can undo this.`)) return;
       window.StripeMaker.showEditor?.(null);
-      Object.assign(selected, { roads: [], joints: [], gores: [], medians: [], intersections: [], signs: [] });
+      Object.assign(selected, { roads: [], joints: [], gores: [], medians: [], intersections: [], signs: [], markings: [], lines: [], bridges: [], surfaces: [] });
       scheduleSave(selected);
       history.record();
       document.dispatchEvent(new CustomEvent("sheethistory"));

@@ -192,7 +192,8 @@
         const stroke = node.getAttribute("stroke") ?? (band ? ASPHALT : null);
         const ops = [pathOps(node.getAttribute("d"))];
         if (stroke) {
-          ops.unshift(`${rgb(stroke)} RG ${n(+(node.getAttribute("stroke-width") ?? BAND_EDGE))} w 0 j 4 M`);  // miter joins, SVG's miter limit
+          // Miter joins with SVG's miter limit, or round joins (contrast borders).
+          ops.unshift(`${rgb(stroke)} RG ${n(+(node.getAttribute("stroke-width") ?? BAND_EDGE))} w ${node.getAttribute("stroke-linejoin") === "round" ? "1 j" : "0 j 4 M"}`);
           const dash = node.getAttribute("stroke-dasharray");
           ops.unshift(dash ? `[${dash.split(/[\s,]+/).map(v => n(+v)).join(" ")}] ${n(+(node.getAttribute("stroke-dashoffset") ?? 0))} d` : "[] 0 d");
         }
@@ -328,8 +329,12 @@
       busy = true;
       status.textContent = "Preparing download…";
       update();
+      // Roads left for the after-drag refresh are brought up to date first, and
+      // every level is drawn, even ones hidden in Settings.
+      window.StripeMaker.roadEditor?.flush();
+      const allLevels = window.StripeMaker.levels?.showingAll ?? (run => run());
       try {
-        const blob = format === "pdf" ? await pdfBlob(sheet) : await toBlob(await render(sheet), "image/png");
+        const blob = await allLevels(async () => format === "pdf" ? await pdfBlob(sheet) : await toBlob(await render(sheet), "image/png"));
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = `${sheet.name}.${format}`;

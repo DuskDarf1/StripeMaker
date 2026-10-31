@@ -117,6 +117,9 @@ hr { border: 0; border-top: 1px solid rgba(var(--baseColor), 0.45); margin: 0.75
   outline: calc(3px / var(--zoom, 1)) solid #fff;
 }
 .sheetImage canvas { position: absolute; display: block; }
+/* A blank sheet takes the theme's sheet color: light in light mode, dark in dark mode. */
+.sheetImage.blankSheet { background: var(--blankSheetColor); }
+.sheetImage.blankSheet img, .sheetImage.blankSheet canvas { visibility: hidden; }
 .sheetImage img { display: block; width: 100%; height: 100%; -webkit-user-drag: none; pointer-events: none; }
 #openSheetGuide { gap: 0.25rem; }
 #openSheetGuide .material-symbols-outlined { font-size: 1rem; }
@@ -192,16 +195,17 @@ button.scaleHandle:focus-visible, button.roadNode:focus-visible { outline: 2px s
 .roadBand.preview, .roadMarkings .preview { opacity: 0.75; }
 .roadMarking { fill: none; }
 .roadOutline { fill: none; stroke: none; }
-#workspace.elementsActive .roadOutline { stroke: #ffdf00; stroke-width: calc(2px / var(--zoom, 1)); }
+/* The selected road's outline and curve handles take its node color (--roadColor). */
+#workspace.elementsActive .roadOutline { stroke: var(--roadColor, #ffdf00); stroke-width: calc(2px / var(--zoom, 1)); }
 .roadSnap { fill: none; stroke: #ffdf00; stroke-width: 2px; filter: drop-shadow(0 0 1px #252628); }
-/* Lane nodes are little steering wheels. */
+/* Lane nodes: a circle with an arrow in the lane's direction of travel. */
 .roadNode {
   position: absolute;
   width: 22px;
   height: 22px;
   padding: 0;
-  transform: translate(-50%, -50%);
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23665900' stroke-width='4.5' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M3.5 11h6M14.5 11h6M12 14.5v6'/%3E%3C/g%3E%3Cg fill='none' stroke='%23ffdf00' stroke-width='2.5' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M3.5 11h6M14.5 11h6M12 14.5v6'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='3.2' fill='%23ffdf00' stroke='%23665900' stroke-width='1'/%3E%3C/svg%3E") center / contain no-repeat;
+  transform: translate(-50%, -50%) rotate(var(--angle, 0rad));
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%23252628' fill-opacity='.55' stroke='%23252628' stroke-width='4'/%3E%3Ccircle cx='12' cy='12' r='10' fill='none' stroke='%23ffdf00' stroke-width='2'/%3E%3Cpath d='M6.5 12h10M12.5 7.5L17 12l-4.5 4.5' fill='none' stroke='%23ffdf00' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
   border: 0;
   border-radius: 50%;
   cursor: move;
@@ -217,25 +221,20 @@ button.scaleHandle:focus-visible, button.roadNode:focus-visible { outline: 2px s
 .roadOverlay.drawing .roadNode { pointer-events: none; }
 .roadOverlay { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
 .roadOverlay svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.roadControlLine { stroke: #ffdf00; stroke-width: 1.5px; filter: drop-shadow(0 0 1px #252628); }
-/* Flow arrows point the way each lane travels; a wedge badge marks a tapered lane
-   end, narrowing toward the lane's zero-width end. */
-.roadArrow, .roadTaper {
+.roadControlLine { stroke: var(--roadColor, #ffdf00); stroke-width: 1.5px; filter: drop-shadow(0 0 1px #252628); }
+/* A wedge badge marks a tapered lane end, narrowing toward the lane's
+   zero-width end. */
+.roadTaper {
   position: absolute;
   transform: translate(-50%, -50%) rotate(var(--angle, 0rad));
   pointer-events: none;
-}
-.roadArrow {
-  width: 14px;
-  height: 14px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 12h14M12 5l7 7-7 7' fill='none' stroke='%23665900' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M4 12h14M12 5l7 7-7 7' fill='none' stroke='%23ffdf00' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 .roadTaper {
   width: 13px;
   height: 13px;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11' fill='%23252628' stroke='%23ffdf00' stroke-width='2'/%3E%3Cpath d='M5 6.5L19 11v2L5 17.5z' fill='%23ffdf00'/%3E%3C/svg%3E") center / contain no-repeat;
 }
-.roadOverlay.drawing .roadArrow, .roadOverlay.drawing .roadTaper { opacity: 0.6; }
+.roadOverlay.drawing .roadTaper { opacity: 0.6; }
 /* Gore icons sit on the gore's center line and drag along it. The wedge points
    back at the gore point. */
 .goreHandle {
@@ -256,6 +255,22 @@ button.scaleHandle:focus-visible, button.roadNode:focus-visible { outline: 2px s
 .goreHandle:not(.marked) { opacity: 0.8; }
 .goreHandle.selected { width: 24px; height: 24px; filter: drop-shadow(0 0 3px #ffdf00); }
 .goreHandle:focus-visible { outline: 2px solid var(--textColor); outline-offset: 3px; }
+/* Add-lane buttons: a + triangle pointing out from the selected road's edge. */
+.laneAdd {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  transform: translate(-50%, -50%) rotate(var(--angle, 0rad));
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 2.5L22 12L3 21.5Z' fill='%23252628' stroke='%23ffdf00' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M5.5 12h7M9 8.5v7' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  border: 0;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.laneAdd::before { content: ""; position: absolute; inset: -6px; }
+.laneAdd:hover { filter: drop-shadow(0 0 3px #ffdf00); }
+.laneAdd:focus-visible { outline: 2px solid var(--textColor); outline-offset: 3px; }
+.roadOverlay.drawing .laneAdd { display: none; }
 .roadOverlay.drawing .goreHandle { pointer-events: none; opacity: 0.4; }
 .dimensionInputs { display: flex; align-items: center; gap: 0.4rem; flex: 1; min-width: 0; }
 .dimensionInputs input[type="range"] { flex: 1; min-width: 2.5rem; padding: 0; cursor: pointer; }
@@ -268,7 +283,7 @@ button.roadControl {
   height: 14px;
   padding: 0;
   transform: translate(-50%, -50%);
-  background: #ffdf00;
+  background: var(--roadColor, #ffdf00);
   border: 2px solid #665900;
   border-radius: 50%;
   cursor: move;
@@ -342,7 +357,7 @@ button.medianPoint:focus-visible { outline: 2px solid var(--textColor); outline-
 }
 .nodeMenu button:hover, .nodeMenu button:focus-visible { background: var(--selectedColor); }
 .nodeMenu button[aria-checked="true"]::before { content: "✓"; position: absolute; left: 0.35rem; }
-#elementsEditor { width: 20rem; }
+#elementsEditor, #levelsEditor { width: 20rem; }
 #elementsEditor .headActions { margin: 0 0 0.5rem; }
 .editorContent button[aria-pressed="true"] { background: var(--selectedColor); }
 
@@ -359,7 +374,7 @@ button.medianPoint:focus-visible { outline: 2px solid var(--textColor); outline-
 .headChoiceButtons button { width: 100%; min-width: 0; white-space: nowrap; }
 .headChoiceButtons button[aria-pressed="true"] { background: var(--selectedColor); }
 .downloadLabel { display: block; margin-top: 0.5rem; }
-#downloadMenu .dimensionInputs { margin: 0.25rem 0; }
+#downloadMenu .dimensionInputs, #settingsMenu .dimensionInputs { margin: 0.25rem 0; }
 #downloadStatus:empty { display: none; }
 
 /* SignalMaker's action status (Undone. / Redone.) above the toolbar. */
@@ -380,7 +395,7 @@ button.medianPoint:focus-visible { outline: 2px solid var(--textColor); outline-
   .headListButton.panelWiggle { animation: none; }
 }
 @media (max-width: 768px) {
-  #scaleEditor, #elementsEditor, #intersectionEditor { width: 100%; }
+  #scaleEditor, #elementsEditor, #levelsEditor, #intersectionEditor { width: 100%; }
 }
 .headsMenu .headActions button { white-space: nowrap; }
 /* SignalMaker's head list and field conventions (GPL-3.0). */
@@ -420,3 +435,21 @@ button.medianPoint:focus-visible { outline: 2px solid var(--textColor); outline-
 .intersectionAdd:focus-visible { outline:none; }
 #intersectionSheetFields fieldset .fieldRow > label { flex-basis:7.5rem; }
 .intersectionLaneUnknown { fill:#ffc72c; font:700 7px "Overpass",sans-serif; pointer-events:none; }
+
+/* Selection mode (js/selection.js): selected items outlined, and the box. */
+.selectionOutline { fill: rgba(255, 223, 0, 0.12); stroke: #ffdf00; stroke-width: 2px; stroke-dasharray: 6 3; filter: drop-shadow(0 0 1px #252628); }
+.selectionBox { fill: rgba(255, 223, 0, 0.1); stroke: #ffdf00; stroke-width: 1px; stroke-dasharray: 4 3; }
+#workspace.selecting { cursor: default; }
+#selectEditor { width: 20rem; }
+.nodeMenu button:disabled { opacity: 0.45; cursor: default; }
+.bikeActions { align-items: center; flex-wrap: wrap; }
+.bikeActions[hidden] { display: none; }
+.bikeBuffered { display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; font-size: 0.75rem; }
+
+/* Settings › Shortcuts (js/shortcuts.js), and F1's Show/Hide All Menus. */
+.shortcutSettings summary { cursor: pointer; margin: 0.5rem 0 0.25rem; font-size: 0.8rem; }
+.shortcutList { display: grid; gap: 0.25rem; max-height: 14rem; overflow-y: auto; }
+.shortcutList label { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.75rem; }
+.shortcutList input { width: 7.5rem; text-align: center; cursor: pointer; }
+#settingsMenu { max-height: calc(100vh - 6rem); overflow-y: auto; }
+body.menusHidden #configBar, body.menusHidden .editor, body.menusHidden .headsMenu { display: none !important; }

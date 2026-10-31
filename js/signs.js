@@ -182,11 +182,17 @@
         const u={x:dx/distance,y:dy/distance},v={x:-u.y,y:u.x},local=L.rotate(u.x,u.y,-angle);
         const start=Math.min(width/2/Math.max(Math.abs(local.x),1e-6),height/2/Math.max(Math.abs(local.y),1e-6));
         if(distance>start){
-          const a=Math.min(width*.12,(distance-start)*.4),stroke=Math.max(.5,width/55);
-          const d=`M${sign.x} ${sign.y} L${sign.postX} ${sign.postY}`;
+          // Every leader on a sheet has the same weight, whatever its sign's size,
+          // and the line stops inside the arrowhead so it never shows past the tip.
+          // Thickness: a fixed share of the sheet, scaled by the Settings percentage.
+          const sheet=sheets.selected,weight=(app.settings?.get('signArrowWeight')??100)/100;
+          const stroke=(sheet?Math.hypot(sheet.width,sheet.height)/900:Math.max(.5,width/55))*weight;
+          const a=Math.min(stroke*7,(distance-start)*.6);
+          const base={x:sign.postX-u.x*a*.8,y:sign.postY-u.y*a*.8};
+          const d=`M${sign.x} ${sign.y} L${base.x} ${base.y}`;
           svg('path',{d,fill:'none',stroke:'#ffffff','stroke-width':stroke*2.5},group);
           svg('path',{d,fill:'none',stroke:'#000000','stroke-width':stroke},group);
-          svg('path',{d:`M${sign.postX} ${sign.postY} L${sign.postX-u.x*a+v.x*a*.45} ${sign.postY-u.y*a+v.y*a*.45} L${sign.postX-u.x*a-v.x*a*.45} ${sign.postY-u.y*a-v.y*a*.45} Z`,fill:'#000000',stroke:'#ffffff','stroke-width':stroke*.3},group);
+          svg('path',{d:`M${sign.postX} ${sign.postY} L${sign.postX-u.x*a+v.x*a*.45} ${sign.postY-u.y*a+v.y*a*.45} L${sign.postX-u.x*a-v.x*a*.45} ${sign.postY-u.y*a-v.y*a*.45} Z`,fill:'#000000',stroke:'#ffffff','stroke-width':stroke*.75,'stroke-linejoin':'round'},group);
 
         }
       }
@@ -312,7 +318,7 @@
     get('deleteSign').addEventListener('click',remove);
     get('signSize').addEventListener('input',event=>{
       const sign=current(),value=event.target.valueAsNumber;if(!Number.isFinite(value))return;
-      const size=Math.max(25,Math.min(400,value));
+      const size=Math.max(25,Math.min(2000,value));
       if(sign){sign.size=size;changed();}else{choiceSize=size;refreshOverlay();}
     });
     get('signSize').addEventListener('change',()=>{get('signSize').value=current()?.size ?? choiceSize;});
@@ -529,6 +535,8 @@
     document.addEventListener('keydown',event=>{
       if(!active() || picker.open || event.target.closest('input,select,textarea,[contenteditable="true"]'))return;
       if(event.key==='Escape' && placement){event.preventDefault();event.stopImmediatePropagation();placement=null;refreshOverlay();updatePanel();tell('Placement canceled.');}
+      // One level at a time: an assembly panel, then the sign, then the panel closes.
+      else if(event.key==='Escape' && selected && !event.target.closest?.('input,select,textarea,dialog')){event.preventDefault();event.stopImmediatePropagation();if(partIndex>0)partIndex=0;else selected=null;refreshOverlay();updatePanel();}
       else if((event.key==='Delete' || event.key==='Backspace') && current()){event.preventDefault();if(!assemblyPanel.hidden)removeAssemblyPart();else remove();}
     },true);
     new MutationObserver(()=>{if(!active())placement=null;updatePanel();refreshOverlay();}).observe(panel,{attributes:true,attributeFilter:['hidden']});
@@ -541,7 +549,11 @@
       placement=null;dragging=null;partIndex=0;fieldsFor=null;invalidFields.clear();if(selectedSheet!==sheets.selected)selected=null;
       updatePanel();refreshOverlay();if(sheets.selected) { tell('Choose a sign, then click Add Sign.'); } if(sheets.selected)ready(sheets.selected).catch(error=>tell(error.message));
     });
-    app.signs={draw,refreshOverlay,ready};
+    // For selection: a sign's face, centered on its x, y.
+    const box = sign => { const { width, height } = dimensions(sign); return { x: sign.x, y: sign.y, width, height, rotation: sign.rotation ?? 0 }; };
+    // Opens a sign in the Signs panel, selected (right-click Edit).
+    const focus = id => { app.showEditor?.('signsEditor'); selected=id; selectedSheet=sheets.selected; partIndex=0; refreshOverlay(); updatePanel(); };
+    app.signs={draw,refreshOverlay,ready,box,focus};
     loadCatalog().then(async()=>{await loadArt(choice);updatePanel();if(sheets.selected)return ready(sheets.selected);}).catch(error=>tell(error.message));
     updatePanel();
   });

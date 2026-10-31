@@ -10,7 +10,7 @@
     const toolbar = document.getElementById("configBar");
     const buttons = [...toolbar.querySelectorAll("[data-editor]")];
 
-    const popovers = ['sheetsMenu', 'downloadMenu', 'intersectionsEditor'].map(id => ({
+    const popovers = ['sheetsMenu', 'downloadMenu', 'settingsMenu', 'intersectionsEditor'].map(id => ({
       menu: document.getElementById(id), button: buttons.find(button => button.dataset.editor === id),
     }));
     function positionPopovers() {
@@ -89,6 +89,6 @@
 
     Object.assign(window.StripeMaker ??= {}, { showEditor });
 
-    // Copy is a placeholder until its feature is requested; Clear all lives in sheets.js.
+    // Select (selection mode, copy and paste) lives in selection.js; Clear all in sheets.js.
   });
 })();

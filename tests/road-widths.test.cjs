@@ -1,11 +1,11 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {endWidth,widthAt}=require('../js/road-widths.js');
+const {endWidth,widthAt,laneAt,splitWidths}=require('../js/road-widths.js');
 const road=(id,laneWidth,start,end)=>({id,laneWidth,ends:[{joint:start},{joint:end}]});
-test('joined roads meet at one width and blend smoothly to their own width',()=>{
+test('joined roads keep independent widths on either side of a node',()=>{
  const a=road(1,10,1,2),b=road(2,16,2,3);
  const s={roads:[a,b],joints:[{id:1},{id:2,links:[{a:1,b:2,ai:0,bi:0}]},{id:3}]};
- assert.equal(endWidth(s,a,1),13);assert.equal(endWidth(s,b,0),13);
+ assert.equal(endWidth(s,a,1),10);assert.equal(endWidth(s,b,0),16);
  assert.equal(endWidth(s,a,0),10);
  assert.equal(widthAt(10,10,13,0),10);assert.equal(widthAt(10,10,13,.5),10);assert.equal(widthAt(10,10,13,1),13);
  assert(widthAt(10,10,13,.75)>10);assert(widthAt(10,10,13,.75)<13);
@@ -25,4 +25,69 @@ test('beside and opposite pair links do not average unrelated lane widths',()=>{
  const s={roads:[a,b],joints:[{id:2,links:[{a:1,b:2,ai:0,bi:0,...kind}]}]};
  assert.equal(endWidth(s,a,1),10);assert.equal(endWidth(s,b,0),16);
  }
+});
+
+test('per-lane widths are opt-in, independently adjustable at both ends, and survive cuts',()=>{
+ const a={...road(1,12,1,2),lanes:2,laneWidths:{0:16},laneEndWidths:{'0:0':18,'1:0':10}};
+ const s={roads:[a],joints:[]};
+ assert.equal(laneAt(s,a,0,0),12);
+ a.perLaneWidths=true;
+ assert.equal(laneAt(s,a,0,0),18);assert.equal(laneAt(s,a,0,.5),16);assert.equal(laneAt(s,a,0,1),10);
+ assert.equal(laneAt(s,a,1,.5),12);
+ const [before,after]=splitWidths(s,a,.3);
+ const b={...a,widthProfiles:before},c={...a,widthProfiles:after};
+ for(let i=0;i<=10;i++) {
+  assert(Math.abs(laneAt(s,b,0,i/10)-laneAt(s,a,0,.3*i/10))<1e-9);
+  assert(Math.abs(laneAt(s,c,0,i/10)-laneAt(s,a,0,.3+.7*i/10))<1e-9);
+ }
+ assert.equal(endWidth(s,b,1,0),endWidth(s,c,0,0));
+});
+test('wide edge feed cannot change either piece of the receiving road',()=>{
+ const a={...road(1,10,1,2),lanes:2},b={...road(2,10,2,3),lanes:2},r={...road(3,20,4,2),lanes:1};
+ const s={roads:[a,b,r],joints:[{id:2,links:[{a:1,b:2,ai:0,bi:0},{a:2,b:3,ai:1,bi:0,feed:true}]}]};
+ for(const lane of [0,1]) {assert.equal(endWidth(s,a,1,lane),10);assert.equal(endWidth(s,b,0,lane),10);}
+ assert.equal(endWidth(s,r,1,0),10);
+ assert.equal(laneAt(s,r,0,.5),20);
+ assert(laneAt(s,r,0,.75)>10 && laneAt(s,r,0,.75)<20);
+ r.perLaneWidths=true;r.laneEndWidths={'1:0':19};
+ assert.equal(endWidth(s,r,1,0),10,'receiving lane controls even an explicit width');
+ b.perLaneWidths=true;b.laneWidths={1:12};
+ assert.equal(endWidth(s,r,1,0),12,'follows later receiving-lane edits');
+});
+
+test('previously saved edge feeds narrow without changing their receiving cut profile',()=>{
+ const a={...road(1,10,1,2),lanes:1},b={...road(2,10,2,3),lanes:1},r={...road(3,20,4,2),lanes:1};
+ const s={roads:[a,b,r],joints:[{id:2,links:[{a:1,b:2,ai:0,bi:0},{a:2,b:3,ai:0,bi:0}]}]};
+ b.widthProfiles=[{width:10,start:10,end:10,from:.4,to:1}];
+ assert.equal(endWidth(s,r,1,0),10);
+ assert.equal(endWidth(s,b,0,0),10);
+});
+
+test('a wide road end narrows into an existing road start, including saved node joins',()=>{
+ for (const flagged of [false,true]) {
+  const host={...road(1,10,1,2),lanes:2,perLaneWidths:true,laneWidths:{1:11}};
+  const ramp={...road(2,20,3,1),lanes:1};
+  const s={roads:[host,ramp],joints:[{id:1,links:[{a:1,ai:1,b:2,bi:0,...(flagged?{feed:true}:{})}]}]};
+  assert.equal(endWidth(s,ramp,1,0),11);
+  assert.equal(endWidth(s,host,0,1),11);
+  assert.equal(laneAt(s,ramp,0,.5),20);
+  assert.equal(endWidth(s,ramp,0,0),20);
+  s.joints[0].links=[];
+  assert.equal(endWidth(s,ramp,1,0),20,'detaching restores the chosen width');
+ }
+});
+test('a new departing start follows the existing road end without widening it',()=>{
+ const host={...road(1,10,1,2),lanes:1},ramp={...road(2,20,2,3),lanes:1};
+ const s={roads:[host,ramp],joints:[{id:2,links:[{a:1,ai:0,b:2,bi:0,feed:true}]}]};
+ assert.equal(endWidth(s,ramp,0,0),10);assert.equal(endWidth(s,host,1,0),10);
+});
+
+test('bike widths survive vehicle feeds and generic intersection mouths',()=>{
+ const a={...road(1,12,1,2),lanes:2,laneTypes:{1:{type:'bufferedBike',width:7}}};
+ const b={...road(2,12,2,3),lanes:2};
+ const s={roads:[a,b],joints:[{id:1,links:[]},{id:2,links:[{a:2,ai:1,b:1,bi:1,feed:true}]},{id:3,links:[]}],
+  intersections:[{approaches:[{width:12,outWidth:12,links:[{road:1,e:1,lane:1}]}]}]};
+ assert.equal(endWidth(s,a,1,1),7);
+ a.laneTypes[1]={type:'bike',width:5};assert.equal(endWidth(s,a,1,1),5);
+ a.perLaneWidths=true;a.laneEndWidths={'1:1':6};assert.equal(endWidth(s,a,1,1),6);
 });

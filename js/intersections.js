@@ -491,8 +491,10 @@
         fields,
       );
     }
-    function drawPavement(item, parent, convert) {
-      svg("path", { d: path(G.outline(item, margin).map(convert)), class: "roadBand" }, parent);
+    // An intersection on an elevated level (Levels) has a concrete deck.
+    function drawPavement(item, parent, convert, concrete = null) {
+      svg("path", concrete ? { d: path(G.outline(item, margin).map(convert)), fill: concrete, stroke: concrete, "stroke-width": 1.5 }
+        : { d: path(G.outline(item, margin).map(convert)), class: "roadBand" }, parent);
       for (const a of item.approaches)
         for (const median of G.medians(a)) {
           const d = path(median.points.map(convert));
@@ -536,10 +538,33 @@
           },
           parent,
         );
+      // Each corner joins one approach's outgoing-side edge to the next one's
+      // incoming-side edge. An edge with lanes beside it is white (right of
+      // traffic); a one-way approach's other edge is its traffic's left edge,
+      // yellow. Edge lines always run on round the corner: where the two colors
+      // differ, each runs until it meets the other halfway.
+      const halves = (points) => {
+        const along = [0];
+        for (let i = 1; i < points.length; i++) along.push(along[i - 1] + G.length(G.sub(points[i], points[i - 1])));
+        const half = along.at(-1) / 2;
+        let i = 1;
+        while (i < points.length - 1 && along[i] < half) i++;
+        const f = (half - along[i - 1]) / (along[i] - along[i - 1] || 1);
+        const mid = G.add(points[i - 1], G.mul(G.sub(points[i], points[i - 1]), f));
+        return [[...points.slice(0, i), mid], [mid, ...points.slice(i)]];
+      };
       const ordered = G.ordered(item);
       for (const [i, a] of ordered.entries()) {
         const b = ordered[(i + 1) % ordered.length];
-        if (a.outgoing && b.incoming) stroke(G.corner(a, b).points, style.white);
+        const from = a.outgoing ? style.white : style.yellow,
+          to = b.incoming ? style.white : style.yellow,
+          points = G.corner(a, b).points;
+        if (from === to) stroke(points, from);
+        else {
+          const [first, second] = halves(points);
+          stroke(first, from);
+          stroke(second, to);
+        }
       }
       // A median's line wraps its rounded nose: up one side from the mouth, around
       // the nose on the island's own center, and back down the other side.
@@ -611,6 +636,12 @@
         end = at(total - cut);
       return [start.p, ...points.slice(start.i, end.i), end.p];
     }
+    // Each approach's movements share a color, like Cities: Skylines' lane
+    // routing: red for the first approach, the rest spread around the hues.
+    const approachColor = (item, id) => {
+      const i = Math.max(0, item.approaches.findIndex((a) => a.id === id));
+      return `hsl(${Math.round((i * 360) / Math.max(item.approaches.length, 3))} 95% 60%)`;
+    };
     function drawGuides(item, convert, arrows) {
       const paths = movementRoutes(item);
       for (const m of item.movements) {
@@ -618,13 +649,16 @@
         const route = paths.get(m.id) ?? [];
         const points = (arrows ? trim(route, ARROW_FEET) : route).map(convert);
         const focused = selected === item.id && m.id === chosenMovement;
+        const color = approachColor(item, m.from);
+        // The chosen movement: thicker, with a white edge.
+        if (focused) svg("path", { d: line(points), class: "intersectionMovement", stroke: "#ffffff", "stroke-width": 4 }, guides);
         svg(
           "path",
           {
             d: line(points),
             class: "intersectionMovement",
-            stroke: focused ? "#ffc72c" : "#ffffff",
-            "stroke-width": focused ? 1.8 : 1,
+            stroke: color,
+            "stroke-width": focused ? 2.2 : 1.4,
           },
           guides,
         );
@@ -644,8 +678,8 @@
               {
                 d: `M${p.x} ${p.y}L${at.x} ${at.y}L${q.x} ${q.y}`,
                 class: "intersectionMovement",
-                stroke: focused ? "#ffc72c" : "white",
-                "stroke-width": 1,
+                stroke: color,
+                "stroke-width": focused ? 2.2 : 1.4,
               },
               guides,
             );
@@ -950,14 +984,18 @@
       const ordered = G.ordered(item);
       for (const [i, a] of item.approaches.entries()) {
         const pick = () => (select(item.id, a.id), showPanel());
-        for (const incoming of [true, false])
-          control(
+        for (const incoming of [true, false]) {
+          const handle = control(
             convert(G.edge(a, incoming, margin)),
             `Approach ${i + 1} ${incoming ? "incoming" : "outgoing"} outer edge`,
             `edge-${a.id}-${incoming}`,
             pick,
             { type: "mouth", approach: a.id, incoming },
           );
+          const hint = "Drag to turn the opening; Shift-drag to slide it without turning.";
+          handle.setAttribute("aria-description", hint);
+          svg("title", {}, handle).textContent = hint;
+        }
         if (a.median > 0 && a.incoming && a.outgoing) {
           for (const incoming of [true, false])
             control(
@@ -1140,6 +1178,7 @@
         saved: snapshot(sheet),
         sheet,
         alt: event.altKey,
+        slide: event.shiftKey,
         focusKey: event.target.dataset?.key,
         changed: false,
       };
@@ -1198,12 +1237,18 @@
         }
         const edge = G.edge(old, d.incoming, margin),
           wanted = G.add(edge, delta);
-        // Rotate an opening around the intersection center, keeping its cross section
-        // rigid. The grabbed pavement corner remains under the pointer.
-        const angleDelta = Math.atan2(wanted.y, wanted.x) - Math.atan2(edge.y, edge.x);
-        a.angle = G.degrees(old.angle + (angleDelta * 180) / Math.PI);
-        const offset = G.mul(G.axes(a).n, G.side(a, d.incoming, margin));
-        Object.assign(a, G.sub(wanted, offset));
+        if (d.slide) {
+          // Shift-drag slides the whole opening without turning it.
+          Object.assign(a, G.add({ x: old.x, y: old.y }, delta));
+          a.angle = old.angle;
+        } else {
+          // Rotate an opening around the intersection center, keeping its cross section
+          // rigid. The grabbed pavement corner remains under the pointer.
+          const angleDelta = Math.atan2(wanted.y, wanted.x) - Math.atan2(edge.y, edge.x);
+          a.angle = G.degrees(old.angle + (angleDelta * 180) / Math.PI);
+          const offset = G.mul(G.axes(a).n, G.side(a, d.incoming, margin));
+          Object.assign(a, G.sub(wanted, offset));
+        }
         if (!a.binding) {
           const candidate = nearest(d.sheet, item, a, world(d.sheet, item, wanted), d.incoming);
           if (candidate) {
@@ -1371,10 +1416,8 @@
       if (!sheet?.inchesPerPixel) return;
       for (const item of sheet.intersections ?? []) {
         const convert = (p) => screen(sheet, item, p);
-        if (!active()) {
-          drawGuides(item, convert, false);
-          continue;
-        }
+        // Movement guides and arrows show only on the intersection you've clicked.
+        if (!active()) continue;
         const hit = svg(
           "path",
           {
@@ -1417,8 +1460,8 @@
             nudge({ type: "body" }, move, e.shiftKey);
           }
         };
-        drawGuides(item, convert, selected === item.id);
         if (selected !== item.id) continue;
+        drawGuides(item, convert, true);
         svg("path", { d: path(G.outline(item, margin).map(convert)), class: "intersectionOutline" }, guides);
         drawLanes(item, convert);
         drawLinkPreview(item, convert);
@@ -1584,6 +1627,16 @@
           return;
         }
         if (!active() || e.target.closest?.("input,textarea,select") || e.target.dataset?.removable) return;
+        // Escape steps out one level at a time: the movement, then the approach,
+        // and only then the intersection (the panel closes as usual).
+        if (e.key === "Escape" && current() && (chosenMovement || chosen)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          if (chosenMovement) chosenMovement = null;
+          else chosen = null;
+          refresh();
+          return;
+        }
         if ((e.key === "Delete" || e.key === "Backspace") && current()) {
           e.preventDefault();
           if (chosenMovement) {
@@ -1613,12 +1666,43 @@
     document.addEventListener("sheetview", refreshOverlay);
     window.addEventListener("resize", refreshOverlay);
     app.intersections = {
+      // For selection: an intersection's pavement outline (sheet pixels).
+      outlineOf(sheet, item) {
+        return G.outline(item, margin).map((p) => world(sheet, item, p));
+      },
+      // An intersection on free road ends (right-click Make Intersection): one
+      // approach per end, each adopting that road's cross section.
+      makeAt(sheet, point, joints) {
+        const ends = roads.intersectionEnds(sheet).filter((end) => joints.includes(end.joint));
+        if (ends.length < 2) return null;
+        const item = G.create();
+        const names = new Set((sheet.intersections ?? []).map((x) => x.name));
+        let n = 1;
+        while (names.has(`Intersection ${n}`)) n++;
+        Object.assign(item, { name: `Intersection ${n}`, x: point.x, y: point.y });
+        item.approaches = ends.map((end) => {
+          const a = G.approach(0);
+          adopt(sheet, item, a, end);
+          return a;
+        });
+        (sheet.intersections ??= []).push(item);
+        selected = item.id;
+        selectedSheet = sheet;
+        chosen = null;
+        return item;
+      },
+      // Pavement edges and corners, plus the paved areas (each intersection's
+      // outline, less its medians) for telling outer edges from buried ones.
       boundaries(sheet, solved) {
         const edges = [],
-          corners = [];
-        if (!sheet.inchesPerPixel) return { edges, corners };
+          corners = [],
+          paved = [],
+          holes = [];
+        if (!sheet.inchesPerPixel) return { edges, corners, paved, holes };
         for (const item of sheet.intersections ?? []) {
           reconcile(sheet, item, solved);
+          paved.push(G.outline(item, margin).map((p) => world(sheet, item, p)));
+          for (const a of item.approaches) for (const median of G.medians(a)) holes.push(median.points.map((p) => world(sheet, item, p)));
           const ordered = G.ordered(item);
           for (const a of item.approaches) {
             const b = ordered[(ordered.indexOf(a) + 1) % ordered.length];
@@ -1639,17 +1723,102 @@
             }
           }
         }
-        return { edges, corners };
+        return { edges, corners, paved, holes };
       },
-      draw(sheet, layers, solved) {
+      // Ground-level intersections; `slot(level)` gives the group for an elevated
+      // one (null when its level is hidden), drawn later over lower levels.
+      draw(sheet, layers, solved, only = (item) => (item.level ?? 1) === 1) {
         for (const item of sheet.intersections ?? []) {
+          if (!only(item)) continue;
           reconcile(sheet, item, solved);
           const convert = (p) => world(sheet, item, p);
           drawPavement(item, layers.pavement, convert);
           drawMarkings(item, layers.markings, convert);
         }
       },
+      drawElevated(sheet, slot, solved) {
+        for (const item of sheet.intersections ?? []) {
+          const level = item.level ?? 1, parent = level > 1 && slot(level);
+          if (!parent) continue;
+          reconcile(sheet, item, solved);
+          const convert = (p) => world(sheet, item, p);
+          drawPavement(item, parent, convert, roads.medianStyle.concrete);
+          drawMarkings(item, parent, convert);
+        }
+      },
       refreshOverlay,
+      // Double-clicking an intersection's pavement opens it in the panel.
+      focusAt(point) {
+        const sheet = sheets.selected;
+        const item = [...(sheet?.intersections ?? [])].reverse().find((x) => G.contains(local(sheet, x, point), G.outline(x)));
+        if (!item) return false;
+        edit(item);
+        return true;
+      },
+      // Both edges of every movement's path through the intersection, for lane
+      // lines that continue through it (sheet pixels, in the direction of travel).
+      // A movement's width runs from its incoming lane's to its outgoing lane's.
+      lineTargets(sheet, solved) {
+        const targets = [];
+        for (const item of sheet.intersections ?? []) {
+          reconcile(sheet, item, solved);
+          const paths = movementRoutes(item);
+          for (const m of item.movements) {
+            const route = paths.get(m.id),
+              a = item.approaches.find((x) => x.id === m.from),
+              b = item.approaches.find((x) => x.id === m.to);
+            if (!route || route.length < 2 || !a || !b) continue;
+            const along = [0];
+            for (let i = 1; i < route.length; i++) along.push(along[i - 1] + G.length(G.sub(route[i], route[i - 1])));
+            const total = along.at(-1) || 1;
+            for (const side of ["L", "R"]) {
+              const points = route.map((p, i) => {
+                const prev = route[Math.max(0, i - 1)],
+                  next = route[Math.min(route.length - 1, i + 1)],
+                  t = G.unit(G.sub(next, prev)),
+                  half = (G.width(a, true) + (G.width(b, false) - G.width(a, true)) * (along[i] / total)) / 2,
+                  // Right of travel on the sheet (y down) is (-t.y, t.x).
+                  n = side === "R" ? { x: -t.y, y: t.x } : { x: t.y, y: -t.x };
+                return world(sheet, item, G.add(p, G.mul(n, half)));
+              });
+              targets.push({ key: `m:${item.id}:${m.id}:${side}`, points, on: { intersection: item.id, movement: m.id, side } });
+            }
+          }
+        }
+        return targets;
+      },
+      // Each approach direction's lanes as a straight track from where traffic
+      // enters it to where it leaves (incoming: mouth to throat; outgoing: throat
+      // to mouth), with lane edges in sheet pixels right of travel.
+      laneTracks(sheet) {
+        const tracks = [];
+        for (const item of sheet.intersections ?? []) {
+          G.normalize(item);
+          for (const a of item.approaches) {
+            const u = G.axes(a).u,
+              length = Math.max(1, G.dot(a, u) - G.throat(item, a)),
+              k = scale(sheet);
+            for (const incoming of [true, false]) {
+              const ids = incoming ? a.inLanes : a.outLanes;
+              if (!ids?.length) continue;
+              const width = G.width(a, incoming);
+              const edges = ids.map((_, j) => {
+                const left = incoming ? -G.boundary(a, true, j) : G.boundary(a, false, j);
+                return [left * k, (left + width) * k];
+              });
+              const ends = [world(sheet, item, G.local(a, 0, 0)), world(sheet, item, G.local(a, 0, -length))];
+              tracks.push({
+                key: `i:${item.id}:${a.id}:${incoming ? "in" : "out"}`,
+                on: { intersection: item.id, approach: a.id, incoming },
+                lanes: ids,
+                line: incoming ? ends : ends.reverse(),
+                bounds: [edges, edges],
+              });
+            }
+          }
+        }
+        return tracks;
+      },
       alignLinks(sheet) {
         for (const item of sheet.intersections ?? []) {
           if (dragging?.item === item) continue;

@@ -9,6 +9,7 @@
   --hoverColor: rgba(255, 255, 255, 0.5);
   --baseColor: 255, 255, 255;
   --inputColor: 240, 240, 240;
+  --blankSheetColor: rgb(255 255 255);
 }
 
 :root[data-theme="dark"] {
@@ -19,6 +20,7 @@
   --hoverColor: rgb(24 39 78);
   --baseColor: 0, 0, 0;
   --inputColor: 15, 15, 15;
+  --blankSheetColor: rgb(30 31 34);
 }
 
 * { box-sizing: border-box; }

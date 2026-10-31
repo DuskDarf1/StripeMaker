@@ -230,9 +230,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     page.once("dialog", (d) => d.accept());
     await page.locator("#deleteIntersection").click();
     assert.equal((await state()).length, 1);
-    // Guides remain visible with the tab closed and are not part of export SVG.
+    // Guides show only on the clicked intersection: none with the tools closed,
+    // and they are never part of export SVG.
     await page.getByRole("button", { name: "Intersections", exact: true }).click();
-    assert.ok((await page.locator(".intersectionOverlay .intersectionMovement").count()) > 0);
+    assert.equal(await page.locator(".intersectionOverlay .intersectionMovement").count(), 0);
     assert.equal(await page.locator(".roadLayer .intersectionMovement").count(), 0);
     // Both export pipelines must include only pavement/surfaces, not screen guides.
     await page.getByRole("button", { name: "Download", exact: true }).click();
