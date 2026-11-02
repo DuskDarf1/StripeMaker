@@ -105,6 +105,7 @@
         controls:[...document.querySelectorAll('input:not([type=file]):not([type=password]),select,textarea')].filter(el=>el.id).map(el=>({id:el.id,value:el.value,...(['checkbox','radio'].includes(el.type)?{checked:el.checked}:{}),disabled:el.disabled})),
         openPanels:[...document.querySelectorAll('.editor,[role=dialog],dialog')].filter(el=>el.getClientRects().length).map(el=>el.id),
         editors:Object.fromEntries(['roadEditor','markings','intersections','signs','selection','longitudinal','levels'].map(key=>[key,attempt(()=>app[key]?.diagnostics?.())])),
+        storage:attempt(()=>app.sheets.diagnostics()),
         errors:structuredClone(errors),history:app.history?.diagnostics?.(sheets.map(s=>s.id)),
         sheets:sheets.map(sheet=>({id:sheet.id,counts:Object.fromEntries(COLLECTIONS.map(key=>[key,sheet[key]?.length??0])),
           laneTracks:attempt(()=>app.roadEditor.laneTracks(sheet)),intersectionTracks:attempt(()=>app.intersections.laneTracks(sheet)),

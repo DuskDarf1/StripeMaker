@@ -185,6 +185,14 @@
     const pendingSaves = new Set();
     let saveTimer = 0;
     let restoring = true;
+    const unrestored = new Set(), restoreErrors = [];
+    let savedSelection = null;
+    const appRecord = () => ({
+      // Failed records still belong to the project. Keep them discoverable and
+      // reserve their IDs even when only part of a project could be opened.
+      order: [...sheets.map(sheet => sheet.id), ...unrestored],
+      selected: selected?.id ?? (unrestored.has(savedSelection) ? savedSelection : null),
+    });
     function openDatabase() {
       database ??= new Promise((resolve, reject) => {
         const request = indexedDB.open("StripeMaker", 1);
@@ -200,9 +208,11 @@
       const db = await openDatabase();
       return new Promise((resolve, reject) => {
         const transaction = db.transaction(["files", "sheets", "meta"], mode);
-        const result = work(transaction);
+        let result;
         transaction.oncomplete = () => resolve(result);
-        transaction.onerror = transaction.onabort = () => reject(transaction.error);
+        transaction.onerror = transaction.onabort = event => reject(event.target.error ?? transaction.error);
+        try { result = work(transaction); }
+        catch (error) { transaction.abort(); reject(error); }
       });
     }
     const record = sheet => ({
@@ -228,11 +238,24 @@
         const store = transaction.objectStore("sheets");
         saving.forEach(sheet => store.put(record(sheet), sheet.id));
         // Until restore finishes, the list is partial; keep the saved order intact.
-        if (!restoring) transaction.objectStore("meta").put({ order: sheets.map(sheet => sheet.id), selected: selected?.id ?? null }, "app");
+        if (!restoring) transaction.objectStore("meta").put(appRecord(), "app");
       }).catch(saveFailed);
     }
-    function saveFile(sheet) {
-      transact("readwrite", transaction => transaction.objectStore("files").put(sheet.file, sheet.id)).catch(saveFailed);
+    // Safari/WebKit can fail IndexedDB Blob/File preparation. Store immutable
+    // bytes plus metadata instead; runtime/export still receive ordinary Files.
+    // Legacy File records remain readable, without a database version change.
+    const fileRecord = async file => ({ name: file.name, type: file.type,
+      lastModified: file.lastModified, bytes: await file.arrayBuffer() });
+    const fileFromRecord = stored => stored?.bytes instanceof ArrayBuffer
+      ? new File([stored.bytes], stored.name, { type: stored.type, lastModified: stored.lastModified }) : stored;
+    function saveFile(sheet, storedFile) {
+      // File, drawing and list entry become durable together. Reloading between
+      // separate transactions must not leave a new sheet unlisted or file-only.
+      transact("readwrite", transaction => {
+        transaction.objectStore("files").put(storedFile, sheet.id);
+        transaction.objectStore("sheets").put(record(sheet), sheet.id);
+        if (!restoring) transaction.objectStore("meta").put(appRecord(), "app");
+      }).catch(saveFailed);
       scheduleSave(sheet);
     }
     function forget(sheet) {
@@ -249,11 +272,13 @@
           const found = {};
           const meta = transaction.objectStore("meta").get("app");
           meta.onsuccess = () => { found.meta = meta.result; };
-          for (const name of ["files", "sheets"]) {
-            const keys = transaction.objectStore(name).getAllKeys();
-            const values = transaction.objectStore(name).getAll();
-            values.onsuccess = () => { found[name] = new Map(keys.result.map((key, i) => [key, values.result[i]])); };
-          }
+          // Read large source images one at a time below. Loading every byte
+          // record here would multiply startup memory for multi-sheet TIFFs.
+          const fileKeys = transaction.objectStore("files").getAllKeys();
+          fileKeys.onsuccess = () => { found.fileKeys = fileKeys.result; };
+          const keys = transaction.objectStore("sheets").getAllKeys();
+          const values = transaction.objectStore("sheets").getAll();
+          values.onsuccess = () => { found.sheets = new Map(keys.result.map((key, i) => [key, values.result[i]])); };
           return found;
         });
       } catch (error) {
@@ -261,27 +286,51 @@
         saveFailed(error);
         return;
       }
-      const order = saved.meta?.order ?? [...saved.sheets.keys()];
+      // Old failed restores could save an incomplete order. Records, rather
+      // than that index alone, are the source of truth for recoverable sheets.
+      const order = [...new Set([...(saved.meta?.order ?? []), ...saved.sheets.keys()])];
+      savedSelection = saved.meta?.selected ?? null;
+      for (const id of [...saved.fileKeys, ...saved.sheets.keys(), ...order])
+        if (Number.isSafeInteger(id)) nextId = Math.max(nextId, id + 1);
       for (const id of order) {
-        const file = saved.files.get(id);
+        let file, storedFile;
         const data = saved.sheets.get(id);
-        if (!file || !data) continue;
-        status.textContent = `Restoring ${data.name}…`;
+        // A completed Delete may precede its delayed list save. A stale index
+        // with neither drawing nor image is not a recoverable failed sheet.
+        if (!data && !saved.fileKeys.includes(id)) continue;
+        unrestored.add(id);
+        status.textContent = `Restoring ${data?.name ?? 'sheet'}…`;
         try {
+          if (!data) throw Error('The saved drawing record is missing.');
+          // Blank sheets contain no source imagery. Recreate their disposable
+          // white pixel instead of making the drawing depend on its decoding.
+          if (data.blank) file = await blankFile(data.name);
+          else {
+            const request = await transact("readonly", transaction => transaction.objectStore("files").get(id));
+            storedFile = request.result;
+            file = fileFromRecord(storedFile);
+          }
+          if (!file) throw Error('The saved background image is missing.');
           const decoded = await decode(file);
           const view = data.view?.fitted ? null : data.view;
           const sheet = { ...decoded, ...data, id, file, view, content: decoded.content };
           blankSize(sheet);
+          const repairedFile = data.blank ? await fileRecord(file) : null;
           nextId = Math.max(nextId, id + 1);
           sheets.push(sheet);
           renderList();
           if (id === saved.meta?.selected || !selected) select(sheet);
+          unrestored.delete(id);
+          if (data.blank) saveFile(sheet, repairedFile);
+          else if (!(storedFile?.bytes instanceof ArrayBuffer))
+            fileRecord(file).then(stored => { if (sheets.includes(sheet)) saveFile(sheet, stored); }).catch(saveFailed);
         } catch (error) {
-          status.textContent = `Couldn't restore ${data.name}: ${error?.message || "unknown error"}.`;
-          continue;
+          const message = `Couldn't restore ${data?.name ?? 'sheet'}: ${error?.message || error?.name || "unknown error"}.`;
+          restoreErrors.push({ id, name: data?.name, message });
+          console.warn(message, error);
         }
-        status.textContent = "";
       }
+      status.textContent = restoreErrors.map(error => error.message).join(' ');
       restoring = false;
       scheduleSave();
       history.rebase();
@@ -313,12 +362,13 @@
         uploadButton.disabled = true;
         try {
           const decoded = await decode(file);
+          const storedFile = await fileRecord(file);
           const sheet = { id: nextId++, name: file.name.replace(/\.[^.]+$/, ""), file, ...decoded, ...extra };
           blankSize(sheet);
           sheets.push(sheet);
           renderList();
           select(sheet);
-          saveFile(sheet);
+          saveFile(sheet, storedFile);
           history.rebase();
           status.textContent = "";
         } catch (error) {
@@ -342,16 +392,17 @@
           if(!sheet.blank&&(decoded.width!==entry.width||decoded.height!==entry.height))throw Error("Background dimensions do not match the sheet.");
           blankSize(sheet);
         }
+        const storedFiles = await Promise.all(prepared.map(sheet => fileRecord(sheet.file)));
         // Reserve IDs after decoding so concurrent image uploads cannot collide.
         for(const sheet of prepared)sheet.id=nextId++;
         // One IndexedDB transaction: a storage failure cannot leave half an import.
         await transact("readwrite",transaction=>{
-          for(const sheet of prepared) {
-            transaction.objectStore("files").put(sheet.file,sheet.id);
+          for(const [index,sheet] of prepared.entries()) {
+            transaction.objectStore("files").put(storedFiles[index],sheet.id);
             transaction.objectStore("sheets").put(record(sheet),sheet.id);
           }
           const index=Math.max(0,entries.findIndex(e=>e.id===selectedId));
-          transaction.objectStore("meta").put({order:[...sheets,...prepared].map(s=>s.id),selected:prepared[index].id},"app");
+          transaction.objectStore("meta").put({order:[...sheets,...prepared].map(s=>s.id).concat([...unrestored]),selected:prepared[index].id},"app");
         });
       } catch(error) {
         for(const sheet of prepared)if(sheet.url)URL.revokeObjectURL(sheet.url);
@@ -369,15 +420,18 @@
     // Scale still applies). Its image is a single white pixel stretched to that
     // size, so it costs nothing to keep; it's saved like an upload, with its size.
     const BLANK = { width: 30000, height: 30000, inchesPerPixel: 2 };
-    blankButton.addEventListener("click", async () => {
+    async function blankFile(name) {
       const canvas = Object.assign(document.createElement("canvas"), { width: 1, height: 1 });
       const context = canvas.getContext("2d");
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, 1, 1);
       const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+      return new File([blob], `${name}.png`, { type: "image/png" });
+    }
+    blankButton.addEventListener("click", async () => {
       const used = sheets.map(sheet => Number(sheet.name.match(/^Blank sheet (\d+)$/)?.[1] ?? 0));
       const name = `Blank sheet ${Math.max(0, ...used) + 1}`;
-      await addFiles([new File([blob], `${name}.png`, { type: "image/png" })], { name, inchesPerPixel: BLANK.inchesPerPixel, blank: true, width: BLANK.width, height: BLANK.height });
+      await addFiles([await blankFile(name)], { name, inchesPerPixel: BLANK.inchesPerPixel, blank: true, width: BLANK.width, height: BLANK.height });
     });
     // Renaming: the list, downloads, and saved sheets take the new name. Not an undo step.
     nameInput.addEventListener("input", () => {
@@ -722,6 +776,7 @@
       snapshot: sheet => { const {projectArchive,...data}=record(sheet);return structuredClone(data); },
       importProject,
       get ready() { return !restoring; },
+      diagnostics: () => ({ restoring, unrestored: [...unrestored], restoreErrors: structuredClone(restoreErrors) }),
       addOverlay(element) {
         overlays.push(element);
         if (selected) stage.append(element);
