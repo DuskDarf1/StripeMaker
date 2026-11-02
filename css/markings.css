@@ -54,3 +54,28 @@
 .markingSnap { fill: #ffdf00; stroke: #665900; stroke-width: 1px; }
 /* Levels: each road's pavement tinted by its level (js/levels.js). */
 .levelPath { opacity: .45; stroke: none; }
+
+/* Simulator handles reuse the sheet overlay/button focus conventions. */
+.simulatorOverlay .simulatorSpawn,
+.simulatorOverlay .simulatorExit { width: 28px; height: 28px; border-radius: 0; cursor: pointer; }
+.simulatorOverlay .simulatorSpawn { background: transparent; }
+.simulatorSpawn img { display: block; width: 100%; height: 100%; pointer-events: none; }
+.simulatorOverlay .simulatorSpawn[aria-pressed="true"] { outline: 2px solid var(--selectedColor); outline-offset: 3px; }
+.simulatorOverlay .simulatorGhost { opacity: .5; pointer-events: none; }
+.simulatorOverlay .simulatorExit { background: #fff; color: #000; border: 2px solid #000; font-size: 20px; line-height: 1; }
+.simulatorRouteHit { pointer-events: stroke; cursor: pointer; }
+.simulatorRouteHit:focus-visible { stroke: var(--selectedColor); stroke-opacity: .5; outline: none; }
+
+/* Same compact panel width as the Elements editor; keep help wrapping. */
+#simulatorEditor { width: 20rem; }
+@media (max-width: 768px) { #simulatorEditor { width: 100%; } }
+
+.simulatorCars { z-index: 7; overflow: hidden; }
+.simulatorCar { position: absolute; left: 0; top: 0; transform-origin: center; pointer-events: none; }
+
+/* SignalMaker's indication fieldsets, scoped to the spawn route list. */
+.simulatorRouteRow { min-width: 0; margin: 0.6rem 0 0; padding: 0.4rem; border: 1px solid rgba(var(--baseColor), 0.45); }
+.simulatorRouteRow legend { padding: 0 0.25rem; font-family: "Overpass", sans-serif; font-size: 0.8rem; font-weight: 600; }
+
+/* Keep simulator sprites and handles beneath SignalMaker's editor panels. */
+#workspace.simulatorActive #previewStage { isolation: isolate; }

@@ -25,9 +25,109 @@
   const width = (a, incoming, index) => a.laneDetails?.[(incoming ? a.inLanes : a.outLanes)?.[index]]?.width ?? (incoming ? a.width : (a.outWidth ?? a.width));
   const widthsBefore = (a,incoming,count) => Array.from({length:count},(_,i)=>width(a,incoming,i)).reduce((sum,w)=>sum+w,0);
   const local = (a, d, along = 0) => {
-    const { u, n } = axes(a);
-    return add(a, add(mul(n, d), mul(u, along)));
+    const {p,n}=approachFrame(a,along);
+    return add(p,mul(n,d));
   };
+  // The approach anchor is the divider/left edge. Curve the physical middle
+  // of the whole opening, so a one-way approach does not pivot around its edge.
+  const centerOffset=a=>(side(a,true)+side(a,false))/2;
+  const approachCenter=a=>add(a,mul(axes(a).n,centerOffset(a)));
+  const baseApproach=a=>{
+    if(!a.approachCurve)return a;
+    const axis=a.approachCurve.axis,n=axes({angle:axis}).n;
+    return {...a,...sub(approachCenter(a),mul(n,centerOffset(a))),angle:axis,approachCurve:null};
+  };
+  function conflictHub(item) {
+    const approaches=item.approaches.map(baseApproach),centers=approaches.map(approachCenter),hits=[];
+    const widths=approaches.map(a=>Math.abs(side(a,false)-side(a,true))),pad=Math.max(1,...widths);
+    const x0=Math.min(...centers.map(p=>p.x))-pad,x1=Math.max(...centers.map(p=>p.x))+pad;
+    const y0=Math.min(...centers.map(p=>p.y))-pad,y1=Math.max(...centers.map(p=>p.y))+pad;
+    for(let i=0;i<approaches.length;i++)for(let j=i+1;j<approaches.length;j++) {
+      const u=mul(axes(approaches[i]).u,-1),v=mul(axes(approaches[j]).u,-1),den=cross(u,v);
+      // Nearly parallel continuations do not locate a conflict; their remote
+      // line intersection would pull a skewed merge away from the actual junction.
+      if(Math.abs(den)<.02)continue;
+      const d=sub(centers[j],centers[i]),s=cross(d,v)/den,t=cross(d,u)/den;
+      if(s<0||t<0)continue;
+      const p=add(centers[i],mul(u,s));
+      if(p.x>=x0&&p.x<=x1&&p.y>=y0&&p.y<=y1)hits.push(p);
+    }
+    const points=hits.length?hits:centers;
+    return mul(points.reduce(add,{x:0,y:0}),1/points.length);
+  }
+  function approachCurveConfig(item,a) {
+    const base=baseApproach(a),center=approachCenter(a),end=conflictHub(item);
+    let endAngle=base.angle;
+    if(base.incoming&&!base.outgoing) {
+      const targetIds=new Set((item.movements??[]).filter(m=>m.from===a.id).map(m=>m.to));
+      const candidates=item.approaches.filter(b=>b.id!==a.id&&b.outgoing&&(!targetIds.size||targetIds.has(b.id)));
+      if(candidates.length===1)endAngle=degrees(baseApproach(candidates[0]).angle+180);
+    }
+    return {axis:a.approachCurve?.axis??a.angle,end,endAngle,span:Math.max(.1,length(sub(center,end)))};
+  }
+  function curveControls(a) {
+    const curve=a.approachCurve,mouth=approachCenter(a),u=axes(a).u,inner=axes({angle:curve.endAngle??curve.axis}).u;
+    return [mouth,sub(mouth,mul(u,curve.pull)),add(curve.end,mul(inner,curve.span/3)),curve.end];
+  }
+  function approachFrame(a,along=0) {
+    const mouth=axes(a),curve=a.approachCurve;
+    if(!curve||along>=0)return {p:add(a,mul(mouth.u,along)),...mouth};
+    const inner=axes({angle:curve.endAngle??curve.axis}),span=curve.span,c=centerOffset(a);
+    if(along<=-span)return {p:sub(add(curve.end,mul(inner.u,along+span)),mul(inner.n,c)),...inner};
+    const t=-along/span,z=1-t,points=curveControls(a),center=sample(points,t);
+    const derivative=add(add(mul(sub(points[1],points[0]),3*z*z),mul(sub(points[2],points[1]),6*z*t)),mul(sub(points[3],points[2]),3*t*t));
+    const u=mul(unit(derivative),-1),n={x:-u.y,y:u.x};
+    return {p:sub(center,mul(n,c)),u,n};
+  }
+  function approachLine(a,d,from=0,to=-(a.approachCurve?.span??0)) {
+    const count=a.approachCurve?Math.min(256,Math.max(16,Math.ceil(Math.abs(to-from)/2))):1;
+    return Array.from({length:count+1},(_,i)=>{
+      const along=from+(to-from)*i/count,frame=approachFrame(a,along);
+      return {...add(frame.p,mul(frame.n,d)),tangent:mul(frame.u,to>=from?1:-1)};
+    });
+  }
+  function localLine(a,coordinates) {
+    if(!a.approachCurve)return coordinates.map(([d,along=0])=>local(a,d,along));
+    const out=[];
+    for(let i=0;i<coordinates.length;i++) {
+      const p=coordinates[Math.max(0,i-1)],q=coordinates[i];
+      const count=i?Math.min(128,Math.max(1,Math.ceil(Math.hypot(q[0]-p[0],(q[1]??0)-(p[1]??0))/2))):1;
+      for(let j=i?1:0;j<=count;j++) {
+        if(!i&&j)continue;
+        const f=j/count;out.push(local(a,p[0]+(q[0]-p[0])*f,(p[1]??0)+((q[1]??0)-(p[1]??0))*f));
+      }
+    }
+    return out;
+  }
+  const approachSpan=(item,a)=>approachCurveConfig(item,a).span;
+  function approachBezierHandle(item,a) {
+    const span=a.approachCurve?.span??approachSpan(item,a),pull=a.approachCurve?.pull??span/3,from=approachCenter(a);
+    return {from,p:sub(from,mul(axes(a).u,pull))};
+  }
+  function boundPull(a) {
+    const c=a.approachCurve,chord=sub(approachCenter(a),c.end),outward=unit(chord),u=axes(a).u;
+    const projection=dot(u,outward);
+    if(projection<=.05)return false;
+    const inner=axes({angle:c.endAngle??c.axis}).u;
+    const room=Math.max(.1,length(chord)-dot(inner,outward)*c.span/3);
+    // Ordered control-point projections stop long drags from folding back into
+    // an S-shaped return before reaching the shared conflict area.
+    c.pull=Math.max(.1,Math.min(c.pull,room/projection));return true;
+  }
+  function setApproachBezier(item,a,delta) {
+    const baseline=item.approaches.find(b=>b.id===a.id)??a,h=approachBezierHandle(item,baseline),outward=sub(h.from,add(h.p,delta));
+    const pull=length(outward);if(pull<.1)return;
+    const config=approachCurveConfig(item,baseline),angle=degrees(Math.atan2(outward.y,outward.x)*180/Math.PI);
+    const proposed={...a,angle,approachCurve:{...config,pull}};
+    Object.assign(proposed,sub(h.from,mul(axes(proposed).n,centerOffset(proposed))));
+    if(!boundPull(proposed))return;
+    Object.assign(a,{x:proposed.x,y:proposed.y,angle,approachCurve:proposed.approachCurve});
+  }
+  function straightenApproach(a) {
+    if(!a.approachCurve)return;
+    const center=approachCenter(a);a.angle=a.approachCurve.axis;
+    Object.assign(a,sub(center,mul(axes(a).n,centerOffset(a))));delete a.approachCurve;
+  }
   // Besides the center median between the two directions, an approach can split
   // lanes going the same way with more medians (channelizing islands):
   // a.splits = [{ id, incoming, after, width, nose, surface }], a median between
@@ -86,6 +186,8 @@
         if (!a.splits.length) delete a.splits;
       }
     }
+    const configs=item.approaches.map(a=>a.approachCurve?approachCurveConfig(item,a):null);
+    item.approaches.forEach((a,i)=>{if(configs[i]){a.approachCurve={...a.approachCurve,...configs[i]};boundPull(a);}});
     for (const m of item.movements) {
       const a = item.approaches.find((a) => a.id === m.from),
         b = item.approaches.find((a) => a.id === m.to);
@@ -165,7 +267,7 @@
   const ordered = (item) => [...item.approaches].sort((a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x));
   // The concave corner is the intersection of neighboring approach edge rays.
   // A circular fillet is sampled into M/L/Z paths for the vector PDF writer.
-  function corner(a, b, margin = 0) {
+  function straightCorner(a, b, margin = 0) {
     const p = edge(a, false, margin),
       q = edge(b, true, margin),
       u = axes(a).u,
@@ -197,7 +299,74 @@
     points.push(q);
     return { points, center: points[13], radius };
   }
+  const curvedCorners=new WeakMap();
+  function measured(points) {
+    const along=[0];for(let i=1;i<points.length;i++)along.push(along[i-1]+length(sub(points[i],points[i-1])));
+    return {points,along};
+  }
+  function pathStation(path,s) {
+    s=clamp(s,0,path.along.at(-1));
+    const i=Math.max(1,path.along.findIndex(v=>v>=s));
+    const end=i<path.points.length?i:path.points.length-1,from=end-1;
+    const f=clamp((s-path.along[from])/(path.along[end]-path.along[from]||1),0,1);
+    return {p:add(path.points[from],mul(sub(path.points[end],path.points[from]),f)),index:end,u:unit(sub(path.points[end],path.points[from]))};
+  }
+  function boundaryMeeting(a,b) {
+    let best=null;
+    for(let i=1;i<a.points.length;i++)for(let j=1;j<b.points.length;j++) {
+      const p=a.points[i-1],q=b.points[j-1],u=sub(a.points[i],p),v=sub(b.points[j],q);
+      if(Math.max(p.x,a.points[i].x)+1e-7<Math.min(q.x,b.points[j].x)||Math.max(q.x,b.points[j].x)+1e-7<Math.min(p.x,a.points[i].x)||Math.max(p.y,a.points[i].y)+1e-7<Math.min(q.y,b.points[j].y)||Math.max(q.y,b.points[j].y)+1e-7<Math.min(p.y,a.points[i].y))continue;
+      const den=cross(u,v),d=sub(q,p);
+      let t,f;
+      if(Math.abs(den)>1e-9){t=cross(d,v)/den;f=cross(d,u)/den;}
+      else {
+        // Coincident tangents at a merge still have a theoretical meeting point.
+        const pairs=[[0,0],[0,1],[1,0],[1,1]].find(([s,r])=>length(sub(add(p,mul(u,s)),add(q,mul(v,r))))<1e-6);
+        if(!pairs)continue;[t,f]=pairs;
+      }
+      if(t< -1e-7||t>1+1e-7||f< -1e-7||f>1+1e-7)continue;
+      t=clamp(t,0,1);f=clamp(f,0,1);
+      const sa=a.along[i-1]+length(u)*t,sb=b.along[j-1]+length(v)*f;
+      if(!best||sa+sb<best.sa+best.sb)best={p:add(p,mul(u,t)),sa,sb,ua:unit(u),ub:unit(v)};
+    }
+    return best;
+  }
+  function curvedCorner(a,b,margin) {
+    const span=Math.max(a.approachCurve?.span??0,b.approachCurve?.span??0,length(sub(a,b))),extension=Math.max(Math.abs(side(a,true)-side(a,false)),Math.abs(side(b,true)-side(b,false)))*2;
+    const edgePath=(approach,incoming)=>{
+      const d=side(approach,incoming,margin);
+      if(!approach.approachCurve)return measured([edge(approach,incoming,margin),local(approach,d,-(span+extension))]);
+      const points=approachLine(approach,d);points.push(local(approach,d,-approach.approachCurve.span-extension));return measured(points);
+    };
+    const pa=edgePath(a,false),pb=edgePath(b,true),hit=boundaryMeeting(pa,pb);
+    if(!hit) {
+      const p=pa.points[0],q=pb.points[0],pullA=a.approachCurve?.pull??length(sub(p,q))/3,pullB=b.approachCurve?.pull??length(sub(p,q))/3;
+      const c=[p,sub(p,mul(axes(a).u,pullA)),sub(q,mul(axes(b).u,pullB)),q];
+      const points=Array.from({length:65},(_,i)=>sample(c,i/64));return {points,center:points[32],radius:0};
+    }
+    const theta=Math.acos(clamp(dot(hit.ua,hit.ub),-1,1)),tangent=Math.tan(theta/2);
+    const trim=tangent>1e-6?Math.min((a.radius??0)/tangent/.9,hit.sa*.9,hit.sb*.9):0;
+    const sa=pathStation(pa,Math.max(0,hit.sa-trim)),sb=pathStation(pb,Math.max(0,hit.sb-trim));
+    const before=pa.points.slice(0,sa.index).concat([sa.p]),after=pb.points.slice(0,sb.index).concat([sb.p]).reverse();
+    let middle=[hit.p],center=hit.p,radius=0;
+    if(trim>.001) {
+      const virtual=(source,at)=>({...source,x:at.p.x,y:at.p.y,angle:degrees(Math.atan2(-at.u.y,-at.u.x)*180/Math.PI),incoming:0,outgoing:0,approachCurve:null});
+      const fillet=straightCorner(virtual(a,sa),virtual(b,sb),0);middle=fillet.points;center=fillet.center;radius=fillet.radius;
+    }
+    const points=[...before,...middle,...after].filter((p,i,all)=>!i||length(sub(p,all[i-1]))>1e-8);
+    return {points,center,radius};
+  }
+  function corner(a,b,margin=0) {
+    let byOther=curvedCorners.get(a);if(!byOther)curvedCorners.set(a,byOther=new WeakMap());
+    let byMargin=byOther.get(b);if(!byMargin)byOther.set(b,byMargin=new Map());
+    const key=JSON.stringify([a,b,margin]),cached=byMargin.get(margin);
+    if(cached?.key===key)return cached.result;
+    const result=a.approachCurve||b.approachCurve?curvedCorner(a,b,margin):straightCorner(a,b,margin);byMargin.set(margin,{key,result});return result;
+  }
+  const outlineCache=new WeakMap();
   function outline(item, margin = 0) {
+    const key=JSON.stringify([item.approaches,margin]),hit=outlineCache.get(item);
+    if(hit?.key===key)return hit.points;
     const roads = ordered(item),
       points = [];
     for (let i = 0; i < roads.length; i++) {
@@ -205,7 +374,7 @@
         b = roads[(i + 1) % roads.length];
       points.push(edge(a, true, margin), ...corner(a, b, margin).points);
     }
-    return points;
+    outlineCache.set(item,{key,points});return points;
   }
   // How far a median reaches in from the mouth: its nose setback, kept 5 ft
   // inside the approach and at least as long as its rounded tip.
@@ -213,15 +382,16 @@
   // A median band from the mouth inward, with a rounded nose.
   function band(a, center, half, noseLength, mouthHalf = half) {
     const nose = reach(a, half, noseLength),bend=Math.min((nose-half)/2,Math.max(half,6));
-    const points = [local(a, center - mouthHalf)];
-    if(mouthHalf!==half)points.push(local(a,center-half,-bend));
-    points.push(local(a, center - half, -nose + half));
-    for (let i = 0; i <= 24; i++) {
-      const t = (Math.PI * i) / 24;
-      points.push(local(a, center - Math.cos(t) * half, -nose + half - Math.sin(t) * half));
+    const coordinates=[[center-mouthHalf,0]];
+    if(mouthHalf!==half)coordinates.push([center-half,-bend]);
+    coordinates.push([center-half,-nose+half]);
+    for(let i=0;i<=24;i++) {
+      const t=Math.PI*i/24;
+      coordinates.push([center-Math.cos(t)*half,-nose+half-Math.sin(t)*half]);
     }
-    if(mouthHalf!==half)points.push(local(a,center+half,-bend));
-    points.push(local(a, center + mouthHalf));
+    if(mouthHalf!==half)coordinates.push([center+half,-bend]);
+    coordinates.push([center+mouthHalf,0]);
+    const points=localLine(a,coordinates);
     return points;
   }
   function median(a) {
@@ -295,6 +465,7 @@
     );
   }
   function intersects(a, b, c, d) {
+    if(Math.max(a.x,b.x)<Math.min(c.x,d.x)||Math.max(c.x,d.x)<Math.min(a.x,b.x)||Math.max(a.y,b.y)<Math.min(c.y,d.y)||Math.max(c.y,d.y)<Math.min(a.y,b.y))return false;
     const u = sub(b, a),
       v = sub(d, c),
       den = cross(u, v);
@@ -323,24 +494,79 @@
   // How far from the center an approach's curbs start curving into its
   // neighbors: turning paths begin and end inside that, like real turns.
   function throat(item, a) {
-    const list = ordered(item),
-      i = list.indexOf(a),
-      next = list[(i + 1) % list.length],
-      prev = list[(i + list.length - 1) % list.length],
-      u = axes(a).u;
-    const after = corner(a, next).points,
-      before = corner(prev, a).points;
+    const list=ordered(item),i=list.indexOf(a),next=list[(i+1)%list.length],prev=list[(i+list.length-1)%list.length],base=baseApproach(a),u=axes(base).u;
+    const after=straightCorner(base,baseApproach(next)).points,
+      before=straightCorner(baseApproach(prev),base).points;
     return Math.max(
       dot(after[Math.min(1, after.length - 1)], u),
       dot(before[Math.max(0, before.length - 2)], u),
     );
   }
-  function routing(item, margin = 0) {
-    const polygon = outline(item, margin),
-      holes = item.approaches.flatMap((a) => medians(a).map((m) => m.points));
-    return { polygon, holes };
+  // Geometry is independent of selection, pan/zoom and movement edits. Reuse
+  // the same sampled pavement and query index throughout a render/drag frame.
+  const routingCache = new WeakMap();
+  function polygonQuery(poly) {
+    const edges=poly.map((a,i)=>{const b=poly[(i+1)%poly.length];return {a,b,minX:Math.min(a.x,b.x),maxX:Math.max(a.x,b.x),minY:Math.min(a.y,b.y),maxY:Math.max(a.y,b.y)};});
+    const lo=Math.min(...poly.map(p=>p.y)),hi=Math.max(...poly.map(p=>p.y)),step=Math.max((hi-lo)/64,.01);
+    const bins=Array.from({length:65},()=>[]);
+    for(const e of edges)for(let i=Math.max(0,Math.floor((e.minY-lo-.002)/step));i<=Math.min(64,Math.floor((e.maxY-lo+.002)/step));i++)bins[i].push(e);
+    return point=>{
+      if(point.y<lo-.002||point.y>hi+.002)return {inside:false,boundary:false};
+      let inside=false,boundary=false;
+      for(const {a,b,minX,maxX,minY,maxY} of bins[Math.max(0,Math.min(64,Math.floor((point.y-lo)/step)))]) {
+        if(a.y>point.y!==b.y>point.y && point.x<(b.x-a.x)*(point.y-a.y)/(b.y-a.y)+a.x)inside=!inside;
+        if(point.x>=minX-.002&&point.x<=maxX+.002&&point.y>=minY-.002&&point.y<=maxY+.002&&distanceToSegment(point,a,b)<.002)boundary=true;
+      }
+      return {inside,boundary};
+    };
   }
-  function route(item, m, region = routing(item)) {
+  function routing(item, margin = 0) {
+    const key=JSON.stringify([item.approaches,margin]),hit=routingCache.get(item);
+    if(hit?.key===key)return hit.value;
+    const polygon=outline(item,margin),holes=item.approaches.flatMap(a=>medians(a).map(m=>m.points));
+    const outer=polygonQuery(polygon),inner=holes.map(polygonQuery);
+    const value={polygon,holes,inside(point){const p=outer(point);return (p.inside||p.boundary)&&!inner.some(query=>{const h=query(point);return h.inside&&!h.boundary;});}};
+    routingCache.set(item,{key,value});return value;
+  }
+  // Follow the actual lane offsets into the conflict area. Join their inner
+  // tangents with a cubic, rather than treating a curved approach as a ray.
+  function curvedMovement(item,m,a,b,inside) {
+    if(!a.approachCurve&&!b.approachCurve)return null;
+    const laneLine=(end,incoming,f)=>{
+      const index=(incoming?end.inLanes:end.outLanes).indexOf(incoming?m.input:m.output);
+      const offset=dot(sub(ridingLane(end,incoming,index),end),axes(end).n);
+      const span=end.approachCurve?.span??Math.max(0,dot(end,axes(end).u)-throat(item,end));
+      return approachLine(end,offset,0,-span*f);
+    };
+    for(const fraction of [1,.85,.65,.45,.35,.25,.15]) {
+      const entry=laneLine(a,true,fraction),exit=laneLine(b,false,fraction).reverse();
+      const p=entry.at(-1),q=exit[0],distance=length(sub(q,p))/3;
+      const u=unit(sub(p,entry.at(-2))),v=unit(sub(exit[1],q));
+      // Stop before the receiving lane's station. A connector that travels
+      // backward here produces a small hook even if every sample is paved.
+      const chord=sub(q,p);
+      if(dot(chord,u)<=1e-6||dot(chord,v)<=1e-6)continue;
+      if(!entry.every(inside)||!exit.every(inside))continue;
+      for(const pull of [1,.65,.35,.15]) {
+        const handles=m.autoCurve===false?pulls(item,m).map(v=>Math.min(v,distance*3)): [distance,distance];
+        const c=[p,add(p,mul(u,handles[0]*pull)),sub(q,mul(v,handles[1]*pull)),q];
+        const middle=Array.from({length:65},(_,i)=>sample(c,i/64));
+        if(middle.every(inside))return [...entry,...middle.slice(1),...exit.slice(1)];
+      }
+    }
+    return null;
+  }
+  function route(item,m,region=routing(item)) {
+    // Pointer previews have fresh IDs on every frame; retaining them would
+    // grow this cache for the entire duration of a linking gesture.
+    if(!item.movements.some(existing=>existing.id===m.id))return buildRoute(item,m,region);
+    const key=JSON.stringify(m);
+    const cache=region.routes??=new Map();
+    const hit=cache.get(m.id);
+    if(hit?.key===key)return hit.points;
+    const points=buildRoute(item,m,region);cache.set(m.id,{key,points});return points;
+  }
+  function buildRoute(item, m, region) {
     const a = item.approaches.find((a) => a.id === m.from),
       b = item.approaches.find((a) => a.id === m.to),
       c = curve(item, m);
@@ -351,9 +577,11 @@
       v = axes(b).u;
     const nearBoundary = (point, poly) =>
       poly.some((x, i) => distanceToSegment(point, x, poly[(i + 1) % poly.length]) < 0.002);
-    const inside = (point) =>
+    const inside = region.inside ?? ((point) =>
       (contains(point, region.polygon) || nearBoundary(point, region.polygon)) &&
-      !region.holes.some((h) => contains(point, h) && !nearBoundary(point, h));
+      !region.holes.some((h) => contains(point, h) && !nearBoundary(point, h)));
+    const curved = curvedMovement(item,m,a,b,inside);
+    if(curved)return curved;
     const safe = (points) => points.every(inside);
     const sampleLine = (p, q) => {
       const count = Math.max(2, Math.ceil(length(sub(q, p)) / 2));
@@ -423,8 +651,8 @@
     // are nudged into pavement so the following corner smoothing stays inside.
     const entry = sub(p, mul(u, Math.min(10, length(a) / 4))),
       exit = sub(q, mul(v, Math.min(10, length(b) / 4)));
-    const nodes = [entry, exit];
-    for (const poly of [region.polygon, ...region.holes])
+    const vertices=region.visibilityNodes??[];
+    if(!region.visibilityNodes)for (const poly of [region.polygon, ...region.holes])
       for (let i = 0; i < poly.length; i++) {
         const at = poly[i],
           prev = poly[(i + poly.length - 1) % poly.length],
@@ -438,12 +666,20 @@
         ]) {
           const candidate = add(at, mul(d, 0.3));
           if (inside(candidate)) {
-            nodes.push(candidate);
+            vertices.push(candidate);
             break;
           }
         }
       }
-    const visible = (a, b) => safe(sampleLine(a, b));
+    region.visibilityNodes=vertices;
+    const nodes=[entry,exit,...vertices];
+    const visibility=region.visibility??=new WeakMap();
+    const visible=(a,b)=>{
+      let peers=visibility.get(a);if(!peers)visibility.set(a,peers=new WeakMap());
+      if(peers.has(b))return peers.get(b);
+      const result=safe(sampleLine(a,b));peers.set(b,result);
+      let back=visibility.get(b);if(!back)visibility.set(b,back=new WeakMap());back.set(a,result);return result;
+    };
     const distances = nodes.map(() => Infinity),
       previous = nodes.map(() => -1),
       visited = new Set();
@@ -481,7 +717,10 @@
   function polylineDistance(p, q) {
     let best = Infinity;
     for (const x of p)
-      for (let i = 1; i < q.length; i++) best = Math.min(best, distanceToSegment(x, q[i - 1], q[i]));
+      for (let i = 1; i < q.length; i++) {
+        const a=q[i-1],b=q[i],dx=Math.max(Math.min(a.x,b.x)-x.x,0,x.x-Math.max(a.x,b.x)),dy=Math.max(Math.min(a.y,b.y)-x.y,0,x.y-Math.max(a.y,b.y));
+        if(dx*dx+dy*dy<best*best)best=Math.min(best,distanceToSegment(x,a,b));
+      }
     return best;
   }
   function crosses(p, q) {
@@ -510,6 +749,8 @@
     });
   }
   function routes(item, region = routing(item)) {
+    const key=JSON.stringify(item.movements);
+    if(region.grouped?.key===key)return region.grouped.paths;
     const paths = new Map(item.movements.map((m) => [m.id, route(item, m, region)]));
     const groups = new Map();
     for (const m of item.movements) {
@@ -564,6 +805,7 @@
         if (middle(offset).every(inside)) paths.set(m.id, offset);
       }
     }
+    region.grouped={key,paths};
     return paths;
   }
   function rounded(points, inside) {
@@ -664,6 +906,15 @@
     gap,
     width,
     local,
+    localLine,
+    approachCenter,
+    conflictHub,
+    approachFrame,
+    approachLine,
+    approachSpan,
+    approachBezierHandle,
+    setApproachBezier,
+    straightenApproach,
     side,
     edge,
     lane,

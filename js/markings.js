@@ -11,8 +11,8 @@
   const SNAP_STOP_FEET = 10;        // lines this close to a lane's end sit at the end
   const SNAP_MESSAGE_FEET = 8;      // other markings this close to 25 ft back snap to it
   const CLICK_PIXELS = 5;           // pointer travel that still counts as a click
-  const HOVER_HINT = 'Hover a lane to preview the marking; click to add it.';
-  const CROSSWALK_HINT = 'Click one edge of the roadway, then the other. Click off-square to skew the crosswalk.';
+  const HOVER_HINT = 'Hover a lane to preview; click to add. Hold Shift to mark every lane.';
+  const CROSSWALK_HINT = 'Click one roadway edge, then the other. Shift-click a lane to cross all lanes in that direction.';
   const TYPE_HINT = 'Type a message, then hover a lane to preview it.';
   const SCALE_HINT = 'Set the sheet’s scale (Sheets › Set Scale) to add markings.';
 
@@ -28,7 +28,7 @@
     let selected = null, selectedSheet = null;
     let hover = null, hoverMarking = null, press = null, drag = null;
     let crosswalkStart = null;          // a crosswalk's first end, until the second click
-    let tracks = new Map(), drawn = new Map();
+    let tracks = new Map(), drawn = new Map(), tracksReady = true;
     // The next marking's settings; a selected marking's settings show instead.
     const draft = { type: 'through', text: '', gap: C.LINE_GAP.min, route: '95', size: 'arterial', speed: 'fast',
       contrast: false, contrastStyle: 'border', all: false, spacing: C.ARROW_SPACING, width: C.CROSSWALK.width };
@@ -36,6 +36,10 @@
     const active = () => !panel.hidden && tab === 'lateral';
     const current = () => sheets.selected?.markings?.find(m => m.id === selected) ?? null;
     const model = () => current() ?? draft;
+    const copyOptions = (from, to) => {
+      for (const key of ['variant', 'message', 'extent', 'count', 'tableWidth', 'tone', 'enhanced', 'aesthetic', 'aestheticColor', 'aestheticImage', 'imageFit']) if (from[key] != null) to[key] = from[key];
+      return to;
+    };
     const ppf = sheet => 12 / sheet.inchesPerPixel;
     const tell = text => { get('markingStatus').textContent = text; };
     const kindOf = m => C.find(m.type)?.kind;
@@ -95,7 +99,11 @@
       };
     }
     // The track and lane under a sheet point, with its distance along the track.
+    function ensureTracks() {
+      if (!tracksReady) { tracks = collect(sheets.selected); tracksReady = true; }
+    }
     function locate(point) {
+      ensureTracks();
       let best = null;
       for (const track of tracks.values()) {
         const { line, along } = track;
@@ -124,11 +132,29 @@
       if (!track) return null;
       const lane = laneIndex(track, marking.on);
       if (!(lane >= 0 && lane < track.count)) return null;
-      const k = ppf(sheet);
-      const line = kindOf(marking) === 'line';
-      // Bike lanes are marked as such (one yield triangle instead of five).
       const road = marking.on?.road != null ? sheet.roads.find(r => r.id === marking.on.road) : null;
       const laneType=i=>road?.laneTypes?.[i]?.type??track.laneDetails?.[i]?.type;
+      const bike = i => ['bike', 'bufferedBike', 'twoWayBike'].includes(laneType(i));
+      const line = ['line', 'area'].includes(kindOf(marking));
+      // Repeated symbols each use their own travel-lane frame through curves.
+      // They remain one saved/undoable marking.
+      if (marking.all) {
+        const groups = [];
+        for (let i=0;i<track.count;i++) {
+          if (bike(i)) continue;
+          if (line && groups.at(-1)?.at(-1) === i-1) groups.at(-1).push(i);
+          else groups.push([i]);
+        }
+        // Split continuous bars/areas around an interior bike lane, too. Merely
+        // filtering the lane list would let their min/max envelope paint over it.
+        const layouts = groups.map(lanes => layout(sheet, { ...marking, all: false,
+          allLaneCopy: !line, laneSubset: line ? lanes : undefined,
+          on: laneRef(track, lanes.includes(lane) ? lane : lanes[0]) })).filter(l => l?.copies.length);
+        const anchor = layouts.find(l => l.lane === lane) ?? layouts[0];
+        return anchor && { ...anchor, copies: layouts.flatMap(l => l.copies) };
+      }
+      const k = ppf(sheet);
+      // Bike lanes are marked as such (one yield triangle instead of five).
       const placementTrack=track.placementBounds?{...track,bounds:track.placementBounds}:track;
       // A buffered bike lane's riding space starts past its double line (6",
       // 8" gap, 6": 17" from the lane line's center) on the through-lane side,
@@ -142,7 +168,7 @@
       });
       const lanes = all => {
         const edges = riding(all), center = (edges[lane][0] + edges[lane][1]) / 2;
-        return (line && marking.all ? edges.map((e, i) => [e, i]) : [[edges[lane], lane]])
+        return (marking.laneSubset ? marking.laneSubset.map(i => [edges[i], i]) : [[edges[lane], lane]])
           .map(([[l, r], i]) => ({ left: (l - center) / k, right: (r - center) / k, bike: ['bike', 'bufferedBike', 'twoWayBike'].includes(laneType(i)) }));
       };
       const frame = d => {
@@ -154,6 +180,9 @@
       const copies = C.repeats(marking).map(offset => {
         const front = track.length - (back + offset) * k;
         const middle = frame(front - (probe.length / 2) * k);
+        // A spiral can remove a circulating lane at this station. Do not
+        // stamp the vanished lane's copy on its neighbor or the island.
+        if (marking.allLaneCopy && middle.edges[lane][1] - middle.edges[lane][0] < 0.5 * k) return null;
         const built = C.build(marking, lanes(middle.edges));
         const frames = new Map();
         const place = (unit = built.length / 2) => {
@@ -164,7 +193,7 @@
         const parts = built.parts.map(part => ({ ...part, rings: part.rings.map(r => r.map(place(part.unit))) }));
         const hit = box(parts.flatMap(part => part.rings.flat()), middle.t);
         return { parts, hit, center: place()([0, built.length / 2]) };
-      });
+      }).filter(Boolean);
       const tail = frame(track.length - (back + (marking.repeat?.length ?? 0) + probe.length) * k);
       return { track, lane, length: probe.length, copies, repeatPoint: { x: tail.x, y: tail.y } };
     }
@@ -177,8 +206,25 @@
       return [[a0, c0], [a1, c0], [a1, c1], [a0, c1]].map(([a, c]) => ({ x: t.x * a + n.x * c, y: t.y * a + n.y * c }));
     }
     const pathData = ring => `M${ring.map(p => `${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join('L')}Z`;
+    let imageClip=0;
+    function paintImage(part,parent) {
+      const image=part.image;if(!image?.src||!image.width||!image.height)return;
+      const a=part.imageAngle??0,u={x:Math.cos(a),y:Math.sin(a)},v={x:-Math.sin(a),y:Math.cos(a)};
+      const points=part.rings.flat(),along=points.map(p=>p.x*u.x+p.y*u.y),across=points.map(p=>p.x*v.x+p.y*v.y);
+      const x0=Math.min(...along),x1=Math.max(...along),y0=Math.min(...across),y1=Math.max(...across);
+      const w=x1-x0,h=y1-y0;if(!(w>0&&h>0))return;
+      const scale=Math.max(w/image.width,h/image.height);
+      const width=part.imageFit==='stretch'?w:image.width*scale,height=part.imageFit==='stretch'?h:image.height*scale;
+      const x=(x0+x1-width)/2,y=(y0+y1-height)/2;
+      const id=`crosswalk-image-${++imageClip}`,defs=svg('defs',{},parent),clip=svg('clipPath',{id,clipPathUnits:'userSpaceOnUse'},defs);
+      svg('path',{d:part.rings.map(pathData).join('')},clip);
+      const group=svg('g',{'clip-path':`url(#${id})`},parent);
+      svg('image',{href:image.src,width:1,height:1,preserveAspectRatio:'none',
+        transform:`matrix(${u.x*width} ${u.y*width} ${v.x*height} ${v.y*height} ${u.x*x+v.x*y} ${u.y*x+v.y*y})`},group);
+    }
     function paint(parts, parent, sheet) {
       for (const part of parts) {
+        if(part.image){paintImage(part,parent);continue;}
         const attrs = { d: part.rings.map(pathData).join(''), fill: part.fill, 'fill-rule': part.rule };
         // Contrast borders: the outline stroked under the paint, round at corners
         // so the black stays the same width around arrow tips.
@@ -222,7 +268,7 @@
         }
       }
       for (const edge of app.intersections?.boundaries(sheet).edges ?? [])
-        if (edge.on.side === 'corner' || edge.on.side === 'median' || edge.on.side.startsWith('split-'))
+        if (edge.on.side === 'corner' || edge.on.side === 'median' || edge.on.side.startsWith('split-') || edge.on.side.startsWith('gore-') || /^(splitter|apron)-\d+$/.test(edge.on.side))
           edges.push({ points: edge, on: { ...edge.on } });
       return edges;
     }
@@ -241,6 +287,7 @@
       return points[0];
     }
     function snapEnd(sheet, point) {
+      ensureTracks();
       let best = null;
       for (const edge of pavementEdges(sheet)) {
         let walked = 0;
@@ -259,13 +306,22 @@
     }
     function endPoint(sheet, end) {
       if (!end?.on) return end;
-      const key=on=>on?.intersection!=null?`i:${on.intersection}:${on.approach}:${on.side}`:on?.road!=null?`r:${on.road}:${on.side}`:null;
+      const key = on => {
+        if (on?.intersection != null) {
+          // Roundabout surface indices change when another splitter appears
+          // or a mini center becomes a raised island. The approach and kind
+          // identify the curb; its position in the surface list does not.
+          const kind = /^(splitter|apron)-\d+$/.exec(on.side)?.[1];
+          return `i:${on.intersection}:${kind === 'apron' ? 'circulatory' : on.approach}:${kind ?? on.side}`;
+        }
+        return on?.road != null ? `r:${on.road}:${on.side}` : null;
+      };
       const edge = pavementEdges(sheet).find(e => key(e.on) === key(end.on));
       return edge ? alongEdge(edge.points, end.on.f) : end;
     }
     // Where the crosswalk's centerline crosses each lane line and lane center, with
     // that lane's direction of travel, for special emphasis bars (sheet 9).
-    function barsAcross(a, b) {
+    function barsAcross(a, b, sheet = sheets.selected) {
       const bars = [], centers = [];
       const hit = (p, q) => {
         const d1 = { x: b.x - a.x, y: b.y - a.y }, d2 = { x: q.x - p.x, y: q.y - p.y };
@@ -274,25 +330,45 @@
         const t = ((p.x - a.x) * d2.y - (p.y - a.y) * d2.x) / den, u = ((p.x - a.x) * d1.y - (p.y - a.y) * d1.x) / den;
         return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? { x: a.x + d1.x * t, y: a.y + d1.y * t } : null;
       };
-      for (const track of tracks.values()) {
-        const at = [];
-        for (let k = 0; k <= track.count; k++) {
-          const line = track.markingEdges?.[k] ?? boundaryLine(track, k);
-          for (let i = 1; i < line.length && !at[k]; i++) {
-            const p = hit(line[i - 1], line[i]);
-            if (p) at[k] = { ...p, t: unitVector(line[i-1],line[i]) };
-          }
+      const firstHit = line => {
+        for (let i = 1; i < line.length; i++) {
+          const p = hit(line[i - 1], line[i]);
+          if (p) return { ...p, t: unitVector(line[i - 1], line[i]) };
         }
+        return null;
+      };
+      const addBar = bar => {
+        if (bar && !bars.some(other => Math.hypot(other.x - bar.x, other.y - bar.y) < ppf(sheet) * 0.02)) bars.push(bar);
+      };
+      for (const track of tracks.values()) {
+        // A gore has two different edges at one lane boundary. Keep both,
+        // and locate each lane center within its own riding space.
+        const at = Array.from({ length: track.count }, (_, lane) => [0, 1].map(side => firstHit(
+          track.markingLaneEdges?.[lane]?.[side] ?? track.markingEdges?.[lane + side] ?? track.line.map((p, i) => {
+            const offset = track.bounds[i][lane][side], t = track.tangents[i];
+            return { x: p.x - t.y * offset, y: p.y + t.x * offset };
+          }))));
         for (let k = 0; k < track.count; k++) {
           // Use one full-size emphasis bar across each bike lane, including
           // its buffer. Its two edge stripes must not become two narrow bars.
-          if (at[k] && at[k + 1]) bars.push({ x: (at[k].x + at[k + 1].x) / 2, y: (at[k].y + at[k + 1].y) / 2, t: at[k].t });
-          if (k > 0 && at[k] && !track.bikeLanes?.[k] && !track.bikeLanes?.[k-1]) bars.push({...at[k],width:C.CROSSWALK.bar});
+          const [left, right] = at[k];
+          if (left && right) addBar({ x: (left.x + right.x) / 2, y: (left.y + right.y) / 2, t: left.t });
+          if (k > 0 && !track.bikeLanes?.[k] && !track.bikeLanes?.[k - 1]) {
+            addBar(at[k - 1][1]);
+            if (track.paintedGoreBoundaries?.[k]) addBar(left);
+          }
         }
-        if (at[0]) centers.push({ ...at[0], key: track.key });
+        // Enhanced crossings also place bars on the outer edge lines.
+        addBar(at[0]?.[0]);
+        addBar(at[track.count - 1]?.[1]);
+        if (at[0]?.[0]) centers.push({ ...at[0][0], key: track.key });
       }
+      // Marked gores between separate roads also get one 24" bar on each
+      // bounding line (711-001 sheet 9 lane-line bar placement). Deduplicate
+      // coincident shared edges at a gore tip.
+      for (const edge of app.roadEditor.paintedGoreEdges?.(sheet) ?? []) addBar(firstHit(edge));
       // A two-way road's centerline: two left edges 10" apart (no median).
-      const k = ppf(sheets.selected);
+      const k = ppf(sheet);
       centers.forEach((p, i) => centers.slice(i + 1).forEach(q => {
         if (Math.hypot(p.x - q.x, p.y - q.y) < k && p.t.x * q.t.x + p.t.y * q.t.y < -0.5) bars.push({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2, t: p.t });
       }));
@@ -303,7 +379,7 @@
       const a = endPoint(sheet, marking.a), b = endPoint(sheet, marking.b), k = ppf(sheet);
       if (!a || !b || Math.hypot(b.x - a.x, b.y - a.y) < k) return null;
       const feet = p => ({ x: p.x / k, y: p.y / k });
-      const g = C.crosswalk(marking, { ...feet(a), t: a.t }, { ...feet(b), t: b.t }, barsAcross(a, b).map(bar => ({ ...feet(bar), t: bar.t, width:bar.width })));
+      const g = C.crosswalk(marking, { ...feet(a), t: a.t }, { ...feet(b), t: b.t }, barsAcross(a, b, sheet).map(bar => ({ ...feet(bar), t: bar.t, width:bar.width })));
       const parts = g.parts.map(part => ({ ...part, rings: part.rings.map(r => r.map(([x, y]) => ({ x: x * k, y: y * k }))) }));
       return { crosswalk: true, a, b, length: g.length, copies: [{ parts, hit: box(parts.flatMap(p => p.rings.flat()), unitVector(a, b)), center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }] };
     }
@@ -322,15 +398,33 @@
         const a=endPoint(sheet,marking.a),b=endPoint(sheet,marking.b);
         if(!a||!b)continue;
         const toFeet=p=>({...p,x:p.x/scale,y:p.y/scale});
-        const parts=C.crosswalk({...marking,type:'crosswalk',contrast:false},toFeet(a),toFeet(b)).parts;
+        const parts=C.crosswalk({...marking,type:'crosswalk',aesthetic:false,contrast:false},toFeet(a),toFeet(b)).parts;
         const first=parts[0].rings[0],second=parts[1].rings[0];
-        cuts.push([first[0],first[1],second[1],second[0]].map(([x,y])=>({x:x*scale,y:y*scale})));
+        cuts.push([first[0],first[1],second[1],second[0]].map(([x,y])=>app.itemTransform.apply(marking,{x:x*scale,y:y*scale})));
       }
       return cuts;
     }
     // on (null when that level is hidden).
+    function transformPlacement(placed, marking) {
+      if (!placed) return placed;
+      if(app.traffic.reversed && kindOf(marking)!=='crosswalk')for(const copy of placed.copies) {
+        const c=copy.center??copy.hit.reduce((c,p,_,all)=>({x:c.x+p.x/all.length,y:c.y+p.y/all.length}),{x:0,y:0});
+        const reverse=p=>({x:2*c.x-p.x,y:2*c.y-p.y});
+        copy.parts=copy.parts.map(part=>({...part,rings:part.rings.map(r=>r.map(reverse))}));
+        copy.hit=copy.hit.map(reverse);
+      }
+      if(!marking.placementTransform)return placed;
+      const point=p=>app.itemTransform.apply(marking,p);
+      for (const copy of placed.copies) {
+        copy.parts=copy.parts.map(part=>({...part,...(part.image?{imageAngle:(part.imageAngle??0)+marking.placementTransform.angle*Math.PI/180}:{}),rings:part.rings.map(r=>r.map(point))}));
+        copy.hit=copy.hit.map(point);if(copy.center)copy.center=point(copy.center);
+      }
+      for(const key of ['a','b','repeatPoint'])if(placed[key])placed[key]=point(placed[key]);
+      return placed;
+    }
     function draw(sheet, parent, solved, place = null) {
-      tracks = collect(sheet, solved);
+      tracksReady = Boolean(sheet.markings?.length || active());
+      tracks = tracksReady ? collect(sheet, solved) : new Map();
       drawn = new Map();
       sheet.markings ??= [];
       // Markings go with their lane: a removed road, approach, or lane drops them.
@@ -342,7 +436,7 @@
       const groups = new Map();
       const groupIn = into => groups.get(into) ?? groups.set(into, svg('g', { class: 'laneMarkings' }, into)).get(into);
       for (const marking of sheet.markings) {
-        const placed = kindOf(marking) === 'crosswalk' ? layoutCrosswalk(sheet, marking) : layout(sheet, marking);
+        const placed = transformPlacement(kindOf(marking) === 'crosswalk' ? layoutCrosswalk(sheet, marking) : layout(sheet, marking), marking);
         if (!placed) continue;
         const road = marking.on?.road ?? marking.a?.on?.road;
         let shown = false, contrasted = null;
@@ -354,7 +448,7 @@
           // unit gets black contrast (FDM 230.3.1.3) unless it already has it.
           let parts = copy.parts;
           if (into.level > 1 && !marking.contrast && app.settings?.get('autoContrast')) {
-            contrasted ??= kindOf(marking) === 'crosswalk' ? layoutCrosswalk(sheet, { ...marking, contrast: true }) : layout(sheet, { ...marking, contrast: true });
+            contrasted ??= transformPlacement(kindOf(marking) === 'crosswalk' ? layoutCrosswalk(sheet, { ...marking, contrast: true }) : layout(sheet, { ...marking, contrast: true }),marking);
             parts = contrasted?.copies[i]?.parts ?? parts;
           }
           paint(parts, groupIn(into), sheet);
@@ -435,7 +529,8 @@
       if (item.kind === 'shield') Object.assign(m, { route: draft.route, size: draft.size });
       if (draft.type === 'yieldAhead') m.speed = draft.speed;
       if (item.dot && draft.dot) m.dot = true;
-      if (item.kind === 'line' && (draft.all || shift)) m.all = true;
+      if (draft.all || shift) m.all = true;
+      copyOptions(draft, m);
       if (draft.contrast) m.contrast = draft.contrastStyle;
       if (item.repeat) m.repeat = { length: 0, spacing: draft.spacing };
       return m;
@@ -462,9 +557,18 @@
       hoverMarking = crosswalkStart ? null : hitMarking(point);
       if (hoverMarking) return { point, shift };
       if (crossing()) {
+        if (shift) {
+          const found = locate(point);
+          if (found) {
+            const p = at(found.track, found.d), left = p.edges[0][0], right = p.edges.at(-1)[1];
+            const edge = d => snapEnd(sheet, { x: p.x + p.n.x * d, y: p.y + p.n.y * d });
+            const marking = copyOptions(draft, { id: 'preview', type: draft.type, a: edge(left), b: edge(right), width: draft.width, ...(draft.contrast ? { contrast: true } : {}) });
+            return { point, shift, wholeCrosswalk: true, marking, layout: layoutCrosswalk(sheet, marking) };
+          }
+        }
         const snap = snapEnd(sheet, point);
         if (!crosswalkStart) return { point, shift, snap, layout: null };
-        const marking = { id: 'preview', type: draft.type, a: crosswalkStart, b: snap, width: draft.width, ...(draft.contrast ? { contrast: true } : {}) };
+        const marking = copyOptions(draft, { id: 'preview', type: draft.type, a: crosswalkStart, b: snap, width: draft.width, ...(draft.contrast ? { contrast: true } : {}) });
         return { point, shift, snap, marking, layout: layoutCrosswalk(sheet, marking) };
       }
       const found = placement(point, shift);
@@ -482,13 +586,13 @@
     }
     function select(id) {
       selected = id; selectedSheet = sheets.selected;
-      updatePanel(); refreshOverlay();
+      updatePanel(); refreshOverlay(); app.selection?.editorChanged();
     }
     function add() {
       const sheet = sheets.selected;
-      if (crossing() && hover?.snap && sheet) {
+      if (crossing() && (hover?.snap || hover?.wholeCrosswalk) && sheet) {
         // First click: one edge of the roadway; second click: the other.
-        if (!crosswalkStart) { crosswalkStart = hover.snap; refreshOverlay(); tell('Click the other edge of the roadway.'); return; }
+        if (!crosswalkStart && !hover.wholeCrosswalk) { crosswalkStart = hover.snap; refreshOverlay(); tell('Click the other edge of the roadway.'); return; }
         if (!hover.layout) { tell('Click farther from the first end.'); return; }
         const marking = { ...structuredClone(hover.marking), id: crypto.randomUUID() };
         crosswalkStart = null;
@@ -777,8 +881,9 @@
       const type = item.id;
       const text = item.kind === 'word' ? (m?.text ?? draft.text) : undefined;
       if (m) {
-        if (C.find(m.type)?.kind === 'line' && item.kind !== 'line') delete m.all;
+        if (m.type === 'crosswalkAesthetic') m.aesthetic = true;
         m.type = type;
+        if (!C.variantsFor(m)?.some(([v]) => v === m.variant)) delete m.variant;
         if (text != null) { m.text = text; m.gap ??= C.LINE_GAP.min; }
         if (item.kind === 'shield') Object.assign(m, { route: m.route ?? draft.route, size: m.size ?? draft.size });
         if (item.repeat) m.repeat ??= { length: 0, spacing: item.repeat };
@@ -786,6 +891,7 @@
         changed('Marking changed.');
       } else {
         draft.type = type;
+        if (!C.variantsFor(draft)?.some(([v]) => v === draft.variant)) delete draft.variant;
         if (text != null) draft.text = text;
         if (item.repeat) draft.spacing = item.repeat;
         updatePanel();
@@ -833,6 +939,47 @@
     };
     pair('markingGap', (m, v) => { m.gap = v; }, () => model().gap ?? C.LINE_GAP.min);
     pair('markingCrosswalkWidth', (m, v) => { m.width = v; }, () => model().width ?? C.CROSSWALK.width);
+    pair('markingExtent', (m, v) => { m.extent = v; }, () => model().extent ?? (model().type === 'speedReduction' ? C.TICKS.length : C.BLOCK.length));
+    pair('markingTableWidth', (m, v) => { m.tableWidth = v; }, () => model().tableWidth ?? C.HUMP.table);
+    get('markingTickCount').addEventListener('input', event => {
+      if (event.target.checkValidity() && Number.isFinite(event.target.valueAsNumber)) edit(m => { m.count = event.target.valueAsNumber; });
+    });
+    for (const [id, key] of [['markingVariant', 'variant'], ['markingBlockMessage', 'message'], ['markingAestheticTone', 'tone']])
+      get(id).addEventListener('change', event => edit(m => { m[key] = event.target.value; }));
+    get('markingEnhanced').addEventListener('change', event => edit(m => {
+      m.enhanced = event.target.checked;
+      if (m.type === 'crosswalkSpecial') m.type = 'crosswalk';
+    }));
+    // SignalMaker's native upload button + hidden file input convention.
+    // Decode locally and store a bounded PNG; no uploaded markup or remote URL.
+    let crosswalkUpload=0;
+    get('uploadCrosswalkImage').addEventListener('click',()=>get('crosswalkImageFile').click());
+    get('removeCrosswalkImage').addEventListener('click',()=>edit(m=>{delete m.aestheticImage;}));
+    get('crosswalkImageFit').addEventListener('change',event=>edit(m=>{m.imageFit=event.target.value;}));
+    get('crosswalkImageFile').addEventListener('change',async event=>{
+      const file=event.target.files[0];event.target.value='';if(!file)return;
+      if(file.size>20*1024*1024){tell('Choose an image smaller than 20 MB.');return;}
+      const request=++crosswalkUpload,target=model(),sheet=sheets.selected,url=URL.createObjectURL(file);
+      tell('Loading image…');
+      try {
+        const image=new Image();image.src=url;await image.decode();
+        if(request!==crosswalkUpload)return;
+        if(model()!==target||sheets.selected!==sheet){tell('The selected crosswalk changed. Upload the image again.');return;}
+        const scale=Math.min(1,2048/Math.max(image.naturalWidth,image.naturalHeight));
+        const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+        canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+        edit(m=>{m.aestheticImage={src:canvas.toDataURL('image/png'),width:canvas.width,height:canvas.height,name:file.name};m.variant='image';m.aesthetic=true;m.imageFit??='cover';});
+        tell('Image added. Choose Cover or Stretch to fit it.');
+      }catch{tell('Could not read that image. Choose a PNG, JPEG, or WebP image.');}
+      finally{URL.revokeObjectURL(url);}
+    });
+    get('markingAesthetic').addEventListener('change', event => edit(m => {
+      if (m.type === 'crosswalkAesthetic') m.type = 'crosswalk';
+      m.aesthetic = event.target.checked;
+    }));
+    get('markingAestheticColor').addEventListener('input', event => edit(m => {
+      m.aestheticColor = event.target.value; m.tone = 'custom';
+    }));
     pair('markingSpacing', (m, v) => {
       if (m === draft) m.spacing = v;
       else m.repeat = { ...(m.repeat ?? { length: 0 }), spacing: v };
@@ -873,6 +1020,40 @@
       if (draft === m && m.contrast) preview.contrast = m.contrastStyle;
       get('markingPreview').src = thumbnail({ ...preview, id: undefined, on: undefined, back: undefined, repeat: undefined });
       const set = (id, value) => { if (document.activeElement !== get(id)) get(id).value = value; };
+      const variants = C.variantsFor(m);
+      get('markingVariantFields').hidden = !variants;
+      if (variants) {
+        const select = get('markingVariant');
+        if (select.dataset.family !== m.type) {
+          select.replaceChildren(...variants.map(([value, label]) => new Option(label, value)));
+          select.dataset.family = m.type;
+        }
+        set('markingVariant', m.variant ?? variants[0][0]);
+      }
+      get('markingBlockMessageFields').hidden = m.type !== 'doNotBlock' || !['outlineWords', 'words'].includes(m.variant);
+      set('markingBlockMessage', m.message ?? 'doNotBlock');
+      get('markingExtentFields').hidden = !['doNotBlock', 'speedReduction'].includes(m.type);
+      const extent = m.extent ?? (m.type === 'speedReduction' ? C.TICKS.length : C.BLOCK.length);
+      set('markingExtent', extent); set('markingExtentValue', extent);
+      get('markingTickCountFields').hidden = m.type !== 'speedReduction'; set('markingTickCount', m.count ?? C.TICKS.count);
+      get('markingTableFields').hidden = m.type !== 'speedHump' || !/^(table|crosswalk)/.test(m.variant ?? '');
+      set('markingTableWidth', m.tableWidth ?? C.HUMP.table); set('markingTableWidthValue', m.tableWidth ?? C.HUMP.table);
+      const aesthetic = C.isAesthetic(m);
+      get('markingEnhancedRow').hidden = kind !== 'crosswalk';
+      get('markingEnhanced').checked = Boolean(m.enhanced || m.type === 'crosswalkSpecial');
+      get('markingAestheticToggleRow').hidden = kind !== 'crosswalk';
+      get('markingAesthetic').checked = aesthetic;
+      get('markingAestheticImageFields').hidden=!aesthetic||m.variant!=='image';
+      set('crosswalkImageFit',m.imageFit??'cover');
+      get('crosswalkImageName').textContent=m.aestheticImage?.name??'No image uploaded.';
+      get('removeCrosswalkImage').disabled=!m.aestheticImage;
+      get('markingAestheticFields').hidden = !aesthetic||m.variant==='image'; set('markingAestheticTone', m.tone ?? 'brick');
+      get('markingAestheticColorRow').hidden = !aesthetic || m.variant==='image' || m.tone !== 'custom';
+      set('markingAestheticColor', C.aestheticColor(m));
+      get('markingTreatmentHint').textContent = m.type === 'doNotBlock' ? 'Choose a treatment and adjust the marked length.'
+        : m.type === 'speedReduction' ? 'Adjust the marked length and number of tick pairs.'
+        : m.type === 'speedHump' ? 'Choose a hump, table, or advance treatment.'
+        : aesthetic && m.variant==='image' ? 'Upload an image, choose its fit, then click both ends of the crossing.' : aesthetic ? 'Choose a pattern and surface color, then click both ends of the crossing.' : '';
       get('markingWordFields').hidden = kind !== 'word';
       if (kind === 'word') {
         set('markingText', m.text ?? '');
@@ -889,24 +1070,19 @@
       get('markingDotRow').hidden = !item?.dot;
       get('markingDot').checked = Boolean(m.dot || m.type === 'roundabout');
       set('markingSpeed', m.speed ?? 'fast');
-      get('markingLineFields').hidden = kind !== 'line';
+      get('markingLineFields').hidden = kind === 'crosswalk' || kind === 'surface';
       get('markingAllLanes').checked = Boolean(m.all);
       const contrast = m === draft ? m.contrast : Boolean(m.contrast);
       get('markingContrast').checked = contrast;
       const fixed = ['stopLine', 'yieldLine'].includes(m.type) || kind === 'crosswalk';
       get('markingContrastStyleRow').hidden = !contrast || fixed;
       set('markingContrastStyle', m === draft ? m.contrastStyle : (m.contrast || draft.contrastStyle));
-      get('markingContrastHint').textContent = !contrast ? ''
-        : m.type === 'stopLine' ? '4 in black border on both sides of the line.'
-          : kind === 'crosswalk' ? '4 in black on both sides of every line and bar.'
-          : m.type === 'yieldLine' ? 'Black block reaching 1.5 in past each triangle.'
-            : (m === draft ? m.contrastStyle : m.contrast) === 'block' ? 'Black block reaching 1.5 in past the marking.' : '1.5 in black border around the marking.';
       get('markingRepeatFields').hidden = !item?.repeat;
       const spacing = m === draft ? draft.spacing : m.repeat?.spacing ?? item?.repeat ?? draft.spacing;
       set('markingSpacing', spacing); set('markingSpacingValue', spacing);
       get('markingRepeatLengthRow').hidden = !editing;
       if (editing) set('markingRepeatLength', Math.round(m.repeat?.length ?? 0));
-      const copies = editing ? C.repeats(m).length : 1;
+      const copies = editing ? drawn.get(m.id)?.copies.length ?? C.repeats(m).length : 1;
       get('markingRepeatHint').textContent = editing
         ? `${copies} ${copies === 1 ? 'marking' : 'markings'}. Drag the square handle back along the lane to repeat.`
         : 'After adding, drag its square handle back along the lane to repeat it.';
@@ -981,7 +1157,7 @@
       return found && { on: laneRef(found.track, found.lane), back: (found.track.length - found.d) / ppf(sheets.selected) };
     };
     const outlines = id => drawn.get(id)?.copies.map(copy => copy.hit) ?? [];
-    app.markings = { diagnostics: () => structuredClone({selected,tab,draft,crosswalkStart}), draw, crosswalkCuts, refreshOverlay, capture, rehome, openPicker, focusAt, hitAt, anchorAt, outlines, showTab, draftType: () => draft.type, tab: () => tab };
+    app.markings = { selectedItem:()=>!panel.hidden && tab==='lateral' && current()?{kind:'markings',id:selected}:null, diagnostics: () => structuredClone({selected,tab,draft,crosswalkStart}), draw, crosswalkCuts, refreshOverlay, capture, rehome, openPicker, focusAt, hitAt, anchorAt, outlines, showTab, draftType: () => draft.type, tab: () => tab };
     showTab('lateral');
     updatePanel();
     app.roadEditor.render();

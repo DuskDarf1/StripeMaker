@@ -1,0 +1,20 @@
+const assert=require('node:assert/strict'),fixture=require('./fixtures/intersection-pinch-point.json');
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+(async()=>{const browser=await chromium.launch({headless:true,...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{})});try{
+ const page=await browser.newPage({viewport:{width:1800,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(process.env.STRIPEMAKER_URL||'http://127.0.0.1:8879');await page.waitForFunction(()=>StripeMaker.sheets.ready&&StripeMaker.intersections);
+ await page.locator('#blankSheet').evaluate(b=>b.click());await page.waitForFunction(()=>StripeMaker.sheets.selected);
+ const initial=await page.evaluate(f=>{const app=StripeMaker,s=app.sheets.selected,G=app.intersectionGeometry;s.inchesPerPixel=2;Object.assign(f,{x:15000,y:15000});G.normalize(f);s.intersections=[f];s.view={scale:.5,x:-6200,y:-7300,fitted:false};app.sheets.zoomBy(1);document.dispatchEvent(new Event('sheetchange'));app.roadEditor.render();app.intersections.focusAt({x:f.x,y:f.y+18*6});app.history.rebase();const a=f.approaches[1],h=G.approachBezierHandle(f,a),edges=[G.edge(a,true),G.edge(a,false)],angle=125*Math.PI/180,p={x:h.from.x-Math.cos(angle)*150,y:h.from.y-Math.sin(angle)*150},screen=q=>{const r=app.sheets.toScreen({x:f.x+q.x*6,y:f.y+q.y*6}),b=document.getElementById('previewStage').getBoundingClientRect();return {x:r.x+b.left,y:r.y+b.top};};return {from:h.from,midpoint:G.mul(G.add(...edges),.5),target:screen(p),mouth:screen(h.from)};},structuredClone(fixture));
+ assert(Math.hypot(initial.from.x-initial.midpoint.x,initial.from.y-initial.midpoint.y)<1e-8,'the handle starts at the middle of all three lanes');
+ const handle=page.getByRole('button',{name:'Approach 2 Bézier curve',exact:true}),box=await handle.boundingBox();
+ await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(initial.target.x,initial.target.y,{steps:10});await page.mouse.up();
+ const read=()=>page.evaluate(()=>{const s=StripeMaker.sheets.selected,x=s.intersections[0],a=x.approaches[1],G=StripeMaker.intersectionGeometry;return {a:structuredClone(a),center:G.approachCenter(a),valid:G.validate(x),hub:G.conflictHub(x),outline:G.outline(x),movements:x.movements.length};});
+ const curved=await read();assert(curved.a.approachCurve);assert.equal(curved.valid,'');assert(curved.a.approachCurve.span>300,'the curve reaches through the merging conflict area');
+ assert(Math.hypot(curved.center.x-initial.from.x,curved.center.y-initial.from.y)<1e-6,'turning the curve keeps the opening centered');
+ assert.equal(curved.a.approachCurve.endAngle,180,'the inner tangent follows the receiving lanes');assert(curved.a.approachCurve.end.x>0);assert.equal(curved.movements,fixture.movements.length);
+ await page.keyboard.press('F1');await page.screenshot({path:'/tmp/stripe-conflict-curve-centered.png'});await page.keyboard.press('F1');
+ await page.locator('#undoButton').click();assert(!(await read()).a.approachCurve);await page.locator('#redoButton').click();assert.deepEqual((await read()).outline,curved.outline);
+ await page.waitForTimeout(650);await page.reload();await page.waitForFunction(()=>StripeMaker.sheets.ready&&StripeMaker.sheets.selected?.intersections?.length);
+ assert.deepEqual((await read()).outline,curved.outline);assert.deepEqual(errors,[]);
+ console.log('PASS: three-lane merge curves through its conflict zone, centered handle/pivot, receiving tangent, undo/redo and reload.');
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

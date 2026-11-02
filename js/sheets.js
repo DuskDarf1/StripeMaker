@@ -209,7 +209,7 @@
       name: sheet.name, inchesPerPixel: sheet.inchesPerPixel, view: sheet.view,
       roads: sheet.roads ?? [], joints: sheet.joints ?? [], gores: sheet.gores ?? [], medians: sheet.medians ?? [],
       autoTapers: Boolean(sheet.autoTapers), intersections: sheet.intersections ?? [], signs: sheet.signs ?? [],
-      markings: sheet.markings ?? [], lines: sheet.lines ?? [], bridges: sheet.bridges ?? [], surfaces: sheet.surfaces ?? [], blank: Boolean(sheet.blank),
+      markings: sheet.markings ?? [], lines: sheet.lines ?? [], bridges: sheet.bridges ?? [], surfaces: sheet.surfaces ?? [], vehicleSpawns: sheet.vehicleSpawns ?? [], blank: Boolean(sheet.blank),
       ...(sheet.projectArchive ? { projectArchive: sheet.projectArchive } : {}),
       ...(sheet.blank ? { width: sheet.width, height: sheet.height } : {}),
     });
@@ -763,7 +763,7 @@
       }
       if (!window.confirm(`Clear all roads, medians, gores, intersections, signs, and markings on “${selected.name}”? You can undo this.`)) return;
       window.StripeMaker.showEditor?.(null);
-      Object.assign(selected, { roads: [], joints: [], gores: [], medians: [], intersections: [], signs: [], markings: [], lines: [], bridges: [], surfaces: [] });
+      Object.assign(selected, { roads: [], joints: [], gores: [], medians: [], intersections: [], signs: [], markings: [], lines: [], bridges: [], surfaces: [], vehicleSpawns: [] });
       scheduleSave(selected);
       history.record();
       document.dispatchEvent(new CustomEvent("sheethistory"));

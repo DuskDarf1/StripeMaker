@@ -51,7 +51,14 @@
     const ready = () => Boolean(sheet()?.inchesPerPixel);
     const total = () => KINDS.reduce((sum, kind) => sum + selection.get(kind).size, 0);
     const ppf = () => 12 / sheet().inchesPerPixel;
-    const tell = text => { get('selectStatus').textContent = text; };
+    let statusTimer;
+    const tell = text => {
+      get('selectStatus').textContent=text;
+      if(!active()) {
+        const status=get('actionStatus');status.textContent=text;
+        clearTimeout(statusTimer);statusTimer=setTimeout(()=>{if(status.textContent===text)status.textContent='';},5000);
+      }
+    };
     const roadOf = id => sheet().roads.find(road => road.id === id);
     const records = kind => (kind === 'roads' ? sheet().roads : sheet()[kind] ?? []);
     const recordOf = (kind, id) => records(kind).find(item => item.id === id);
@@ -94,7 +101,7 @@
       if (kind === 'lines') return [app.longitudinal.pathOf(item)].filter(p => p.length);
       if (kind === 'surfaces') {
         const road = roadOf(item.on.road);
-        return road ? [app.roadEditor.laneStrip(s, road, item.on.lane, item.from, item.to)] : [];
+        return road ? [app.roadEditor.laneStrip(s, road, item.on.lane, item.from, item.to).map(p=>app.itemTransform.apply(item,p))] : [];
       }
       const box = app.signs?.box(item);
       if (!box) return [];
@@ -139,6 +146,122 @@
       }
     }
 
+    let editorOverride=false;
+    function useEditorSelection() {
+      if(editorOverride&&!total())editorOverride=false;
+      if(active()||editorOverride)return;
+      const hit=[app.roadEditor,app.intersections,app.markings,app.longitudinal,app.signs].map(editor=>editor?.selectedItem?.()).find(Boolean);
+      for(const kind of KINDS)selection.get(kind).clear();
+      if(hit&&selection.has(hit.kind)) {
+        selection.get(hit.kind).add(hit.id);
+        selection.set('roads',withPartners(selection.get('roads')));
+      }
+    }
+    function bounds() {
+      const points=KINDS.flatMap(kind=>[...selection.get(kind)].flatMap(id=>shapes(kind,id).flat()));
+      if(!points.length)return null;
+      const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
+      const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+      return {x:(minX+maxX)/2,y:(minY+maxY)/2,top:minY};
+    }
+    function rotateBy(degrees,pivot=null) {
+      const s=sheet();if(!s||!Number.isFinite(degrees)||!degrees)return;
+      pivot??=bounds();if(!pivot)return;
+      const rad=degrees*Math.PI/180,c=Math.cos(rad),sn=Math.sin(rad);
+      const vector=p=>({x:p.x*c-p.y*sn,y:p.x*sn+p.y*c});
+      const point=p=>{const q=vector({x:p.x-pivot.x,y:p.y-pivot.y});p.x=pivot.x+q.x;p.y=pivot.y+q.y;};
+      const roadIds=selection.get('roads'),interIds=selection.get('intersections');
+      const joints=new Set(s.roads.filter(r=>roadIds.has(r.id)).flatMap(r=>r.ends.map(e=>e.joint)));
+      // Selected intersections also carry their attached joints. Transform each
+      // joint once even when its road and several intersections are selected.
+      for(const item of s.intersections??[])if(interIds.has(item.id))for(const a of item.approaches)
+        for(const binding of [a.binding,...a.links??[]]) {
+          const r=binding&&roadOf(binding.road);if(r?.ends[binding.e])joints.add(r.ends[binding.e].joint);
+        }
+      for(const joint of s.joints)if(joints.has(joint.id)){point(joint);if(joint.dir)joint.dir=vector(joint.dir);}
+      const movedEnds=[];
+      for(const road of s.roads)for(const [e,end]of road.ends.entries())if(joints.has(end.joint)) {
+        if(end.dir)end.dir=vector(end.dir);movedEnds.push({road,e,end});
+      }
+      for(const item of s.intersections??[])if(interIds.has(item.id)){point(item);app.intersections.rotateGeometry(item,degrees);}
+      const onMoved=on=>on&&(roadIds.has(on.road)||interIds.has(on.intersection));
+      for(const median of s.medians??[])if(selection.get('medians').has(median.id))for(const p of median.points) {
+        point(p);if(p.on&&!onMoved(p.on))delete p.on;
+      }
+      for(const sign of s.signs??[])if(selection.get('signs').has(sign.id)) {
+        point(sign);const post={x:sign.postX,y:sign.postY};point(post);
+        sign.postX=post.x;sign.postY=post.y;sign.rotation=((sign.rotation??0)+degrees+360)%360;
+      }
+      for(const kind of ['markings','lines','surfaces'])for(const item of s[kind]??[]) {
+        const baseMoves=onMoved(item.on)||(item.a?.on&&item.b?.on&&onMoved(item.a.on)&&onMoved(item.b.on));
+        const picked=selection.get(kind).has(item.id);
+        if(baseMoves||picked)app.itemTransform.rotate(item,degrees,pivot,Boolean(baseMoves));
+        // Free crosswalk endpoints are their own geometry.
+        if(!item.on&&item.a&&item.b&&picked) {
+          delete item.placementTransform;
+          for(const p of [item.a,item.b]){point(p);if(p.on&&!onMoved(p.on))delete p.on;}
+        }
+      }
+      // Transform a relationship's reference frame when both members move;
+      // otherwise release it, preserving the unselected member's geometry.
+      const touched=new Set(movedEnds.map(p=>p.end));
+      const ids=new Set(movedEnds.map(p=>p.end.curveLink?.id).filter(Boolean));
+      for(const id of ids) {
+        const members=app.curveLinks.members(s,id);
+        if(members.some(p=>!touched.has(p.end))) {app.curveLinks.unlink(s,members[0]?.end.curveLink);continue;}
+        for(const {end}of members)if(end.curveLink.axis) {
+          if(end.curveLink.mode==='mirror')end.curveLink.axis.forEach(point);
+          else end.curveLink.axis=end.curveLink.axis.map(vector);
+        }
+      }
+      app.roadEditor.render();
+    }
+    function rotateSelection(degrees) {
+      useEditorSelection();if(!total()||!ready())return;
+      rotateBy(degrees);commit();tell(`Rotated ${describe()} by ${degrees}°.`);
+    }
+    const rotationHandle=document.createElement('button');
+    rotationHandle.type='button';rotationHandle.className='markingHandle selectionRotate';rotationHandle.hidden=true;
+    rotationHandle.setAttribute('aria-label','Rotate selection. Drag, or use Left and Right arrow keys.');
+    rotationHandle.innerHTML='<span class="material-symbols-outlined" aria-hidden="true">rotate_right</span>';
+    const selectionGuides=document.createElement('div');
+    overlay.append(selectionGuides,rotationHandle);
+    let rotationDrag=null;
+    rotationHandle.addEventListener('pointerdown',event=>{
+      if(event.button!==0)return;event.preventDefault();event.stopPropagation();
+      const pivot=bounds(),p=pointOf(event);if(!pivot)return;
+      rotationDrag={pointer:event.pointerId,pivot,angle:Math.atan2(p.y-pivot.y,p.x-pivot.x),
+        snapshot:clone(Object.fromEntries(['roads','joints',...KINDS.filter(k=>k!=='roads')].map(k=>[k,sheet()[k]??[]])))};
+      rotationHandle.setPointerCapture(event.pointerId);
+    });
+    rotationHandle.addEventListener('pointermove',event=>{
+      if(!rotationDrag||rotationDrag.pointer!==event.pointerId)return;
+      const p=pointOf(event),angle=Math.atan2(p.y-rotationDrag.pivot.y,p.x-rotationDrag.pivot.x);
+      let delta=(angle-rotationDrag.angle)*180/Math.PI;
+      if(delta>180)delta-=360;if(delta<-180)delta+=360;
+      rotateBy(delta,rotationDrag.pivot);rotationDrag.angle=angle;refresh();
+    });
+    const finishRotation=event=>{
+      if(!rotationDrag||rotationDrag.pointer!==event.pointerId)return;
+      if(event.type==='pointercancel')Object.assign(sheet(),rotationDrag.snapshot);
+      rotationDrag=null;if(rotationHandle.hasPointerCapture(event.pointerId))rotationHandle.releasePointerCapture(event.pointerId);
+      if(event.type==='pointercancel'){app.roadEditor.render();refresh();}else commit();
+    };
+    rotationHandle.addEventListener('pointerup',finishRotation);rotationHandle.addEventListener('pointercancel',finishRotation);
+    rotationHandle.addEventListener('keydown',event=>{
+      if(!['ArrowLeft','ArrowRight'].includes(event.key))return;
+      event.preventDefault();event.stopImmediatePropagation();rotateSelection((event.key==='ArrowLeft'?-1:1)*(event.shiftKey?15:1));
+    });
+    const editorTransforms=document.createElement('div');editorTransforms.hidden=true;
+    editorTransforms.innerHTML='<h3>Selection</h3><div class="fieldRow"><label for="editorRotateAmount">Rotate by (°)</label><input id="editorRotateAmount" type="number" value="15" step="1" /></div><div class="headActions"><button type="button" data-turn="-1">Rotate Left</button><button type="button" data-turn="1">Rotate Right</button></div>';
+    editorTransforms.querySelectorAll('[data-turn]').forEach(button=>button.addEventListener('click',()=>rotateSelection(Number(get('editorRotateAmount').value)*Number(button.dataset.turn))));
+    document.addEventListener('pointerup',event=>{
+      if(!event.target.closest('#workspace')||active()||rotationDrag||event.target.closest('.selectionRotate'))return;
+      // Native click handlers may select an item after pointerup. Wait until
+      // those handlers finish; editor setters also refresh synchronously.
+      requestAnimationFrame(()=>{if(!active()){editorOverride=false;useEditorSelection();refresh();}});
+    },true);
+
     // Copying: everything selected, with what it depends on.
     function gather(items = selection) {
       const s = sheet(), ids = kind => items.get(kind) ?? new Set();
@@ -152,7 +275,7 @@
         return copy;
       });
       const endRoad = end => Number(end.split(':')[0]);
-      const gores = (s.gores ?? []).filter(g => g.key.split('|').every(end => roadIds.has(endRoad(end)))).map(clone);
+      const gores = (s.gores ?? []).filter(g => g.intersection ? interIds.has(g.intersection) : g.key.split('|').every(end => roadIds.has(endRoad(end)))).map(clone);
       const bridges = (s.bridges ?? []).filter(b => roadIds.has(b.road)).map(clone);
       const intersections = (s.intersections ?? []).filter(item => interIds.has(item.id)).map(item => {
         const copy = clone(item);
@@ -183,10 +306,12 @@
         lines: lines.filter(l => !onCopied(l.on)),
       };
       const points = [...joints, ...intersections, ...medians.flatMap(m => m.points), ...signs];
+      if(!points.length)for(const kind of ['markings','lines','surfaces'])for(const id of ids(kind))points.push(...shapes(kind,id).flat());
       const center = points.length ? { x: points.reduce((t, p) => t + p.x, 0) / points.length, y: points.reduce((t, p) => t + p.y, 0) / points.length } : null;
       return { roads, joints, gores, bridges, intersections, markings, lines, medians, signs, surfaces, loose, center, inchesPerPixel: s.inchesPerPixel };
     }
     function copy() {
+      useEditorSelection();
       if (!total()) return tell('Select something to copy.');
       clipboard = gather();
       tell(`Copied ${describe()}.`);
@@ -216,7 +341,15 @@
       for (const joint of c.joints) jointMap.set(joint.id, nextJoint++);
       for (const road of c.roads) {
         road.id = roadMap.get(road.id);
-        for (const end of road.ends) end.joint = jointMap.get(end.joint);
+        for (const end of road.ends) { end.joint = jointMap.get(end.joint);if(end.length!=null)end.length/=k; }
+      }
+      app.curveLinks.prune(c);
+      const curveIds=new Map(),curveSets=new Map();
+      for(const road of c.roads)for(const end of road.ends)if(end.curveLink) {
+        const link=end.curveLink;
+        if(!curveIds.has(link.id))curveIds.set(link.id,uuid());link.id=curveIds.get(link.id);
+        if(link.set){if(!curveSets.has(link.set))curveSets.set(link.set,uuid());link.set=curveSets.get(link.set);}
+        if(link.mode==='mirror'&&link.axis)link.axis.forEach(move);
       }
       for (const joint of c.joints) {
         joint.id = jointMap.get(joint.id);
@@ -226,7 +359,7 @@
       }
       const remapEnd = end => { const [road, e] = end.split(':'); return `${roadMap.get(Number(road))}:${e}`; };
       const goreMap = new Map();
-      for (const gore of c.gores) {
+      for (const gore of c.gores.filter(g=>!g.intersection)) {
         const key = gore.key.split('|').map(remapEnd).sort().join('|');
         goreMap.set(gore.key, key);
         gore.key = key;
@@ -250,6 +383,10 @@
           if (a.binding) a.binding.road = roadMap.get(a.binding.road);
           for (const link of a.links ?? []) link.road = roadMap.get(link.road);
         }
+      }
+      for(const gore of c.gores.filter(g=>g.intersection)) {
+        const old=gore.key,newId=interMap.get(gore.intersection);
+        gore.key=old.replace(`i:${gore.intersection}:`,`i:${newId}:`);gore.intersection=newId;goreMap.set(old,gore.key);
       }
       const remapOn = on => {
         if (!on) return on;
@@ -313,6 +450,10 @@
         move(post);
         Object.assign(sign, { postX: post.x, postY: post.y });
       }
+      for(const kind of ['markings','lines','surfaces'])for(const item of c[kind]??[])if(item.placementTransform) {
+        item.placementTransform.x/=k;item.placementTransform.y/=k;
+        app.itemTransform.translate(item,offset.x,offset.y,true);
+      }
       s.roads.push(...c.roads);
       s.joints.push(...c.joints);
       (s.gores ??= []).push(...c.gores);
@@ -331,6 +472,7 @@
         ...(roadMap.size ? [] : (c.surfaces ?? []).map(x => ({ kind: 'surfaces', id: x.id }))),
       ];
       commit();
+      editorOverride=true;
       setSelection(pasted);
       tell(`Pasted ${describe(Object.fromEntries(KINDS.map(kind => [kind, pasted.filter(p => p.kind === kind).length])))}.`);
     }
@@ -356,7 +498,7 @@
       const roadIds = withPartners(ids('roads'));
       if (roadIds.size) app.roadEditor.removeRoads(s, s.roads.filter(road => roadIds.has(road.id)));
       const endRoad = end => Number(end.split(':')[0]);
-      s.gores = (s.gores ?? []).filter(g => !g.key.split('|').some(end => roadIds.has(endRoad(end))));
+      s.gores = (s.gores ?? []).filter(g => g.intersection ? !ids('intersections').has(g.intersection) : !g.key.split('|').some(end => roadIds.has(endRoad(end))));
       s.intersections = (s.intersections ?? []).filter(item => !ids('intersections').has(item.id));
       s.medians = (s.medians ?? []).filter(m => !ids('medians').has(m.id));
       s.markings = (s.markings ?? []).filter(m => !ids('markings').has(m.id) && !roadIds.has(m.on?.road) && !ids('intersections').has(m.on?.intersection));
@@ -382,9 +524,25 @@
         }
       }
       for (const sign of s.signs ?? []) if (selection.get('signs').has(sign.id)) { sign.x += dx; sign.y += dy; sign.postX += dx; sign.postY += dy; }
-      app.roadEditor.renderLater({ joints: [...joints] });
+      const onMoved=on=>on&&(roadIds.has(on.road)||selection.get('intersections').has(on.intersection));
+      for(const kind of ['markings','lines','surfaces'])for(const item of s[kind]??[]) {
+        const baseMoves=onMoved(item.on)||(item.a?.on&&item.b?.on&&onMoved(item.a.on)&&onMoved(item.b.on));
+        const picked=selection.get(kind).has(item.id);
+        if(baseMoves||picked)app.itemTransform.translate(item,dx,dy,Boolean(baseMoves));
+        if(!item.on&&item.a&&item.b&&picked&&!baseMoves) {
+          delete item.placementTransform;
+          for(const p of [item.a,item.b]){p.x+=dx;p.y+=dy;if(p.on&&!onMoved(p.on))delete p.on;}
+        }
+      }
+      const ids=new Set(s.roads.flatMap(r=>r.ends.filter(e=>joints.has(e.joint)&&e.curveLink).map(e=>e.curveLink.id)));
+      for(const id of ids) {
+        const members=app.curveLinks.members(s,id);
+        if(members.some(p=>!joints.has(p.end.joint))){app.curveLinks.unlink(s,members[0]?.end.curveLink);continue;}
+        for(const {end}of members)if(end.curveLink.mode==='mirror')for(const p of end.curveLink.axis){p.x+=dx;p.y+=dy;}
+      }
+      app.roadEditor.renderLater();
     }
-    const movable = () => ['roads', 'intersections', 'medians', 'signs'].some(kind => selection.get(kind).size);
+    const movable = () => total()>0;
 
     function commit() {
       app.roadEditor.render();
@@ -396,16 +554,28 @@
     // Overlay: selected items outlined, and the selection box while dragging.
     function refresh() {
       prune();
-      overlay.replaceChildren();
+      selectionGuides.replaceChildren();
+      rotationHandle.hidden=true;
       refreshPanel();
+      if(!active()) {
+        const content=document.querySelector('.editor:not([hidden]) .editorContent');
+        editorTransforms.hidden=total()===selection.get('lines').size||!content;
+        if(content&&total()&&editorTransforms.parentNode!==content)content.append(editorTransforms);
+      } else editorTransforms.hidden=true;
       const s = sheet();
       if (!s?.inchesPerPixel || (!total() && !drag?.box)) return;
-      const root = svg('svg', { 'aria-hidden': 'true' }, overlay);
+      const root = svg('svg', { 'aria-hidden': 'true' }, selectionGuides);
       const view = svg('g', { transform: `translate(${s.view.x} ${s.view.y}) scale(${s.view.scale})` }, root);
       for (const kind of KINDS) for (const id of selection.get(kind)) {
         for (const shape of shapes(kind, id)) {
           svg('path', { d: pathData(shape, kind !== 'lines'), class: 'selectionOutline', 'vector-effect': 'non-scaling-stroke' }, view);
         }
+      }
+      const box=bounds();
+      if(box && total()>selection.get('lines').size) {
+        const p=sheets.toScreen({x:box.x,y:box.top});
+        rotationHandle.hidden=false;
+        Object.assign(rotationHandle.style,{left:`${p.x}px`,top:`${p.y-28}px`});
       }
       if (drag?.box) {
         const a = sheets.toScreen(drag.box.from), b = sheets.toScreen(drag.box.to);
@@ -416,7 +586,7 @@
       if (panel.hidden) return;
       const has = total() > 0;
       get('selectCount').textContent = has ? `Selected: ${describe()}.` : 'Nothing selected.';
-      for (const id of ['selectCopy', 'selectCut', 'selectDuplicate', 'selectDelete', 'selectClear']) get(id).disabled = !has;
+      for (const id of ['selectCopy', 'selectCut', 'selectDuplicate', 'selectDelete', 'selectClear','selectRotateLeft','selectRotateRight']) get(id).disabled = !has;
       get('selectPaste').disabled = !clipboard;
       get('selectMakeIntersection').disabled = !crossingCount();
       if (!sheet()) tell('Upload a sheet first.');
@@ -445,7 +615,7 @@
       workspace.setPointerCapture(event.pointerId);
     }, true);
     workspace.addEventListener('pointermove', event => {
-      if (active()) pointer = pointOf(event);
+      pointer = pointOf(event);
       if (!drag || event.pointerId !== drag.pointer) return;
       event.stopImmediatePropagation();
       if (!drag.moved && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) <= DRAG_PIXELS) return;
@@ -483,15 +653,19 @@
     // Keyboard: copy, cut, paste, duplicate, select all, delete, and Escape.
     document.addEventListener('keydown', event => {
       if (event.target.closest?.('input, select, textarea, dialog, [contenteditable="true"]') || document.querySelector('dialog[open]')) return;
+      if(rotationDrag&&event.key==='Escape') {
+        event.preventDefault();event.stopImmediatePropagation();finishRotation({type:'pointercancel',pointerId:rotationDrag.pointer});return;
+      }
       const mod = event.metaKey || event.ctrlKey, key = event.key.toLowerCase();
       if (mod && key === 'v' && clipboard && ready()) { event.preventDefault(); paste(pointer); return; }
-      if (!active()) return;
-      if (mod && key === 'c') { event.preventDefault(); copy(); }
-      else if (mod && key === 'x') { event.preventDefault(); copy(); remove(); }
-      else if (mod && key === 'd') { event.preventDefault(); duplicate(); }
+      if (!active()) useEditorSelection();
+      if (mod && key === 'c' && total()) { event.preventDefault(); copy(); }
+      else if (mod && key === 'x' && total()) { event.preventDefault(); copy(); remove(); }
+      else if (mod && key === 'd' && total()) { event.preventDefault(); duplicate(); }
+      else if (!active()) return;
       else if (mod && key === 'a') { event.preventDefault(); selectAll(); }
       else if ((event.key === 'Delete' || event.key === 'Backspace') && total()) { event.preventDefault(); remove(); }
-      else if (event.key.startsWith('Arrow') && movable() && ready()) {
+      else if (!event.target.closest('.selectionRotate') && event.key.startsWith('Arrow') && movable() && ready()) {
         // Arrow keys move the whole selection: 1 ft, or 10 ft with Shift.
         event.preventDefault();
         const step = (event.shiftKey ? 10 : 1) * ppf();
@@ -559,6 +733,8 @@
         'separator',
         { label: many ? `Copy Selection (${total()})` : 'Copy', run: () => { clipboard = gather(many ? selection : just(hit)); tell(`Copied ${many ? describe() : `1 ${name}`}.`); refreshPanel(); } },
         { label: many ? `Duplicate Selection (${total()})` : 'Duplicate', run: () => duplicate(many ? selection : just(hit)) },
+        { label: many ? 'Rotate Selection Left (15°)' : 'Rotate Left (15°)', run: () => { if(!many)setSelection([hit]);editorOverride=true;rotateSelection(-15); } },
+        { label: many ? 'Rotate Selection Right (15°)' : 'Rotate Right (15°)', run: () => { if(!many)setSelection([hit]);editorOverride=true;rotateSelection(15); } },
         { label: 'Paste Here', disabled: !clipboard, run: () => paste(point) },
         ...(many && hit.kind === 'roads' && crossingCount() ? [{ label: 'Make Intersection From Selection', run: makeIntersection }] : []),
         'separator',
@@ -583,6 +759,8 @@
     document.addEventListener('sheetview', () => { closeMenu(); refresh(); });
 
     // Panel.
+    get('selectRotateLeft').addEventListener('click',()=>rotateSelection(-Number(get('selectionRotation').value)));
+    get('selectRotateRight').addEventListener('click',()=>rotateSelection(Number(get('selectionRotation').value)));
     get('selectCopy').addEventListener('click', copy);
     get('selectCut').addEventListener('click', () => { copy(); remove(); });
     get('selectPaste').addEventListener('click', () => paste(null));
@@ -597,7 +775,7 @@
       refresh();
     }).observe(panel, { attributes: true, attributeFilter: ['hidden'] });
     for (const event of ['sheetchange']) document.addEventListener(event, () => { KINDS.forEach(kind => selection.get(kind).clear()); refresh(); });
-    document.addEventListener('sheethistory', refresh);
-    app.selection = { diagnostics: () => Object.fromEntries([...selection].map(([kind,ids])=>[kind,[...ids]])), refresh, itemAt, edit, paste, copy: () => copy(), clear: () => setSelection([]) };
+    document.addEventListener('sheethistory',()=>{if(!active()&&!editorOverride)useEditorSelection();refresh();});
+    app.selection = { diagnostics: () => Object.fromEntries([...selection].map(([kind,ids])=>[kind,[...ids]])), editorChanged:()=>{editorOverride=false;useEditorSelection();refresh();}, refresh, itemAt, edit, paste, rotate:rotateSelection, copy: () => copy(), clear: () => setSelection([]) };
   });
 })();

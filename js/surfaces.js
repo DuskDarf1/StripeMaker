@@ -48,11 +48,14 @@
     const overlay = document.createElement('div');
     overlay.className = 'markingOverlay surfaceOverlay';
     sheets.addOverlay(overlay);
-    let start = null, hover = null, press = null;
+    let start = null, hover = null, press = null, all = false;
 
     const item = () => C.find(app.markings?.draftType?.());
     const active = () => !panel.hidden && app.markings?.tab() === 'lateral' && item()?.kind === 'surface' && Boolean(sheets.selected?.inchesPerPixel);
     const tell = text => { const status = get('markingStatus'); if (status) status.textContent = text; };
+    const lanesFor = (road, lane, all) => all
+      ? Array.from({length:road.lanes},(_,i)=>i).filter(i=>!['bike','bufferedBike','twoWayBike'].includes(road.laneTypes?.[i]?.type))
+      : [lane];
     // The lane under a point (roads only) and how far along the road it is.
     function anchor(point) {
       const sheet = sheets.selected, found = app.markings.anchorAt(point);
@@ -72,14 +75,17 @@
       const view = svg('g', { transform: `translate(${sheet.view.x} ${sheet.view.y}) scale(${sheet.view.scale})` }, root);
       const route = hover && routeBetween(sheet,start,hover);
       for (const segment of route ?? [{road:start.road,lane:start.lane,from:start.f,to:Math.min(1,start.f+1e-4)}]) {
-        const strip = app.roadEditor.laneStrip(sheet,segment.road,segment.lane,segment.from,segment.to);
-        svg('path', { d: pathData(strip), fill: C.SURFACE[item().color], opacity: '0.6', stroke: '#ffdf00', 'stroke-width': '2', 'vector-effect': 'non-scaling-stroke' }, view);
+        for (const lane of lanesFor(segment.road,segment.lane,all)) {
+          const strip = app.roadEditor.laneStrip(sheet,segment.road,lane,segment.from,segment.to);
+          svg('path', { d: pathData(strip), fill: C.SURFACE[item().color], opacity: '0.6', stroke: '#ffdf00', 'stroke-width': '2', 'vector-effect': 'non-scaling-stroke' }, view);
+        }
       }
     }
     const pointOf = event => sheets.toImage(event.clientX, event.clientY);
     workspace.addEventListener('pointermove', event => {
       if (!active()) return;
       hover = anchor(pointOf(event));
+      all = Boolean(start?.all || event.shiftKey);
       workspace.classList.toggle('markingPlacing', Boolean(hover));
       refresh();
     });
@@ -95,16 +101,17 @@
       const at = anchor(pointOf(event));
       if (!at) return;
       if (!start) {
-        start = at;
-        tell('Now click where it ends, on this lane or a connected lane.');
+        start = { ...at, all: event.shiftKey }; all = event.shiftKey;
+        tell('Now click where it ends, on this lane or a connected lane. Hold Shift for all lanes.');
         return refresh();
       }
       const sheet = sheets.selected, kind = item();
       const route = routeBetween(sheet,start,at);
       if (!route) return tell('Choose an end on a lane connected to the starting lane.');
-      const span = crypto.randomUUID();
-      const surfaces = route.filter(s=>s.to-s.from>1e-4).map((s,order)=>({
-        id:crypto.randomUUID(),span,order,on:{road:s.road.id,lane:s.lane},from:s.from,to:s.to,color:kind.color,pattern:kind.pattern,
+      const spans = new Map(), full = start.all || event.shiftKey;
+      const surfaces = route.filter(s=>s.to-s.from>1e-4).flatMap((s,order)=>lanesFor(s.road,s.lane,full).map(lane=>{
+        const key = full ? lane : 'route'; if(!spans.has(key))spans.set(key,crypto.randomUUID());
+        return {id:crypto.randomUUID(),span:spans.get(key),order,on:{road:s.road.id,lane},from:s.from,to:s.to,color:kind.color,pattern:kind.pattern};
       }));
       start = null;
       if (!surfaces.length) return refresh();

@@ -2,7 +2,7 @@
    Uses the existing SignalMaker-derived buttons/fields (GPL-3.0). */
 (() => {
   const FORMAT='StripeMakerProject', VERSION=1;
-  const COLLECTIONS=['roads','joints','gores','medians','intersections','signs','markings','lines','bridges','surfaces'];
+  const COLLECTIONS=['roads','joints','gores','medians','intersections','signs','markings','lines','bridges','surfaces','vehicleSpawns'];
   const DATA_KEYS=new Set(['name','inchesPerPixel','view','autoTapers','blank','width','height',...COLLECTIONS]);
   const RUNTIME_KEYS=new Set(['content','file','url','roadLayer','id','projectArchive']);
   const pick=(value,predicate)=>Object.fromEntries(Object.entries(value).filter(([key])=>predicate(key)));
@@ -36,7 +36,21 @@
       if(d.blank&&(!finite(d.width)||!finite(d.height)||d.width<=0||d.height<=0||d.width!==sheet.width||d.height!==sheet.height))fail('Invalid blank sheet dimensions.');
       const file=sheet.file;
       if(!object(file)||typeof file.name!=='string'||!(/\.(png|jpe?g|tiff?)$/i.test(file.name))||typeof file.base64!=='string'||!file.base64.length||file.base64.length%4||!/^[A-Za-z0-9+/]*={0,2}$/.test(file.base64))fail('Missing or invalid embedded sheet image.');
-      for(const key of COLLECTIONS)if(!Array.isArray(d[key])||d[key].some(item=>!object(item)))fail('Invalid '+key+' collection.');
+      if(d.vehicleSpawns!=null&&!Array.isArray(d.vehicleSpawns))fail('Invalid vehicle spawn points.');
+      const laneIndex = value => Number.isInteger(value) && value >= 0 && value < 999;
+      for(const spawn of d.vehicleSpawns??[]) {
+        if(!object(spawn)||!id(spawn.road)||spawn.e!=null&&![0,1].includes(spawn.e))fail('Invalid vehicle spawn point.');
+        if(spawn.rate!=null&&(!Number.isInteger(spawn.rate)||spawn.rate<0||spawn.rate>600))fail('Invalid spawn output rate.');
+        if(spawn.laneShares!=null&&(!object(spawn.laneShares)||Object.entries(spawn.laneShares).some(([lane,share])=>!/^\d+$/.test(lane)||!laneIndex(Number(lane))||!finite(share)||share<0||share>100)))fail('Invalid lane distribution.');
+        if(spawn.outputs!=null&&(!object(spawn.outputs)||Object.entries(spawn.outputs).some(([lane,rate])=>!/^\d+$/.test(lane)||!laneIndex(Number(lane))||!Number.isInteger(rate)||rate<0||rate>600)))fail('Invalid spawn output rate.');
+        if(spawn.excludedLanes!=null&&(!Array.isArray(spawn.excludedLanes)||spawn.excludedLanes.some(lane=>!laneIndex(lane))))fail('Invalid removed spawn lanes.');
+        if(spawn.routes!=null&&(!Array.isArray(spawn.routes)||spawn.routes.some(route=>!object(route)||route.lane!=null&&!laneIndex(route.lane)||route.name!=null&&(typeof route.name!=='string'||route.name.length>80)||route.percent!=null&&(!finite(route.percent)||route.percent<0||route.percent>100)||!object(route.exit)||!id(route.exit.road)||route.exit.lane!=null&&!laneIndex(route.exit.lane)||route.exit.e!=null&&![0,1].includes(route.exit.e))))fail('Invalid vehicle exit route.');
+      }
+      for(const key of COLLECTIONS)if(!(key==='vehicleSpawns'&&d[key]==null)&&(!Array.isArray(d[key])||d[key].some(item=>!object(item))))fail('Invalid '+key+' collection.');
+      for(const key of ['markings','lines','surfaces'])for(const item of d[key])if(item.placementTransform!=null) {
+        const t=item.placementTransform;
+        if(!object(t)||!['angle','x','y'].every(k=>finite(t[k])))fail('Invalid item placement transform.');
+      }
       const roads=new Map(),joints=new Map();
       for(const r of d.roads) {
         if(!id(r.id)||roads.has(r.id)||!Number.isInteger(r.lanes)||r.lanes<1||r.lanes>999||!finite(r.laneWidth)||r.laneWidth<=0||!Array.isArray(r.ends)||r.ends.length!==2)fail('Invalid road or lane count.');
@@ -132,8 +146,10 @@
       const added=await app.sheets.importProject(entries,project.selectedSheet);
       if(applySettings) {
         const s=project.settings??{};
+        if(finite(s.drawingOpacity)&&s.drawingOpacity>=0&&s.drawingOpacity<=100)app.settings.set('drawingOpacity',s.drawingOpacity);
         if(finite(s.signArrowWeight)&&s.signArrowWeight>=25&&s.signArrowWeight<=400)app.settings.set('signArrowWeight',s.signArrowWeight);
         if(Number.isInteger(s.hideLevelsAbove)&&s.hideLevelsAbove>=0&&s.hideLevelsAbove<=9)app.settings.set('hideLevelsAbove',s.hideLevelsAbove);
+        if(typeof s.leftHandTraffic==='boolean')app.settings.set('leftHandTraffic',s.leftHandTraffic);
         if(typeof s.autoContrast==='boolean')app.settings.set('autoContrast',s.autoContrast);
         if(['all','undo-redo','none'].includes(s.keybindMode))app.settings.set('keybindMode',s.keybindMode);
         app.shortcuts.restore(project.shortcuts??{});

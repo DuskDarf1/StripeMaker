@@ -1,0 +1,46 @@
+INITIAL REVIEW FINDINGS
+
+Geometry audit: 5213 unique cases; 0 exceptions; 0 nonfinite outputs.
+These observations preserve the current renderer. They are starting points for the next fixing pass, not acceptance criteria.
+
+LAYOUT VALIDATION MESSAGES
+R063 Approach speed 50 mph
+Approaches overlap at the circle. Move them apart or reduce their lanes.
+
+R064 Approach speed 65 mph
+Approaches overlap at the circle. Move them apart or reduce their lanes.
+
+R087 3 circulating lanes, all entry gores
+Approaches overlap. Move them apart or reduce their lanes.
+
+R089 4 circulating lanes, symmetric
+Approaches overlap. Move them apart or reduce their lanes.
+
+R091 4 circulating lanes, unequal widths
+Approaches overlap. Move them apart or reduce their lanes.
+
+R092 4 circulating lanes, all entry gores
+Approaches overlap. Move them apart or reduce their lanes.
+
+MOVEMENT PATHS VERY CLOSE TO THE APRON
+Diagnostic: minimum sampled radial distance from movement center to apron is under 4 ft. This is not a swept-path analysis.
+R084 3 circulating lanes, symmetric: 0.098 ft
+R085 3 circulating lanes, mixed: -0.001 ft
+R086 3 circulating lanes, unequal widths: 0.231 ft
+R087 3 circulating lanes, all entry gores: 0.43 ft
+R089 4 circulating lanes, symmetric: 0.413 ft
+R090 4 circulating lanes, mixed: 0 ft
+R091 4 circulating lanes, unequal widths: 0.355 ft
+R092 4 circulating lanes, all entry gores: 0.24 ft
+
+VISUAL REVIEW
+R004 retains the reported southern spiral and 20 ft gore. R089 exposes angular corner joins and complicated guide connections in the four-lane symmetric case. All of these editable inputs are retained for diagnosis.
+
+FULL EVIDENCE
+audit.json records each layout validation, design check, lane demand, spiral count and interior arrow assignment. browser-audit.json records actual imports and renders. review-browser-audit.json verifies the final labeled file, including reload and export.
+Lane-count matrix and movement cases are checked for importability and finite rendering; they are not all visually approved.
+
+BROWSER VERIFICATION
+All 5,213 unique cases imported and rendered in isolated browser storage. No case produced a nonfinite SVG or changed editable input geometry during repeat rendering.
+The first full pass logged one missing-catalog initialization error in L2241-L2304. That entire 64-case batch was re-imported and rendered again without errors; both audit records are retained.
+The final labeled 93-case review project also passed reload and export. Two attached-road joint coordinates changed by about 2e-13 pixels on normalization; the raw values are retained under roundoff in the review audit.

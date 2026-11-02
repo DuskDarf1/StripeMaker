@@ -1,0 +1,180 @@
+{
+  "id": "f8e7474a-cc5a-42c2-b14d-782ef86e4a07",
+  "kind": "roundabout",
+  "name": "Roundabout 1",
+  "x": 0,
+  "y": 0,
+  "rotation": 0,
+  "approaches": [
+    {
+      "id": "e3b6a089-194e-485e-bda7-2aa5352c9005",
+      "angle": 0,
+      "incoming": 1,
+      "outgoing": 1,
+      "width": 12,
+      "outWidth": 12,
+      "median": 12,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": 132.3180138641063,
+      "y": 0,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "exitCurve": 300,
+      "bend": 0,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "6b0b0b3a-5949-456d-aa28-e25b914f19b7"
+      ],
+      "outLanes": [
+        "942be620-1c17-4c4c-aa24-84e299e75cc4"
+      ],
+      "movementAngle": 0,
+      "yieldSetback": 0
+    },
+    {
+      "id": "2c039785-db5b-47fa-81c6-9f275468f5b7",
+      "angle": 90,
+      "incoming": 1,
+      "outgoing": 1,
+      "width": 12,
+      "outWidth": 12,
+      "median": 12,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": 0.5000000000000115,
+      "y": 188.29311622219905,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "exitCurve": 300,
+      "bend": -0.5,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "416a255b-178e-4660-9a15-f2179f75cb88"
+      ],
+      "outLanes": [
+        "0f107e30-ee8f-4b14-b7b7-290d78de0177"
+      ],
+      "movementAngle": 90,
+      "bezierSides": {
+        "exit": {
+          "pull": 7.190729168340816,
+          "offset": -12.734187643046798,
+          "corner": 0.14330775750647096,
+          "cornerAt": 1.00235956227
+        },
+        "entry": {
+          "pull": 17.839725999517718,
+          "offset": 6.7733111959841565
+        }
+      },
+      "yieldSetback": 0
+    },
+    {
+      "id": "61d848f4-88d3-4f0d-8a87-6078a13675cf",
+      "angle": 199.5925459920462,
+      "incoming": 1,
+      "outgoing": 2,
+      "width": 12,
+      "outWidth": 12,
+      "median": 12,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": -185.8356419642302,
+      "y": -62.941499986600206,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "exitCurve": 300,
+      "bend": 0,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "c2cb1678-190b-4c72-a2e7-f15d59e9b2fc"
+      ],
+      "outLanes": [
+        "4a925bfc-c36f-4def-a461-65e5287e141e",
+        "6364830f-d535-4a2b-b21b-ede6d328e45f"
+      ],
+      "movementAngle": 180,
+      "yieldSetback": 11.5,
+      "bezierSides": {
+        "entry": {
+          "pull": 3.0273903972749414,
+          "offset": 5.799480519211077,
+          "corner": -0.1661125660163405,
+          "cornerAt": 0.9798622244690227
+        },
+        "exit": {
+          "pull": -20.972298976475283,
+          "offset": -1.5521888523889513,
+          "corner": 0.30702728705497195,
+          "cornerAt": 0.9571973054798875
+        }
+      }
+    },
+    {
+      "id": "6e58d896-827f-4fd7-b883-ab16cc45586a",
+      "angle": 270,
+      "incoming": 2,
+      "outgoing": 1,
+      "width": 12,
+      "outWidth": 12,
+      "median": 12,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": 3.49999999999997,
+      "y": -163.63804822472838,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "exitCurve": 300,
+      "bend": 3.5,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "8d6d888a-6e93-4271-a756-e60e68051dc5",
+        "e3de169a-8490-434e-bc64-97048371730b"
+      ],
+      "outLanes": [
+        "c2a13f5d-2bd5-4f2a-9c87-2fb9970bed27"
+      ],
+      "movementAngle": 270,
+      "entryGores": {
+        "e3de169a-8490-434e-bc64-97048371730b": 16.81848631582739
+      },
+      "entryGoreLengths": {
+        "e3de169a-8490-434e-bc64-97048371730b": 57.0267553199126
+      },
+      "yieldSetback": 9
+    }
+  ],
+  "movements": [],
+  "roundabout": {
+    "mini": false,
+    "lanes": "auto",
+    "icd": null,
+    "shape": "circle",
+    "ratio": 1,
+    "turn": 0,
+    "widths": null,
+    "laneWidth": null,
+    "apron": 15,
+    "entryRadius": 65,
+    "exitRadius": 65,
+    "exitCurb": true,
+    "spiral": "auto"
+  }
+}

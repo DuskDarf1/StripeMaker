@@ -1,0 +1,533 @@
+{
+  "observedAt": "2026-10-31T17:41:11.844Z",
+  "files": [
+    {
+      "file": "lane-counts/L2241-L2304.json",
+      "imported": 64,
+      "expected": 64,
+      "reload": null
+    }
+  ],
+  "errors": [],
+  "cases": [
+    {
+      "id": "L2241",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2242",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2243",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2244",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2245",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2246",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2247",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2248",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2249",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2250",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2251",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2252",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2253",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2254",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2255",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2256",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2257",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2258",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2259",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2260",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2261",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2262",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2263",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2264",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2265",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2266",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2267",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2268",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2269",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2270",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2271",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2272",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2273",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2274",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2275",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2276",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2277",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2278",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2279",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2280",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2281",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2282",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2283",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2284",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2285",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2286",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2287",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2288",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2289",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2290",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2291",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2292",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2293",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2294",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2295",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2296",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2297",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2298",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2299",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2300",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2301",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2302",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2303",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "L2304",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    }
+  ],
+  "summary": {
+    "rendered": 64,
+    "failures": [],
+    "inputChanges": [],
+    "pageErrors": 0,
+    "fileErrors": 0
+  }
+}

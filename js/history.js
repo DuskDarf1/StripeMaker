@@ -21,7 +21,7 @@
     let editingInput = null;
     const serialize = () => JSON.stringify(Object.fromEntries(sheets.all.map(sheet => [sheet.id, {
       inchesPerPixel: sheet.inchesPerPixel ?? null, roads: sheet.roads ?? [], joints: sheet.joints ?? [], gores: sheet.gores ?? [],
-      intersections: sheet.intersections ?? [], signs: sheet.signs ?? [], markings: sheet.markings ?? [], lines: sheet.lines ?? [], medians: sheet.medians ?? [], bridges: sheet.bridges ?? [], surfaces: sheet.surfaces ?? [], autoTapers: Boolean(sheet.autoTapers),
+      intersections: sheet.intersections ?? [], signs: sheet.signs ?? [], markings: sheet.markings ?? [], lines: sheet.lines ?? [], medians: sheet.medians ?? [], bridges: sheet.bridges ?? [], surfaces: sheet.surfaces ?? [], vehicleSpawns: sheet.vehicleSpawns ?? [], autoTapers: Boolean(sheet.autoTapers),
     }])));
     let currentSnapshot = serialize();
 

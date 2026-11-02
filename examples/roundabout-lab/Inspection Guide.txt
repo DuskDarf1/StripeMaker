@@ -1,0 +1,309 @@
+ROUNDABOUT INSPECTION LIBRARY — 5213 UNIQUE EDITABLE CASES
+
+IMPORT
+Sheets > Import Project JSON. Keep imported app settings unchecked. Imports append sheets; they do not replace your existing work.
+Start with Roundabout Inspection Library.json. Each sheet and roundabout has a stable R/L/M case ID. Double-click the roundabout to open its movement editor.
+Use Two-way Lane Count Matrix.json for the 256 ordinary four-leg one/two-lane count combinations. These are also included in lane-counts; importing both duplicates those examples.
+lane-counts/ and movements/ are split into 64-sheet files so you can work through a batch at a time. E/S/W/N identify the actual approach locations, not traffic headings. Counts are entry/exit.
+
+WHAT TO INSPECT
+1. Spiral tips must open the intended lane, with no line crossing the apron.
+2. Lane width is perpendicular to travel. Check the assigned inside/outside widths through curves and the surviving width after a lane drops.
+3. Change approach destinations: inspect entry arrows, arrows inside the circle, dotted guides, exit connections and visible movement paths.
+4. Gores separate existing lanes. Inspect their tips, width, chevron direction and gaps in YIELD.
+5. Check every approach orientation, the wrap around north, and each interacting spiral.
+6. Review Design checks. Empty destinations, all-entry/all-exit networks, crossed movements, narrow diameters and out-of-range widths are intentional negative cases.
+7. Test custom markings, attached roads, undo/redo, save/reload and vector export on the labeled integration cases.
+
+REPORT A CASE
+Export the selected sheet as Project JSON and include its R/L/M case ID plus what you expected. Keep the inputs that expose the defect; do not repair the fixture to make a failing rendering disappear.
+
+COVERAGE
+All 8^4 = 4,096 labeled E/S/W/N combinations of 0–2 entry lanes and 0–2 exit lanes, excluding a 0/0 leg. Automatic circulating lanes stay within 1–2.
+All 16^2 = 256 destination-subset pairs for one two-lane entry, repeated at E/S/W/N: 1,024 cases. Other approaches retain two-lane defaults.
+Saved reports; all subsets of spiral entries and gore locations; lane widths; gore widths; medians; diameters; speeds; skew; 2/3/5/6 legs; oval/peanut shapes; attached roads; custom markings; 3/4-lane stress cases.
+Continuous angles, dimensions and arbitrary numbers of approaches have no finite exhaustive set. This is not the Cartesian product of every setting or every destination choice on all eight entry lanes simultaneously (16^8 = 4,294,967,296 assignments). Out-of-range and conflicting cases are intentionally retained.
+
+GENERATION AND VERIFICATION
+Run node examples/roundabout-lab/generate.cjs to regenerate deterministic inputs. Run label-review.browser.cjs for on-sheet review titles, audit.cjs for geometry observations, and verify.browser.cjs for actual import/render/persistence checks.
+These are inspection inputs, not approved designs. Validation results belong in audit.json and browser-audit.json; a finite render does not establish correct geometry.
+
+REVIEW CASES
+R001 Single-lane baseline
+Compact default. Check all four entry and exit corners.
+
+R002 Two-lane baseline
+Check lane widths, interior arrows, entry guides and exit connections.
+
+R003 Saved mixed-spiral report
+Preserves the earlier reported geometry, with stable anonymous IDs.
+
+R004 Saved southern spiral report
+Preserves the southern lane-add case and its 20 ft gore; do not silently resize it.
+
+R005 1x2 pair E/W
+Two-lane opposite approaches; inspect the transition to each one-lane sector.
+
+R006 1x2 pair S/N
+Two-lane opposite approaches; inspect the transition to each one-lane sector.
+
+R007 Spiral entries E
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R008 Spiral entries S
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R009 Spiral entries E/S
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R010 Spiral entries W
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R011 Spiral entries E/W
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R012 Spiral entries S/W
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R013 Spiral entries E/S/W
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R014 Spiral entries N
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R015 Spiral entries E/N
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R016 Spiral entries S/N
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R017 Spiral entries E/S/N
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R018 Spiral entries W/N
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R019 Spiral entries E/W/N
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R020 Spiral entries S/W/N
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R021 Spiral entries E/S/W/N
+Two entry lanes and one exit lane at each named approach; inspect every opening and the lane remaining after each exit.
+
+R022 Spiral mode auto
+Same south two-lane entry. Compare shaped island and guide behavior across the three modes.
+
+R023 Spiral mode on
+Same south two-lane entry. Compare shaped island and guide behavior across the three modes.
+
+R024 Spiral mode off
+Same south two-lane entry. Compare shaped island and guide behavior across the three modes.
+
+R025 Circulating widths 12/18
+Measure perpendicular to each lane. Equal and reversed widths deliberately exercise design checks.
+
+R026 Circulating widths 14/16
+Measure perpendicular to each lane. Equal and reversed widths deliberately exercise design checks.
+
+R027 Circulating widths 16/16
+Measure perpendicular to each lane. Equal and reversed widths deliberately exercise design checks.
+
+R028 Circulating widths 18/12
+Measure perpendicular to each lane. Equal and reversed widths deliberately exercise design checks.
+
+R029 South entry gore 0 ft
+Check the tip, yield gaps, lane centers and guide alignment; widths outside 6–7 ft are deliberate stress inputs.
+
+R030 South entry gore 2 ft
+Check the tip, yield gaps, lane centers and guide alignment; widths outside 6–7 ft are deliberate stress inputs.
+
+R031 South entry gore 6 ft
+Check the tip, yield gaps, lane centers and guide alignment; widths outside 6–7 ft are deliberate stress inputs.
+
+R032 South entry gore 7 ft
+Check the tip, yield gaps, lane centers and guide alignment; widths outside 6–7 ft are deliberate stress inputs.
+
+R033 South entry gore 20 ft
+Check the tip, yield gaps, lane centers and guide alignment; widths outside 6–7 ft are deliberate stress inputs.
+
+R034 Gore placement E
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R035 Gore placement S
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R036 Gore placement E/S
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R037 Gore placement W
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R038 Gore placement E/W
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R039 Gore placement S/W
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R040 Gore placement E/S/W
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R041 Gore placement N
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R042 Gore placement E/N
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R043 Gore placement S/N
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R044 Gore placement E/S/N
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R045 Gore placement W/N
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R046 Gore placement E/W/N
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R047 Gore placement S/W/N
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R048 Gore placement E/S/W/N
+All subsets of approaches with a 6 ft entry gore. No entry lanes are added by the gore.
+
+R049 South median 0 ft
+Check splitter nose and entry alignment without changing lane widths.
+
+R050 South median 6 ft
+Check splitter nose and entry alignment without changing lane widths.
+
+R051 South median 12 ft
+Check splitter nose and entry alignment without changing lane widths.
+
+R052 South median 20 ft
+Check splitter nose and entry alignment without changing lane widths.
+
+R053 South median 40 ft
+Check splitter nose and entry alignment without changing lane widths.
+
+R054 Two-lane diameter 120 ft
+Boundary and out-of-range diameters are intentional; inspect curvature and design checks.
+
+R055 Two-lane diameter 140 ft
+Boundary and out-of-range diameters are intentional; inspect curvature and design checks.
+
+R056 Two-lane diameter 160 ft
+Boundary and out-of-range diameters are intentional; inspect curvature and design checks.
+
+R057 Two-lane diameter 180 ft
+Boundary and out-of-range diameters are intentional; inspect curvature and design checks.
+
+R058 Two-lane diameter 200 ft
+Boundary and out-of-range diameters are intentional; inspect curvature and design checks.
+
+R059 Two-lane diameter 300 ft
+Boundary and out-of-range diameters are intentional; inspect curvature and design checks.
+
+R060 Approach speed 25 mph
+Use speed-dependent splitter lengths and approach geometry. Inspect long stems and island transitions.
+
+R061 Approach speed 35 mph
+Use speed-dependent splitter lengths and approach geometry. Inspect long stems and island transitions.
+
+R062 Approach speed 45 mph
+Use speed-dependent splitter lengths and approach geometry. Inspect long stems and island transitions.
+
+R063 Approach speed 50 mph
+Use speed-dependent splitter lengths and approach geometry. Inspect long stems and island transitions.
+
+R064 Approach speed 65 mph
+Use speed-dependent splitter lengths and approach geometry. Inspect long stems and island transitions.
+
+R065 Skew 0/75/180/270
+Inspect asymmetric corners, spiral alignment and lane widths at each leg.
+
+R066 Skew 0/105/180/270
+Inspect asymmetric corners, spiral alignment and lane widths at each leg.
+
+R067 Skew 15/100/190/285
+Inspect asymmetric corners, spiral alignment and lane widths at each leg.
+
+R068 Skew 0/60/180/270
+Inspect asymmetric corners, spiral alignment and lane widths at each leg.
+
+R069 2 legs, 1 lane(s)
+Additional and reduced approach counts. Close angles and overlapping mouths remain visible as test inputs.
+
+R070 2 legs, 2 lane(s)
+Additional and reduced approach counts. Close angles and overlapping mouths remain visible as test inputs.
+
+R071 3 legs, 1 lane(s)
+Additional and reduced approach counts. Close angles and overlapping mouths remain visible as test inputs.
+
+R072 3 legs, 2 lane(s)
+Additional and reduced approach counts. Close angles and overlapping mouths remain visible as test inputs.
+
+R073 5 legs, 1 lane(s)
+Additional and reduced approach counts. Close angles and overlapping mouths remain visible as test inputs.
+
+R074 5 legs, 2 lane(s)
+Additional and reduced approach counts. Close angles and overlapping mouths remain visible as test inputs.
+
+R075 6 legs, 1 lane(s)
+Additional and reduced approach counts. Close angles and overlapping mouths remain visible as test inputs.
+
+R076 6 legs, 2 lane(s)
+Additional and reduced approach counts. Close angles and overlapping mouths remain visible as test inputs.
+
+R077 oval ratio 1.2
+Alternative shapes exercise the app; FDM roundabout guidance is circular. Check both ends and the waist.
+
+R078 oval ratio 1.6
+Alternative shapes exercise the app; FDM roundabout guidance is circular. Check both ends and the waist.
+
+R079 peanut ratio 1.2
+Alternative shapes exercise the app; FDM roundabout guidance is circular. Check both ends and the waist.
+
+R080 peanut ratio 1.6
+Alternative shapes exercise the app; FDM roundabout guidance is circular. Check both ends and the waist.
+
+R081 Attached roads, 1 lane(s)
+Incoming and outgoing roads are linked lane to lane to the east approach. Move the roundabout and inspect the joints.
+
+R082 Attached roads, 2 lane(s)
+Incoming and outgoing roads are linked lane to lane to the east approach. Move the roundabout and inspect the joints.
+
+R083 Manual circulating markings
+A yellow longitudinal span and an arrow are attached to the circulating track. Edit geometry, save and reload.
+
+R084 3 circulating lanes, symmetric
+Beyond the main one/two-lane matrix. Preserve and review all design checks.
+
+R085 3 circulating lanes, mixed
+One multi-lane entry; other approaches have one or two lanes. Inspect lane adds and drops.
+
+R086 3 circulating lanes, unequal widths
+Lane widths are assigned individually, inside to outside.
+
+R087 3 circulating lanes, all entry gores
+A 6 ft gore at every entry boundary; inspect distinct yield gaps and lane centers.
+
+R088 3 circulating lanes, forced count
+One-lane roads with a manual circulating lane count. Test unused lane markings.
+
+R089 4 circulating lanes, symmetric
+Beyond the main one/two-lane matrix. Preserve and review all design checks.
+
+R090 4 circulating lanes, mixed
+One multi-lane entry; other approaches have one or two lanes. Inspect lane adds and drops.
+
+R091 4 circulating lanes, unequal widths
+Lane widths are assigned individually, inside to outside.
+
+R092 4 circulating lanes, all entry gores
+A 6 ft gore at every entry boundary; inspect distinct yield gaps and lane centers.
+
+R093 4 circulating lanes, forced count
+One-lane roads with a manual circulating lane count. Test unused lane markings.

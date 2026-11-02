@@ -1,0 +1,130 @@
+{
+  "id": "R015-roundabout",
+  "kind": "roundabout",
+  "name": "R015 Spiral entries E/N",
+  "x": 0,
+  "y": 0,
+  "rotation": 0,
+  "movements": [],
+  "roundabout": {
+    "lanes": "auto",
+    "icd": null,
+    "shape": "circle",
+    "ratio": 1,
+    "turn": 0,
+    "widths": null,
+    "apron": 15,
+    "entryRadius": 65,
+    "exitRadius": 65,
+    "exitCurb": true,
+    "spiral": "auto"
+  },
+  "approaches": [
+    {
+      "id": "R015-a1",
+      "angle": 0,
+      "incoming": 2,
+      "outgoing": 1,
+      "width": 12,
+      "outWidth": 12,
+      "median": 12,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": 139,
+      "y": 0,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "R015-a1-in1",
+        "R015-a1-in2"
+      ],
+      "outLanes": [
+        "R015-a1-out1"
+      ]
+    },
+    {
+      "id": "R015-a2",
+      "angle": 90,
+      "incoming": 1,
+      "outgoing": 1,
+      "width": 12,
+      "outWidth": 12,
+      "median": 12,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": 8.511295254074105e-15,
+      "y": 139,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "R015-a2-in1"
+      ],
+      "outLanes": [
+        "R015-a2-out1"
+      ]
+    },
+    {
+      "id": "R015-a3",
+      "angle": 180,
+      "incoming": 1,
+      "outgoing": 1,
+      "width": 12,
+      "outWidth": 12,
+      "median": 12,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": -139,
+      "y": 1.702259050814821e-14,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "R015-a3-in1"
+      ],
+      "outLanes": [
+        "R015-a3-out1"
+      ]
+    },
+    {
+      "id": "R015-a4",
+      "angle": 270,
+      "incoming": 2,
+      "outgoing": 1,
+      "width": 12,
+      "outWidth": 12,
+      "median": 12,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": -2.5533885762222313e-14,
+      "y": -139,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "R015-a4-in1",
+        "R015-a4-in2"
+      ],
+      "outLanes": [
+        "R015-a4-out1"
+      ]
+    }
+  ]
+}

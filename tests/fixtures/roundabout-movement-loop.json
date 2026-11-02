@@ -1,0 +1,150 @@
+{
+  "id": "e74170fb-92ef-469d-844a-1db7fc2bc1d8",
+  "kind": "roundabout",
+  "name": "Roundabout 1",
+  "x": 0,
+  "y": 0,
+  "rotation": 0,
+  "approaches": [
+    {
+      "id": "2a18b7c8-4255-481c-858f-38b4d2b40765",
+      "angle": 2.813028950271928,
+      "incoming": 2,
+      "outgoing": 1,
+      "width": 12,
+      "outWidth": 12,
+      "median": 23.85196708593624,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": 298.5753744359785,
+      "y": 8.129248842212654,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 88,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "458cab68-a646-46fe-8efb-1c17af500015",
+        "ab2152ad-d3b1-41b4-b815-ea80a83a9b07"
+      ],
+      "outLanes": [
+        "b31e8458-3595-4f68-95e2-9a15a866596f"
+      ],
+      "exitCurve": 161
+    },
+    {
+      "id": "4e49ab44-1994-4b4b-9355-bb20d6038b34",
+      "angle": 85.98150028067033,
+      "incoming": 2,
+      "outgoing": 1,
+      "width": 12,
+      "outWidth": 12,
+      "median": 46.87107776913763,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": -5.9302814494385885,
+      "y": 289.0654325892132,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "entryGore": 0,
+      "dest": {
+        "58b6404c-c910-4ca2-b82d-2753cb516cfb": [
+          "2a18b7c8-4255-481c-858f-38b4d2b40765",
+          "a9c3278a-a881-41bf-8ad2-98b6a54fa03e",
+          "bd104dd6-c64c-41b9-a90a-08d59c943711"
+        ],
+        "b37576d7-35e3-4b77-bd51-9a2cdf4add4e": [
+          "4e49ab44-1994-4b4b-9355-bb20d6038b34",
+          "bd104dd6-c64c-41b9-a90a-08d59c943711"
+        ]
+      },
+      "inLanes": [
+        "b37576d7-35e3-4b77-bd51-9a2cdf4add4e",
+        "58b6404c-c910-4ca2-b82d-2753cb516cfb"
+      ],
+      "outLanes": [
+        "58f592f3-4159-49c4-996f-4783021da367"
+      ],
+      "entryGores": {
+        "58b6404c-c910-4ca2-b82d-2753cb516cfb": 20
+      },
+      "exitCurve": 300
+    },
+    {
+      "id": "bd104dd6-c64c-41b9-a90a-08d59c943711",
+      "angle": 155.5799650942804,
+      "incoming": 1,
+      "outgoing": 2,
+      "width": 12,
+      "outWidth": 12,
+      "median": 12,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": -227.30823292510246,
+      "y": 78.5394373853186,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "8942b5b2-6c5f-4999-8b3d-567783623cc9"
+      ],
+      "outLanes": [
+        "6f253836-23fb-4865-9e5d-137eac6ace34",
+        "09bfd293-c152-4fdf-aaf9-6daf943138da"
+      ],
+      "exitCurve": 300
+    },
+    {
+      "id": "a9c3278a-a881-41bf-8ad2-98b6a54fa03e",
+      "angle": 268.9557543090773,
+      "incoming": 1,
+      "outgoing": 2,
+      "width": 12,
+      "outWidth": 12,
+      "median": 51.91288240547874,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": -32.50578094555141,
+      "y": -258.67894565369295,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "d91239e2-b9ff-43c3-81aa-bd64d17980cf"
+      ],
+      "outLanes": [
+        "12473c33-47db-40bf-829d-bb0a77cddb4d",
+        "76302dc7-dd3e-43b5-abc2-f6a106cdee17"
+      ],
+      "exitCurve": 125
+    }
+  ],
+  "movements": [],
+  "roundabout": {
+    "lanes": "auto",
+    "icd": null,
+    "shape": "circle",
+    "ratio": 1,
+    "turn": 0,
+    "widths": null,
+    "apron": 15,
+    "entryRadius": 65,
+    "exitRadius": 65,
+    "exitCurb": true,
+    "spiral": "auto",
+    "laneWidth": null
+  }
+}

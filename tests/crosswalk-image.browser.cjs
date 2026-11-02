@@ -1,0 +1,34 @@
+const assert=require('node:assert/strict'),fs=require('node:fs/promises');
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const selectChoice=require('./select-choice.cjs');
+(async()=>{const browser=await chromium.launch({headless:true,...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{})});try{
+ const page=await browser.newPage({viewport:{width:1500,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(process.env.STRIPEMAKER_URL||'http://127.0.0.1:8879');await page.waitForFunction(()=>StripeMaker.sheets.ready&&StripeMaker.roadEditor&&StripeMaker.selection);
+ await page.locator('#blankSheet').evaluate(b=>b.click());await page.waitForFunction(()=>StripeMaker.sheets.selected);
+ await page.evaluate(()=>{const s=StripeMaker.sheets.selected;s.inchesPerPixel=4;s.markings=[{id:'image-test',type:'crosswalk',aesthetic:true,variant:'brick',width:10,a:{x:14500,y:14800},b:{x:14900,y:14800}}];s.view={scale:1,x:-14000,y:-14300,fitted:false};StripeMaker.sheets.zoomBy(1);document.dispatchEvent(new Event('sheetchange'));StripeMaker.roadEditor.render();StripeMaker.markings.focusAt({x:14700,y:14800});StripeMaker.history.rebase();});
+ await selectChoice(page.locator('#markingVariant'),'image');
+ const image=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=80;c.height=40;const x=c.getContext('2d');x.fillStyle='red';x.fillRect(0,0,40,40);x.fillStyle='blue';x.fillRect(40,0,40,40);return c.toDataURL('image/png').split(',')[1];});
+ await page.locator('#crosswalkImageFile').setInputFiles({name:'crossing-art.png',mimeType:'image/png',buffer:Buffer.from(image,'base64')});
+ await page.waitForFunction(()=>StripeMaker.sheets.selected.markings[0].aestheticImage);
+ const artwork=()=>page.evaluate(()=>{const s=StripeMaker.sheets.selected,i=s.roadLayer.querySelector('image');return {model:structuredClone(s.markings[0]),matrix:i.getAttribute('transform').match(/matrix\(([^)]+)\)/)[1].split(' ').map(Number),clip:i.parentNode.getAttribute('clip-path'),white:[...s.roadLayer.querySelectorAll('.laneMarkings path[fill="#ffffff"]')].length,outline:StripeMaker.markings.outlines(s.markings[0].id)};});
+ let a=await artwork();assert(a.clip);assert(a.white>=2);assert.equal(a.model.aestheticImage.name,'crossing-art.png');
+ const ratio=m=>Math.hypot(m[0],m[1])/Math.hypot(m[2],m[3]);assert(Math.abs(ratio(a.matrix)-2)<1e-6,'Cover keeps source proportions');
+ await selectChoice(page.locator('#crosswalkImageFit'),'stretch');a=await artwork();assert(Math.abs(ratio(a.matrix)-400/30)<1e-6,'Stretch uses the crossing dimensions');
+ await page.locator('#undoButton').click();assert.equal((await artwork()).model.imageFit,'cover');await page.locator('#redoButton').click();
+ await page.locator('#markingsTitle').focus();await page.keyboard.press(']');a=await artwork();assert(Math.abs(Math.atan2(a.matrix[1],a.matrix[0])*180/Math.PI-15)<1e-6,'image rotates with its crosswalk from the normal editor');
+ // Native-editor copy/paste carries the embedded image, including its placement.
+ await page.keyboard.press('Control+c');await page.mouse.move(1050,800);await page.keyboard.press('Control+v');
+ assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.markings.length),2);
+ assert.equal(await page.locator('#markingsEditor').isVisible(),true);
+ await page.screenshot({path:'/tmp/stripe-crosswalk-image.png'});
+ const project=await page.evaluate(()=>StripeMaker.projectJSON.snapshot());assert(project.sheets[0].data.markings.every(m=>m.aestheticImage?.src.startsWith('data:image/png;base64,')));
+ await page.locator('button[aria-controls="downloadMenu"]').click();await page.locator('[data-format="pdf"]').click();await page.locator('#downloadWidthValue').fill('1000');await page.locator('#downloadWidthValue').dispatchEvent('input');
+ const waiting=page.waitForEvent('download');await page.locator('#downloadSheet').click();const download=await waiting;const pdf=await fs.readFile(await download.path());
+ await fs.writeFile('/tmp/stripe-crosswalk-image.pdf',pdf);
+ const header=/5 0 obj\s*<< \/Length (\d+) \/Filter \/FlateDecode >>\s*stream\n/.exec(pdf.toString('latin1'));
+ assert(header);const start=header.index+header[0].length,content=require('node:zlib').inflateSync(pdf.subarray(start,start+Number(header[1]))).toString();
+ assert(content.includes('/Sign0 Do'),'embedded image is exported');assert(content.includes('W n'),'crosswalk crop remains a vector clip');
+ await page.waitForTimeout(650);await page.reload();await page.waitForFunction(()=>StripeMaker.sheets.ready&&StripeMaker.sheets.selected?.markings?.length===2);
+ assert.equal((await artwork()).model.imageFit,'stretch');assert.deepEqual(errors,[]);
+ console.log('PASS: custom crosswalk upload, cover/stretch, vector-clipped PDF, rotation, native-editor copy/paste, undo/redo and reload.');
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -176,7 +176,7 @@
     function drawOne(sign, parent, preview = false) {
       if (!entryFor(sign)) return;
       const group=svg('g',{class:preview?'preview':'signCallout','data-sign':sign.id??'preview'},parent);
-      const {width,height,items}=dimensions(sign),angle=sign.rotation??0;
+      const {width,height,items}=dimensions(sign),angle=app.traffic.angle(sign.rotation);
       const dx=sign.postX-sign.x,dy=sign.postY-sign.y,distance=Math.hypot(dx,dy);
       if(distance>0){
         const u={x:dx/distance,y:dy/distance},v={x:-u.y,y:u.x},local=L.rotate(u.x,u.y,-angle);
@@ -231,7 +231,7 @@
         button.dataset.sign = sign.id; button.dataset.part = 'face';
         button.setAttribute('aria-label', `${label(entry)} callout. Drag to move sign face.`);
         button.title = label(entry);
-        Object.assign(button.style, {transform:`rotate(${sign.rotation??0}deg)`,left:`${face.x-width*sheet.view.scale/2}px`,top:`${face.y-height*sheet.view.scale/2}px`,width:`${width*sheet.view.scale}px`,height:`${height*sheet.view.scale}px`});
+        Object.assign(button.style, {transform:`rotate(${app.traffic.angle(sign.rotation)}deg)`,left:`${face.x-width*sheet.view.scale/2}px`,top:`${face.y-height*sheet.view.scale/2}px`,width:`${width*sheet.view.scale}px`,height:`${height*sheet.view.scale}px`});
         overlay.append(button);
         if (active() && selected === sign.id) {
           const handle = document.createElement('button'); handle.type='button';handle.className='signPost';
@@ -550,10 +550,10 @@
       updatePanel();refreshOverlay();if(sheets.selected) { tell('Choose a sign, then click Add Sign.'); } if(sheets.selected)ready(sheets.selected).catch(error=>tell(error.message));
     });
     // For selection: a sign's face, centered on its x, y.
-    const box = sign => { const { width, height } = dimensions(sign); return { x: sign.x, y: sign.y, width, height, rotation: sign.rotation ?? 0 }; };
+    const box = sign => { const { width, height } = dimensions(sign); return { x: sign.x, y: sign.y, width, height, rotation: app.traffic.angle(sign.rotation) }; };
     // Opens a sign in the Signs panel, selected (right-click Edit).
-    const focus = id => { app.showEditor?.('signsEditor'); selected=id; selectedSheet=sheets.selected; partIndex=0; refreshOverlay(); updatePanel(); };
-    app.signs={diagnostics:()=>structuredClone({selected,draft:draft(),partIndex,appendPanel}),draw,refreshOverlay,ready,box,focus};
+    const focus = id => { app.showEditor?.('signsEditor'); selected=id; selectedSheet=sheets.selected; partIndex=0; refreshOverlay(); updatePanel(); app.selection?.editorChanged(); };
+    app.signs={selectedItem:()=>active()&&current()?{kind:"signs",id:selected}:null,diagnostics:()=>structuredClone({selected,draft:draft(),partIndex,appendPanel}),draw,refreshOverlay,ready,box,focus};
     loadCatalog().then(async()=>{await loadArt(choice);updatePanel();if(sheets.selected)return ready(sheets.selected);}).catch(error=>tell(error.message));
     updatePanel();
   });

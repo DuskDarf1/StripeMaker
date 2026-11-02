@@ -104,7 +104,6 @@
     const goreState = document.getElementById("goreState");
     const goreSpacing = document.getElementById("goreSpacing");
     const goreSpacingValue = document.getElementById("goreSpacingValue");
-    const goreSpacingHint = document.getElementById("goreSpacingHint");
     const goreLength = document.getElementById("goreLength");
     const addMedianButton = document.getElementById("addMedian");
     const medianFields = document.getElementById("medianFields");
@@ -115,7 +114,6 @@
     const medianLean = document.getElementById("medianLean");
     const medianSpacing = document.getElementById("medianSpacing");
     const medianSpacingValue = document.getElementById("medianSpacingValue");
-    const medianSpacingHint = document.getElementById("medianSpacingHint");
     const medianState = document.getElementById("medianState");
     const defaults = { perLaneWidths: false, lanes: 1, laneWidth: 12, opposite: 0, median: 0, medianType: "grass", medianSpacing: MEDIAN_SPACING_FEET, medianColor: "yellow", medianLean: "right", bufferedBike: true };
     const medianPoints = [];
@@ -132,6 +130,16 @@
     let snapTarget = null;
     let menuNode = null;
     let selectedGore = null;
+    const curveLinks = window.StripeMaker.curveLinks;
+    let curvePick = null;
+    const curveFields = document.getElementById("curveLinkFields");
+    const curveStatus = document.getElementById("curveLinkStatus");
+    const keepSymmetric = document.getElementById("keepSymmetric");
+    const curveRotation = document.getElementById("curveRotation");
+    const applyMirrorButton = document.getElementById("applyCurveMirror");
+    const editAxisButton = document.getElementById("editCurveAxis");
+    const unlinkCurveButton = document.getElementById("unlinkCurve");
+    const cancelCurveButton = document.getElementById("cancelCurveLink");
 
     const overlay = document.createElement("div");
     overlay.className = "roadOverlay";
@@ -147,6 +155,9 @@
     const controlButtons = [...overlay.querySelectorAll(".roadControl")];
     const [medianPreview, medianClosing] = overlay.querySelectorAll(".medianPreview");
     const medianPreviewPoints = overlay.querySelector(".medianPreviewPoints");
+    const curveGuide = document.createElementNS(SVG, "g");
+    curveGuide.setAttribute("class", "curveGuide");
+    overlay.querySelector("svg").append(curveGuide);
     sheets.addOverlay(overlay);
     const nodeMenu = document.getElementById("nodeMenu");
 
@@ -617,7 +628,7 @@
           const strip=[...stationSlice(paintShape,laneBoundary(paintShape,lane,0,lane>0?buffer:0),start,finish),
             ...stationSlice(paintShape,laneBoundary(paintShape,lane,1,lane===0?-buffer:0),start,finish).reverse()];
           const path = document.createElementNS(SVG, "path");
-          path.setAttribute("d", `${pathData(strip)}Z`);
+          path.setAttribute("d", `${pathData(strip.map(p=>window.StripeMaker.itemTransform.apply(surface,p)))}Z`);
           path.setAttribute("fill", C.SURFACE[surface.color] ?? C.SURFACE.green);
           path.setAttribute("class", "laneSurface");
           group.append(path);
@@ -1042,6 +1053,55 @@
           });
         }));
       }
+      // A ramp can branch from the extra lane of a road whose remaining lanes
+      // enter an intersection at this same joint. Its facing boundary is then
+      // the intersection corner, rather than a second departing road.
+      for (const joint of sheet.intersections?.length ? sheet.joints : []) {
+        const here=attachments(sheet,joint);
+        for (const source of here) {
+          const continuations=window.StripeMaker.intersections?.goreContinuationEdges(sheet,nodeRef(source.road,source.e),solved)??[];
+          if (!continuations.length) continue;
+          for (const branch of here) {
+            if (branch.road===source.road || branch.e===source.e || branch.end.sign!==source.end.sign || pairOf(sheet,source.road)===branch.road) continue;
+            const key=goreKey(source,branch);
+            if (solved.gores.has(key)) continue;
+            let best=null;
+            for (const corner of continuations) for (const k of [0,branch.road.lanes]) {
+              const edge=boundary(shapeOf(sheet,branch.road,solved),k);
+              if (branch.e) edge.reverse();
+              const gap=Math.hypot(corner[0].x-edge[0].x,corner[0].y-edge[0].y);
+              if (gap>tolerance || (best && gap>=best.gap)) continue;
+              // Both boundaries must lead into the same gap, not back into the
+              // approaching road or across the opposite intersection corner.
+              const a=unit({x:corner[1].x-corner[0].x,y:corner[1].y-corner[0].y});
+              const b=unit({x:edge[1].x-edge[0].x,y:edge[1].y-edge[0].y});
+              if (a.x*b.x+a.y*b.y<.5) continue;
+              best={e1:corner,e2:edge,gap};
+            }
+            if (!best) continue;
+            const total=Math.min(polylineLength(best.e1),polylineLength(best.e2));
+            const count=Math.min(400,Math.max(20,Math.ceil(total/feetToPixels(sheet,2))));
+            const e1=resample(best.e1,count,total),e2=resample(best.e2,count,total);
+            const mid=e1.map((p,n)=>({x:(p.x+e2[n].x)/2,y:(p.y+e2[n].y)/2}));
+            const width=e1.map((p,n)=>Math.hypot(p.x-e2[n].x,p.y-e2[n].y));
+            if (Math.max(...width)<feetToPixels(sheet,4)) continue;
+            const along=[0];
+            for(let n=1;n<mid.length;n++)along.push(along[n-1]+Math.hypot(mid[n].x-mid[n-1].x,mid[n].y-mid[n-1].y));
+            solved.gores.set(key,{key,e1,e2,mid,width,along,same:true,split:branch.e===0,awayFirst:branch.e===0});
+          }
+        }
+      }
+      for(const notch of window.StripeMaker.intersections?.goreNotches(sheet)??[]) {
+        const total=Math.min(polylineLength(notch.e1),polylineLength(notch.e2));
+        if(total<1)continue;
+        const count=Math.min(400,Math.max(20,Math.ceil(total/feetToPixels(sheet,2))));
+        const e1=resample(notch.e1,count,total),e2=resample(notch.e2,count,total);
+        const mid=e1.map((p,n)=>({x:(p.x+e2[n].x)/2,y:(p.y+e2[n].y)/2}));
+        const width=e1.map((p,n)=>Math.hypot(p.x-e2[n].x,p.y-e2[n].y));
+        if(Math.max(...width)<feetToPixels(sheet,4))continue;
+        const along=[0];for(let n=1;n<mid.length;n++)along.push(along[n-1]+Math.hypot(mid[n].x-mid[n-1].x,mid[n].y-mid[n-1].y));
+        solved.gores.set(notch.key,{...notch,e1,e2,mid,width,along,same:true,awayFirst:notch.split});
+      }
       return solved.gores;
     }
     // Where two polylines first cross, and both from that point on.
@@ -1068,14 +1128,15 @@
     };
     const goreTangent = (mid, i) => unit({ x: mid[Math.min(i + 1, mid.length - 1)].x - mid[Math.max(i - 1, 0)].x, y: mid[Math.min(i + 1, mid.length - 1)].y - mid[Math.max(i - 1, 0)].y });
     const goreDefaultSpacing = candidate => (candidate.same ? GORE_SPACING_FEET : 20);
-    function goreLine(points, color, width, join) {
+    function goreLine(points, color, width, join, cuts = []) {
       const path = strokePath(points, color, width);
+      if (cuts.length) path.setAttribute("d", window.StripeMaker.markingTrim.trim(points, cuts).map(part => pathData(part.points)).join(""));
       if (join) path.setAttribute("stroke-linejoin", "miter");
       return path;
     }
     // Paves the gore from its point to the marked length, then lays chevrons (same
     // direction) or diagonals (opposite directions) clipped to it.
-    function drawGore(sheet, gore, candidate, layers) {
+    function drawGore(sheet, gore, candidate, layers, cuts = []) {
       const length = Math.min(feetToPixels(sheet, gore.length), candidate.along.at(-1));
       const last = indexAt(candidate.along, length);
       if (last < 1) return;
@@ -1113,27 +1174,30 @@
         const reach = w * 1.5;
         if (candidate.same) {
           // Chevrons point back toward approaching traffic.
-          const f = candidate.split ? t : { x: -t.x, y: -t.y };
+          const f = (candidate.split !== window.StripeMaker.traffic.reversed) ? t : { x: -t.x, y: -t.y };
           const arms = [1, -1].map(side => unit({ x: f.x + n.x * side, y: f.y + n.y * side }));
           stripes.append(goreLine([{ x: m.x + arms[0].x * reach, y: m.y + arms[0].y * reach }, m,
-            { x: m.x + arms[1].x * reach, y: m.y + arms[1].y * reach }], color, stripe, true));
+            { x: m.x + arms[1].x * reach, y: m.y + arms[1].y * reach }], color, stripe, true, cuts));
         } else {
           // Diagonals run from the arriving side toward the departing side as they
           // move away from the gore point, as drawn in 711-001.
-          const side = candidate.awayFirst ? -1 : 1;
+          const side = (candidate.awayFirst ? -1 : 1) * window.StripeMaker.traffic.sign;
           const d = unit({ x: t.x + n.x * side, y: t.y + n.y * side });
-          stripes.append(goreLine([{ x: m.x - d.x * reach, y: m.y - d.y * reach }, { x: m.x + d.x * reach, y: m.y + d.y * reach }], color, stripe));
+          stripes.append(goreLine([{ x: m.x - d.x * reach, y: m.y - d.y * reach }, { x: m.x + d.x * reach, y: m.y + d.y * reach }], color, stripe, false, cuts));
         }
       }
       layers.markings.append(clip, stripes);
       if (inner) {
         const lineWidth = inchesToPixels(sheet, LINE_INCHES);
-        layers.markings.append(strokePath(inner.e1, YELLOW, lineWidth), strokePath(inner.e2, YELLOW, lineWidth));
+        layers.markings.append(goreLine(inner.e1, YELLOW, lineWidth, false, cuts), goreLine(inner.e2, YELLOW, lineWidth, false, cuts));
       }
       // Gores are outlined in 8" white over the roads' edge lines.
       if (candidate.same) {
         const lineWidth = inchesToPixels(sheet, GORE_LINE_INCHES);
-        layers.markings.append(strokePath(candidate.e1.slice(0, last + 1), WHITE, lineWidth), strokePath(candidate.e2.slice(0, last + 1), WHITE, lineWidth));
+        const outline=document.createElementNS(SVG,"g");
+        outline.setAttribute("class","goreWhiteOutline");
+        outline.append(goreLine(candidate.e1.slice(0, last + 1), WHITE, lineWidth, false, cuts), goreLine(candidate.e2.slice(0, last + 1), WHITE, lineWidth, false, cuts));
+        layers.markings.append(outline);
       }
     }
     // The inner lines of each side's double yellow, from where the sides are far
@@ -1304,12 +1368,17 @@
     // road that's gone is dropped and the point stays where it was.
     function anchorMedians(sheet, solved) {
       if (!sheet.medians.some(median => median.points.some(p => p.on))) return;
-      const { byKey,edges } = pavementEdges(sheet, solved);
+      const { byKey,edges,corners } = pavementEdges(sheet, solved);
       for (const p of sheet.medians.flatMap(median => median.points)) {
         if (!p.on) continue;
         let edge = byKey.get(medianAnchorKey(p.on));
         if(!edge&&p.on.crossing){p.on={...p.on.crossing};edge=byKey.get(medianAnchorKey(p.on));}
         if (!edge) {delete p.on;continue;}
+        if(p.on.tip) {
+          const tip=corners.find(c=>c.tip&&medianAnchorKey(c.on)===medianAnchorKey(p.on));
+          if(tip){p.x=tip.x;p.y=tip.y;p.on.f=tip.on.f;continue;}
+          delete p.on.tip;
+        }
         // Upgrade old single-edge pinch anchors while their saved location
         // still identifies the crossing. Ordinary edge points stay single.
         if(!p.on.crossing&&Math.hypot(pointAtFraction(edge,p.on.f).x-p.x,pointAtFraction(edge,p.on.f).y-p.y)<.5){
@@ -1360,7 +1429,12 @@
       // Keep branches in a graph rather than greedily joining the first two
       // coincident edges. At a merge, that would consume the shared edge into
       // the wrong branch and leave a median on the other branch straight.
-      const longitudinal = pavement.filter(edge => edge.on && ["L", "R"].includes(edge.on.side));
+      // Intersection corners and marked gore edges are continuations too:
+      // an anchored median may cross a road mouth on its way to the next point.
+      const longitudinal = pavement.filter(edge => edge.on &&
+        (["L","R"].includes(edge.on.side) ||
+          (edge.on.intersection && ["corner","cornerLine"].includes(edge.on.side)) ||
+          (edge.on.gore && ["e1","e2"].includes(edge.on.side))));
       const slice = (edge, from, to, first, last) => {
         const result=[first];
         if(from<to)for(let n=Math.floor(from)+1;n<to;n++)result.push(edge[n]);
@@ -1406,7 +1480,8 @@
       }));
       return points.map((p, i) => {
         const j = (i + 1) % points.length;
-        const k = edges.findIndex((edge, n) => on[i][n] != null && on[j][n] != null && edge.length > 2);
+        const anchored=(point,edge)=>!point.on||[point.on,point.on.crossing].some(anchor=>anchor&&medianAnchorKey(anchor)===medianAnchorKey(pavement[edge].on));
+        const k = edges.findIndex((edge, n) => on[i][n] != null && on[j][n] != null && edge.length >= 2 && anchored(p,n) && anchored(points[j],n));
         if (k < 0) return follow(p,points[j]) ?? [p];
         const [from, to] = [on[i][k], on[j][k]];
         const between = [];
@@ -1423,7 +1498,7 @@
       const edges = [...pavement];
       // Medians' own points and edges; everything else is pavement, which only
       // snaps along its outer edges.
-      const own = new Set();
+      const own = new Set(corners.filter(p=>p.tip));
       for (const median of sheet.medians) {
         if (median.points.some(p => exclude.has(p))) {
           median.points.forEach(p => !exclude.has(p) && (corners.push(p), own.add(p)));
@@ -1499,6 +1574,61 @@
         return { x: p.x + (n1.x + n2.x) * scale, y: p.y + (n1.y + n2.y) * scale };
       });
     }
+    // Shared by standalone and intersection painted medians. Dimensions and
+    // pattern: FDOT Standard Plans 711-001 sheet 8 (constants above).
+    function drawMedianHatching(points, corners, inner, median, parent, pixelsPerFoot, id) {
+      if (inner.length < 3) return;
+      const color = median.color === "white" ? WHITE : YELLOW;
+      // Diagonals at 45° to the median's longest side, `spacing` apart along it,
+      // leaning right (╱) or left (╲) as seen with that side running left to right.
+      let along = { x: 1, y: 0 };
+      let longest = 0;
+      corners.forEach((p, i) => {
+        const q = corners[(i + 1) % corners.length];
+        const length = Math.hypot(q.x - p.x, q.y - p.y);
+        if (length > longest) [longest, along] = [length, unit({ x: q.x - p.x, y: q.y - p.y })];
+      });
+      if (along.x < -1e-6 || (Math.abs(along.x) <= 1e-6 && along.y > 0)) along = { x: -along.x, y: -along.y };
+      const lean = (median.lean === "left" ? 1 : -1) * (median.color === "white" ? window.StripeMaker.traffic.sign : 1);
+      const d = unit({ x: along.x + rightOf(along).x * lean, y: along.y + rightOf(along).y * lean });
+      const across = rightOf(d);
+      const step = pixelsPerFoot * Math.max(MIN_GORE_SPACING_FEET, Math.min(MAX_GORE_SPACING_FEET, Number(median.spacing) || MEDIAN_SPACING_FEET)) / Math.SQRT2;
+      const [lo, hi] = [Math.min(...points.map(p => dot(p, across))), Math.max(...points.map(p => dot(p, across)))];
+      const [first, last] = [Math.min(...points.map(p => dot(p, d))), Math.max(...points.map(p => dot(p, d)))];
+      const clip = document.createElementNS(SVG, "clipPath");
+      clip.id = id;
+      const clipPath = document.createElementNS(SVG, "path");
+      clipPath.setAttribute("d", `${pathData(inner)}Z`);
+      clip.append(clipPath);
+      const stripes = document.createElementNS(SVG, "g");
+      stripes.setAttribute("clip-path", `url(#${id})`);
+      parent.append(clip, stripes);
+      const stripe = pixelsPerFoot * GORE_STRIPE_INCHES / 12;
+      if(median.color==='white') {
+        const normal=rightOf(along),low=Math.min(...points.map(p=>dot(p,along))),high=Math.max(...points.map(p=>dot(p,along)));
+        const acrossLow=Math.min(...points.map(p=>dot(p,normal))),acrossHigh=Math.max(...points.map(p=>dot(p,normal)));
+        const reach=Math.max(acrossHigh-acrossLow,stripe)*2;
+        const spacing=step*Math.SQRT2;
+        stripes.setAttribute('class','medianChevrons');
+        for(let c=low+((high-low)%spacing)/2;c<=high;c+=spacing) {
+          const hits=[];
+          points.forEach((p,i)=>{
+            const q=points[(i+1)%points.length],a=dot(p,along),b=dot(q,along);
+            if(Math.abs(b-a)<1e-9||c<Math.min(a,b)||c>Math.max(a,b))return;
+            const f=(c-a)/(b-a);hits.push(dot(p,normal)+(dot(q,normal)-dot(p,normal))*f);
+          });
+          if(hits.length<2)continue;
+          const center=(Math.min(...hits)+Math.max(...hits))/2;
+          const tip={x:along.x*c+normal.x*center,y:along.y*c+normal.y*center};
+          const arms=[-1,1].map(side=>({x:tip.x+along.x*reach*lean+normal.x*reach*side,y:tip.y+along.y*reach*lean+normal.y*reach*side}));
+          const chevron=strokePath([arms[0],tip,arms[1]],WHITE,stripe);chevron.setAttribute('stroke-linejoin','miter');stripes.append(chevron);
+        }
+        return;
+      }
+      for (let c = lo + ((hi - lo) % step) / 2; c <= hi; c += step) {
+        stripes.append(strokePath([first, last].map(t => ({ x: across.x * c + d.x * t, y: across.y * c + d.y * t })), color, stripe));
+      }
+    }
     function drawMedian(sheet, median, layers, solved) {
       const corners = median.points.filter((p, i) => !samePoint(p, median.points[(i + 1) % median.points.length]));
       if (corners.length < 3) return;
@@ -1544,27 +1674,7 @@
       // which is itself 8" inside the pavement edge the median snaps to. White
       // (same-direction) medians are outlined like gores, in 8" white.
       const inner = insetPolygon(points, inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES - PAVEMENT_MARGIN_INCHES));
-      // Diagonals at 45° to the median's longest side, `spacing` apart along it,
-      // leaning right (╱) or left (╲) as seen with that side running left to right.
-      let along = { x: 1, y: 0 };
-      let longest = 0;
-      corners.forEach((p, i) => {
-        const q = corners[(i + 1) % corners.length];
-        const length = Math.hypot(q.x - p.x, q.y - p.y);
-        if (length > longest) [longest, along] = [length, unit({ x: q.x - p.x, y: q.y - p.y })];
-      });
-      if (along.x < -1e-6 || (Math.abs(along.x) <= 1e-6 && along.y > 0)) along = { x: -along.x, y: -along.y };
-      const lean = median.lean === "left" ? 1 : -1;
-      const d = unit({ x: along.x + rightOf(along).x * lean, y: along.y + rightOf(along).y * lean });
-      const across = rightOf(d);
-      const step = feetToPixels(sheet, median.spacing ?? MEDIAN_SPACING_FEET) / Math.SQRT2;
-      const [lo, hi] = [Math.min(...points.map(p => dot(p, across))), Math.max(...points.map(p => dot(p, across)))];
-      const [first, last] = [Math.min(...points.map(p => dot(p, d))), Math.max(...points.map(p => dot(p, d)))];
-      const stripes = clipTo(inner, "stripes");
-      const stripe = inchesToPixels(sheet, GORE_STRIPE_INCHES);
-      for (let c = lo + ((hi - lo) % step) / 2; c <= hi; c += step) {
-        stripes.append(strokePath([first, last].map(t => ({ x: across.x * c + d.x * t, y: across.y * c + d.y * t })), color, stripe));
-      }
+      drawMedianHatching(points, corners, inner, median, layers.markings, feetToPixels(sheet, 1), `median-${sheet.id}-${median.id}-stripes`);
       const line = closed(inner);
       line.setAttribute("stroke-width", inchesToPixels(sheet, median.color === "white" ? GORE_LINE_INCHES : LINE_INCHES));
       layers.markings.append(line);
@@ -1745,7 +1855,7 @@
         if (sheet.inchesPerPixel) {
           for (const road of sheet.roads) if (!partial || partial.has(road.id)) targets.set(road.id, roadTargets(sheet, road, solved));
           for (const id of targets.keys()) if (!roadOf(sheet, id)) targets.delete(id);
-          window.StripeMaker.longitudinal.begin(sheet, [
+          window.StripeMaker.longitudinal.begin(sheet, () => [
             ...[...targets.values()].flat(), ...(window.StripeMaker.intersections?.lineTargets?.(sheet, solved) ?? [])]);
         }
         if (sheet.inchesPerPixel) {
@@ -1763,11 +1873,11 @@
           const candidates = goreCandidates(sheet, solved);
           for (const gore of sheet.gores) {
             const candidate = candidates.get(gore.key);
-            if (!candidate) continue;
+            if (!candidate || candidate.intersection) continue;
             // What each marked gore drew and where it's paved, so a bridge over
             // a lane split takes in its gore.
             const counts = LAYERS.map(name => after[name].childNodes.length);
-            drawGore(sheet, gore, candidate, after);
+            drawGore(sheet, gore, candidate, after, solved.crosswalkCuts ??= window.StripeMaker.markings?.crosswalkCuts(sheet, solved) ?? []);
             const last = indexAt(candidate.along, Math.min(feetToPixels(sheet, gore.length), candidate.along.at(-1)));
             if (last < 1) continue;
             gores.push({ roads: gore.key.split("|").map(end => Number(end.split(":")[0])),
@@ -1779,6 +1889,11 @@
         }
         if (sheet.inchesPerPixel) window.StripeMaker.intersections?.draw(sheet, after, solved);  // ground level
         if (sheet.inchesPerPixel) window.StripeMaker.longitudinal.drawMovementLines(sheet, after.markings);
+        // A same-direction gore's 8-inch white boundary replaces the edge color
+        // underneath it, including the yellow half of an intersection corner.
+        // Keep these vector strokes above ground-level intersection markings,
+        // but below bridges; yellow beyond the marked gore remains untouched.
+        for(const outline of [...after.markings.querySelectorAll('.goreWhiteOutline')])after.markings.append(outline);
         // Bridges go over every lower road, gore, and intersection.
         const place = sheet.inchesPerPixel ? window.StripeMaker.levels?.draw(sheet, after.markings, {
           section: crossSectionOf(sheet, solved), nodes, gores, pairOf: road => pairOf(sheet, road), concrete: CONCRETE, barrier: CURB }) : null;
@@ -1806,6 +1921,7 @@
       window.StripeMaker.markings?.refreshOverlay();
       window.StripeMaker.longitudinal.refreshOverlay?.();
       window.StripeMaker.levels?.refreshOverlay?.();
+      window.StripeMaker.simulator?.refreshOverlay();
       window.StripeMaker.selection?.refresh?.();
     }
     // A two-way preview puts the clicked line on the centerline, like the result.
@@ -1837,6 +1953,8 @@
       return removedGreen || before !== JSON.stringify([sheet.roads.map(r => r.laneTypes ?? null), sheet.joints.map(j => j.links)]);
     }
     function changed(change = null) {
+      curveLinks.prune(sheets.selected);
+      if(change && sheets.selected?.roads.some(r=>r.ends.some(e=>e.curveLink)))change=null;
       pruneGores(sheets.selected);
       tidyBikeLanes(sheets.selected);
       if (change) drawSheet(change);
@@ -1931,20 +2049,20 @@
               button.classList.toggle("laneSelected", road === selectedRoad && selectedLane?.e === e && selectedLane.lane === lane);
               const shape = shapeOf(sheet, road, solved);
               const tapered = shape.tapers.has(`${e}:${lane}`);
-              button.setAttribute("aria-label", `Road ${road.id}, lane ${lane + 1} ${e ? "end" : "start"}${tapered ? (e ? ", lane drop taper" : ", lane add taper") : ""}`);
+              button.setAttribute("aria-label", `Road ${road.id}, lane ${lane + 1} ${window.StripeMaker.traffic.incoming(Boolean(e)) ? "end" : "start"}${tapered ? (window.StripeMaker.traffic.incoming(Boolean(e)) ? ", lane drop taper" : ", lane add taper") : ""}`);
               button.setAttribute("aria-expanded", String(button === menuNode?.button));
               const color = colors.get(key);
               button.style.backgroundImage = color ? nodeIcon(color) : "";
               const at = place(button, nodePoint(sheet, road, e, lane, solved));
               const inward = inwardAt(shape.line, e);
               const travel = laneHeading(sheet, shape, e, lane);
-              const angle = Math.atan2(travel.y, travel.x);
+              const angle = Math.atan2(travel.y, travel.x) + (window.StripeMaker.traffic.reversed ? Math.PI : 0);
               button.style.setProperty("--angle", `${angle}rad`);
               // The wedge sits past the arrow and narrows toward the lane's zero-width end.
               button.taper.hidden = !tapered;
               button.taper.style.left = `${at.x + inward.x * TAPER_BADGE_PIXELS}px`;
               button.taper.style.top = `${at.y + inward.y * TAPER_BADGE_PIXELS}px`;
-              button.taper.style.setProperty("--angle", `${angle + (e ? 0 : Math.PI)}rad`);
+              button.taper.style.setProperty("--angle", `${angle - (window.StripeMaker.traffic.reversed ? Math.PI : 0) + (e ? 0 : Math.PI)}rad`);
             }
           }
         }
@@ -1969,6 +2087,7 @@
         snapRing.setAttribute("cx", at.x);
         snapRing.setAttribute("cy", at.y);
       }
+      drawCurveGuides(sheet, solved);
       controlButtons.forEach((button, e) => {
         const handle = selectedRoad && !drawing && openCurves.has(`${selectedRoad.id}:${e}`) ? handlePoint(sheet, selectedRoad, e, solved) : null;
         button.hidden = !handle;
@@ -2222,6 +2341,15 @@
     // lanes and everything that refers to them.
     function renumberLanes(sheet, road, from = 0) {
       const up = lane => (Number(lane) >= from ? Number(lane) + 1 : Number(lane));
+      for (const spawn of sheet.vehicleSpawns ?? []) {
+        if (spawn.road === road.id) {
+          if (spawn.excludedLanes) spawn.excludedLanes = spawn.excludedLanes.map(up);
+          if (spawn.laneShares) spawn.laneShares = Object.fromEntries(Object.entries(spawn.laneShares).map(([lane, percent]) => [up(lane), percent]));
+          if (spawn.outputs) spawn.outputs = Object.fromEntries(Object.entries(spawn.outputs).map(([lane, rate]) => [up(lane), rate]));
+          for (const route of spawn.routes ?? []) if (route.lane != null) route.lane = up(route.lane);
+        }
+        for (const route of spawn.routes ?? []) if (route.exit.road === road.id && route.exit.lane != null) route.exit.lane = up(route.exit.lane);
+      }
       const bump = key => key.replace(/:(\d+)$/, (_, lane) => `:${up(lane)}`);
       for (const field of ["tapers", "laneEndWidths"]) {
         if (road[field]) road[field] = Object.fromEntries(Object.entries(road[field]).map(([key, value]) => [bump(key), value]));
@@ -2289,7 +2417,8 @@
       const candidate = goreCandidates(sheet, solve(sheet)).get(key);
       if (!candidate) return;
       feet = Math.max(0, Math.min(feet, candidate.along.at(-1) / feetToPixels(sheet, 1)));
-      if (!gore && feet > 0) sheet.gores.push(gore = { key, length: feet, spacing: goreDefaultSpacing(candidate) });
+      if (!gore && feet > 0) sheet.gores.push(gore = { key, length: feet, spacing: goreDefaultSpacing(candidate),
+        ...(candidate.intersection?{intersection:candidate.intersection,approaches:candidate.approaches}: {}) });
       if (gore) gore.length = feet;
     }
     function bindGore(button) {
@@ -2343,6 +2472,7 @@
       selectedLane = null;
       closeMenu();
       render();
+      window.StripeMaker.selection?.editorChanged();
     }
     function removeGore() {
       const sheet = sheets.selected;
@@ -2469,6 +2599,7 @@
       selectedGore = null;
       closeMenu();
       render();
+      window.StripeMaker.selection?.editorChanged();
     }
     function startMedian() {
       drawing = null;
@@ -2504,7 +2635,6 @@
       snapTarget = snapMedian(sheet, point, new Set(), medianDraw.points);
       return snapTarget ? { x: snapTarget.x, y: snapTarget.y, ...(snapTarget.on && { on: { ...snapTarget.on } }) } : point;
     }
-    const separationSpeed = feet => ({ 10: "30 mph or less", 20: "35–40 mph", 30: "45 mph", 40: "50 mph or more" })[feet];
 
     function setupBikeLane() {
       const lanes=Object.keys(selectedRoad?.laneTypes??{}).map(Number).filter(k=>["bike","bufferedBike"].includes(bikeType(selectedRoad,k)));
@@ -2538,10 +2668,7 @@
       document.getElementById("bikeCrossoverRow").hidden=!showCrossover;
       document.getElementById("bikeCrossoverHelp").hidden=!showCrossover;
       document.getElementById("bikeCrossover").checked=Boolean(config.continueCrossover);
-      const short=transition&&transition.total<feetToPixels(sheet,transition.entering?200:100);
-      document.getElementById("bikeConflictStatus").textContent=short
-        ? `This segment is too short for the ${transition.entering?200:100}-ft crossing treatment. Lengthen it to provide the full transition.`
-        : detected
+      document.getElementById("bikeConflictStatus").textContent=detected
         ? `Conflict striping active on lane ${lane+1}. Changes apply immediately.`
         : `No crossing detected on lane ${lane+1} yet. ${layout==="separate"?"Add an outside turn lane and taper its start.":"Connect the crossing or continuing roads to activate the markings."}`;
     }
@@ -2575,6 +2702,7 @@
         medianInput.value = partner ? pairLinks(sheet, selectedRoad, partner)[0]?.median ?? 0 : defaults.median;
       }
       splitRow.hidden = !partner;
+      updateCurveFields();
       const lane = selectedRoad && selectedLane?.lane < selectedRoad.lanes ? selectedLane : null;
       laneFields.hidden = !lane || !solved;
       if (!laneFields.hidden) {
@@ -2590,7 +2718,6 @@
         const type = bikeType(selectedRoad, lane.lane);
         if (document.activeElement !== laneTypeSelect) laneTypeSelect.value = type ?? "travel";
         bikeWidthRow.hidden = !type;
-        document.getElementById("bikeWidthHint").hidden = !type;
         if (type) {
           bikeWidthInput.min = BIKE_LANE[type].min;
           if (document.activeElement !== bikeWidthInput) bikeWidthInput.value = selectedRoad.laneTypes[lane.lane].width;
@@ -2613,18 +2740,13 @@
         const gore = sheet.gores.find(item => item.key === selectedGore);
         const spacing = gore?.spacing ?? goreDefaultSpacing(candidate);
         goreTitle.textContent = candidate.same ? "Gore" : "Traffic Separation";
-        goreState.textContent = candidate.same
-          ? "Channelization at a gore: 8\" white gore lines and 18\" white chevrons at 45°."
-          : "Traffic separation: 6\" double yellow on each side and 18\" yellow diagonals at 45° between opposing traffic.";
+        goreState.textContent = "Drag the gore handle to change its marked length.";
         for (const input of [goreSpacing, goreSpacingValue]) {
           input.disabled = !gore;
           if (document.activeElement !== input) input.value = spacing;
         }
         if (document.activeElement !== goreLength) goreLength.value = Math.round(gore?.length ?? 0);
         goreLength.max = Math.floor(candidate.along.at(-1) / feetToPixels(sheet, 1));
-        goreSpacingHint.textContent = candidate.same
-          ? `Standard chevron spacing is ${GORE_SPACING_FEET} ft.`
-          : `Spacing by posted speed: 10 ft ≤30 mph, 20 ft 35–40, 30 ft 45, 40 ft ≥50.${separationSpeed(spacing) ? ` ${spacing} ft fits ${separationSpeed(spacing)}.` : ""}`;
       }
       medianFields.hidden = !median && !medianDraw;
       if (!medianFields.hidden) {
@@ -2633,19 +2755,17 @@
         if (document.activeElement !== medianType) medianType.value = values.type;
         paintedFields.hidden = values.type !== "painted";
         if (document.activeElement !== medianColor) medianColor.value = values.color ?? "yellow";
+        const chevrons=values.color==='white';
+        document.querySelector('label[for="medianLean"]').textContent=chevrons?'Chevron direction':'Stripe direction';
+        for(const option of medianLean.options) {
+          const label=chevrons?(option.value==='right'?'Point right':'Point left'):(option.value==='right'?'╱ Lean right':'╲ Lean left');
+          if(option.textContent!==label)option.textContent=label;
+        }
         if (document.activeElement !== medianLean) medianLean.value = values.lean ?? "right";
         for (const input of [medianSpacing, medianSpacingValue]) {
           if (document.activeElement !== input) input.value = values.spacing ?? MEDIAN_SPACING_FEET;
         }
-        const spacing = values.spacing ?? MEDIAN_SPACING_FEET;
-        medianSpacingHint.textContent = `Spacing by posted speed: 10 ft ≤30 mph, 20 ft 35–40, 30 ft 45, 40 ft ≥50.${separationSpeed(spacing) ? ` ${spacing} ft fits ${separationSpeed(spacing)}.` : ""}`;
-        medianState.textContent = {
-          grass: "Unpaved turf median.",
-          concrete: "Raised concrete median with a 6\" curb along its edge.",
-          painted: values.color === "white"
-            ? "Painted median between same-direction traffic: 8\" white outline and 18\" white diagonals at 45°."
-            : "Painted median between opposing traffic: a second 6\" yellow line 10\" inside each road's yellow edge line, and 18\" yellow diagonals at 45°.",
-        }[values.type];
+        medianState.textContent = "Choose a surface, then drag the median's points to reshape it.";
       }
       workspace.classList.toggle("drawing", Boolean(drawing || medianDraw));
       workspace.classList.toggle("elementsActive", active());
@@ -2683,6 +2803,7 @@
       selectedRoad = road;
       selectedLane = null;
       render();
+      window.StripeMaker.selection?.editorChanged();
       // SignalMaker's flashSelection timing and pulse, applied to the actual
       // SVG outline while retaining the persistent yellow selection beneath it.
       if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -2815,6 +2936,9 @@
       const host = jointOf(sheet, target.road.ends[target.e].joint);
       const moving = jointOf(sheet, road.ends[e].joint);
       if (host === moving || road.ends[1 - e].joint === host.id) return;
+      // A physical lane join supersedes a separate curve constraint.
+      curveLinks.unlink(sheet,road.ends[e].curveLink);
+      curveLinks.unlink(sheet,target.road.ends[target.e].curveLink);
       const solved = solve(sheet);
       const pair = dot(travelAt(road, e, solved), travelAt(target.road, target.e, solved)) < 0;
       host.dir ??= travelAt(target.road, target.e, solved);
@@ -2900,6 +3024,213 @@
       regroup(sheet, joint, before);
     }
 
+    const nodeRef = (road, e) => ({ road: road.id, e });
+    function curveEnd(ref) {
+      const road = roadOf(sheets.selected, ref?.road);
+      return road && { road, e: ref.e, end: road.ends[ref.e] };
+    }
+    function curveLinkFor(road,e) {
+      return road.ends[e].curveLink ?? pairOf(sheets.selected,road)?.ends[1-e].curveLink;
+    }
+    function selectedCurveLink() {
+      if (!selectedRoad) return null;
+      return selectedLane ? curveLinkFor(selectedRoad,selectedLane.e) : curveLinkFor(selectedRoad,0) ?? curveLinkFor(selectedRoad,1);
+    }
+    function curveState(ref, solved = solve(sheets.selected), exact = false) {
+      const item = curveEnd(ref);
+      if (!item) return null;
+      const handle = handlePoint(sheets.selected, item.road, item.e, solved);
+      const travel = solved.get(`${ref.road}:${ref.e}`).travel ?? travelAt(item.road, item.e, solved);
+      return { point: handle.from, travel, length: exact && !solved.get(`${ref.road}:${ref.e}`).travel ? 0 : Math.hypot(handle.at.x-handle.from.x,handle.at.y-handle.from.y) };
+    }
+    function putCurve(ref, state, movePoint = false) {
+      const sheet=sheets.selected, item=curveEnd(ref);
+      if (!item) return;
+      // An explicit direction applies to this road end and its two-way partner;
+      // it does not merge unrelated joints or move a linked node for parallel handles.
+      item.end.dir={...state.travel}; item.end.length=state.length;
+      const pair=pairOf(sheet,item.road);
+      if (pair) {
+        pair.ends[1-item.e].dir={x:-state.travel.x,y:-state.travel.y};
+        pair.ends[1-item.e].length=state.length;
+      }
+      if (movePoint) {
+        const at=solve(sheet).get(`${ref.road}:${ref.e}`), joint=jointOf(sheet,item.end.joint);
+        joint.x+=state.point.x-at.x; joint.y+=state.point.y-at.y;
+      }
+    }
+    function syncCurve(ref, movePoint = false) {
+      const sheet=sheets.selected;
+      let item=curveEnd(ref), link=item?.end.curveLink;
+      if(!link&&item) {
+        const partner=pairOf(sheet,item.road);
+        if(partner){ref=nodeRef(partner,1-item.e);item=curveEnd(ref);link=item.end.curveLink;}
+      }
+      if (!curveLinks.valid(link) || (movePoint && link.mode!=="mirror")) return;
+      const peer=curveLinks.members(sheet,link.id).find(p=>p.end!==item.end);
+      if (!peer) return;
+      const state=curveState(ref,solve(sheet),link.mode==="mirror"), sign=link.mode==="mirror"?(ref.e===peer.e?1:-1):link.polarity*peer.end.curveLink.polarity;
+      const reflected=link.mode === "mirror" || link.rotation === "opposite";
+      const travel=reflected ? curveLinks.reflectVector(state.travel,link.axis) : state.travel;
+      putCurve(nodeRef(peer.road,peer.e), {
+        point:link.mode === "mirror" ? curveLinks.reflectPoint(state.point,link.axis) : state.point,
+        travel:{x:travel.x*sign,y:travel.y*sign}, length:state.length
+      },link.mode === "mirror");
+    }
+    function beginCurvePick(node, mode) {
+      drawing=null; medianDraw=null; snapTarget=null;
+      selectedRoad=node.road; selectedLane={e:node.e,lane:node.lane};
+      curvePick={source:nodeRef(node.road,node.e),mode};
+      keepSymmetric.checked=true;
+      curveRotation.value="same";
+      render();
+    }
+    function cancelCurvePick() { curvePick=null; render(); }
+    function pickCurveNode(node) {
+      if (!curvePick || curvePick.target) return;
+      const source=curveEnd(curvePick.source), sheet=sheets.selected;
+      if (!source) return cancelCurvePick();
+      if (source.road===node.road && source.e===node.e) {
+        curveStatus.textContent="Choose a different road end."; return;
+      }
+      if (pairOf(sheet,source.road)===node.road) {
+        curveStatus.textContent="These ends already belong to the same two-way road."; return;
+      }
+      if (curvePick.mode === "mirror") {
+        if (source.road===node.road || source.road.ends.some(a=>node.road.ends.some(b=>a.joint===b.joint))) {
+          curveStatus.textContent="Choose a separate road without a shared joint to mirror onto."; return;
+        }
+        const attached=(sheet.intersections??[]).some(x=>x.approaches.some(a=>
+          [a.binding,...a.links??[]].some(b=>b && [source.road.id,node.road.id].includes(b.road))));
+        if (attached) { curveStatus.textContent="Detach these roads from their intersection before mirroring."; return; }
+        curvePick.target=nodeRef(node.road,node.e);
+        curvePick.axis=[];
+        render(); return;
+      }
+      const target=nodeRef(node.road,node.e), a=curveState(curvePick.source), b=curveState(target);
+      curveLinks.unlink(sheet,source.end.curveLink); curveLinks.unlink(sheet,node.road.ends[node.e].curveLink);
+      const id=crypto.randomUUID(), polarity=a.travel.x*b.travel.x+a.travel.y*b.travel.y<0?-1:1;
+      const rotation=curveRotation.value, axis=[{x:0,y:0},{...a.travel}];
+      source.end.curveLink={id,mode:"parallel",polarity:1,rotation,axis};
+      node.road.ends[node.e].curveLink={id,mode:"parallel",polarity,rotation,axis:structuredClone(axis)};
+      openCurves.add(`${source.road.id}:${source.e}`);
+      syncCurve(curvePick.source);
+      curvePick=null; changed();
+    }
+    function snapCurveAxis(p, q) {
+      const dx=Math.abs(p.x-q.x),dy=Math.abs(p.y-q.y);
+      if (dx<dy*.12) return {x:q.x,y:p.y};
+      if (dy<dx*.12) return {x:p.x,y:q.y};
+      return p;
+    }
+    function editCurveAxis(ref) {
+      let item=curveEnd(ref), link=item?.end.curveLink;
+      if(!link&&item){const partner=pairOf(sheets.selected,item.road);if(partner){ref=nodeRef(partner,1-item.e);item=curveEnd(ref);link=item.end.curveLink;}}
+      if (link?.mode!=="mirror") return;
+      const peer=curveLinks.members(sheets.selected,link.id).find(p=>p.end!==item.end);
+      if (!peer) return;
+      selectedRoad=item.road;
+      const ids=new Set();
+      const refs=[];
+      for(const road of sheets.selected.roads)for(const [e,end]of road.ends.entries()) {
+        if(!end.curveLink || (link.set ? end.curveLink.set!==link.set : end.curveLink.id!==link.id) || ids.has(end.curveLink.id))continue;
+        ids.add(end.curveLink.id);
+        const members=curveLinks.members(sheets.selected,end.curveLink.id);
+        const driver=members.find(p=>p.end.curveLink.role===link.role)??members.find(p=>p.road===item.road)??members[0];
+        const other=members.find(p=>p!==driver);
+        if(driver&&other)refs.push({source:nodeRef(driver.road,driver.e),target:nodeRef(other.road,other.e)});
+      }
+      curvePick={source:ref,target:nodeRef(peer.road,peer.e),refs,mode:"mirror",axis:structuredClone(link.axis)};
+      keepSymmetric.checked=true;
+      render();
+    }
+    function mirrorRefs(pick) {
+      if(pick.refs)return pick.refs;
+      return [0,1].map(e=>({source:{road:pick.source.road,e},target:{road:pick.target.road,e:pick.target.e===pick.source.e?e:1-e}}));
+    }
+    function applyCurveMirror() {
+      if (!curvePick?.target || curvePick.axis?.length!==2) return;
+      const pick=curvePick, sheet=sheets.selected, axis=structuredClone(pick.axis);
+      const refs=mirrorRefs(pick), solved=solve(sheet);
+      // Capture both source controls before changing any destination joint.
+      const states=refs.map(({source})=>curveState(source,solved,true));
+      for (const {source,target} of refs) {
+        curveLinks.unlink(sheet,curveEnd(source)?.end.curveLink);
+        curveLinks.unlink(sheet,curveEnd(target)?.end.curveLink);
+      }
+      const set=crypto.randomUUID();
+      refs.forEach(({source,target},i)=>{
+        const state=states[i], polarity=source.e===target.e?1:-1;
+        const travel=curveLinks.reflectVector(state.travel,axis);
+        putCurve(target,{point:curveLinks.reflectPoint(state.point,axis),travel:{x:travel.x*polarity,y:travel.y*polarity},length:state.length},true);
+        if (keepSymmetric.checked) {
+          const id=crypto.randomUUID();
+          curveEnd(source).end.curveLink={id,set,role:"a",mode:"mirror",polarity:1,axis:structuredClone(axis)};
+          curveEnd(target).end.curveLink={id,set,role:"b",mode:"mirror",polarity,axis:structuredClone(axis)};
+        }
+      });
+      curvePick=null; changed();
+    }
+    function updateCurveFields() {
+      const link=selectedCurveLink();
+      curveFields.hidden=!curvePick && !link;
+      const mirror=curvePick?.mode==="mirror";
+      document.getElementById("curveRotationRow").hidden=curvePick ? curvePick.mode!=="parallel" : link?.mode!=="parallel";
+      if (!curvePick && link?.mode==="parallel") curveRotation.value=link.rotation??"same";
+      document.getElementById("keepSymmetricRow").hidden=!mirror;
+      applyMirrorButton.hidden=!mirror;
+      applyMirrorButton.disabled=!curvePick?.target || curvePick.axis?.length!==2;
+      editAxisButton.hidden=Boolean(curvePick) || link?.mode!=="mirror";
+      unlinkCurveButton.hidden=Boolean(curvePick) || !link;
+      cancelCurveButton.hidden=!curvePick;
+      curveStatus.textContent=curvePick ? (!curvePick.target
+        ? (mirror ? "Choose the corresponding end of the road to mirror onto." : "Choose another node to link its curve handle. Escape cancels.")
+        : curvePick.axis?.length===2 ? "Preview ready. Apply Mirror or press Enter. Click two new points to change the symmetry line."
+          : curvePick.axis?.length===1 ? "Click the second point of the symmetry line. Horizontal and vertical lines snap." : "Click two points to set the symmetry line. Escape cancels.")
+        : link?.mode==="mirror" ? "Symmetric curves. Editing either side updates the other." : link?.rotation==="opposite" ? "Linked handles turn in opposite directions and share length. Nodes move independently." : "Linked handles turn together and share length. Nodes move independently.";
+    }
+    function drawCurveGuides(sheet, solved) {
+      curveGuide.replaceChildren();
+      if (!sheet || !solved) return;
+      const line=(points,cls="roadControlLine")=>{
+        const el=document.createElementNS(SVG,"polyline"); el.setAttribute("class",cls);
+        el.setAttribute("points",points.map(p=>{const q=sheets.toScreen(p);return `${q.x},${q.y}`;}).join(" "));
+        el.setAttribute("fill","none");el.setAttribute("stroke-dasharray","6 5");curveGuide.append(el);
+      };
+      const link=selectedCurveLink();
+      if (!curvePick && curveLinks.valid(link)) {
+        const peers=curveLinks.members(sheet,link.id);
+        line(peers.map(p=>handlePoint(sheet,p.road,p.e,solved).at));
+        if (link.mode==="mirror") line(link.axis);
+      }
+      if (!curvePick?.target) return;
+      const axis=curvePick.axis?.length===1 && curvePick.cursor ? [curvePick.axis[0],curvePick.cursor] : curvePick.axis;
+      if (axis?.length!==2 || Math.hypot(axis[1].x-axis[0].x,axis[1].y-axis[0].y)<1) return;
+      line(axis);
+      const source=curveEnd(curvePick.source);
+      if (source) line(centerline(source.road,solved).map(p=>curveLinks.reflectPoint(p,axis)));
+    }
+    curveRotation.addEventListener("change",()=>{
+      if (curvePick) return;
+      const link=selectedCurveLink();
+      if (link?.mode!=="parallel") return;
+      const members=curveLinks.members(sheets.selected,link.id);
+      if (members.length!==2) return;
+      const a=curveState(nodeRef(members[0].road,members[0].e)),b=curveState(nodeRef(members[1].road,members[1].e));
+      const sign=members[0].end.curveLink.polarity*members[1].end.curveLink.polarity;
+      const sum={x:a.travel.x+b.travel.x*sign,y:a.travel.y+b.travel.y*sign};
+      const bisector=Math.hypot(sum.x,sum.y)>1e-6?unit(sum):{x:-a.travel.y,y:a.travel.x};
+      for (const {end} of members) { end.curveLink.rotation=curveRotation.value; end.curveLink.axis=[{x:0,y:0},bisector]; }
+      changed();
+    });
+    applyMirrorButton.addEventListener("click",applyCurveMirror);
+    cancelCurveButton.addEventListener("click",cancelCurvePick);
+    unlinkCurveButton.addEventListener("click",()=>{curveLinks.unlink(sheets.selected,selectedCurveLink());changed();});
+    editAxisButton.addEventListener("click",()=>{
+      const link=selectedCurveLink(), member=curveLinks.members(sheets.selected,link?.id).find(p=>p.road===selectedRoad||pairOf(sheets.selected,p.road)===selectedRoad);
+      if (member) editCurveAxis(nodeRef(member.road,member.e));
+    });
+
     function handlePoint(sheet, road, e, solved) {
       const line = centerline(road, solved);
       const from = endOf(line, e);
@@ -2978,6 +3309,8 @@
     function removeRoads(sheet, roads) {
       const before = solve(sheet);
       const ids = roads.map(road => road.id);
+      sheet.vehicleSpawns = (sheet.vehicleSpawns ?? []).filter(spawn => !ids.includes(spawn.road));
+      for (const spawn of sheet.vehicleSpawns) spawn.routes = (spawn.routes ?? []).filter(route => !ids.includes(route.exit.road));
       sheet.roads = sheet.roads.filter(road => !ids.includes(road.id));
       const joints = new Set(roads.flatMap(road => road.ends.map(end => jointOf(sheet, end.joint))).filter(Boolean));
       for (const joint of joints) {
@@ -3080,21 +3413,32 @@
         const left=groups[n],right=groups[n+1],at=cuts[n].at;
         const point=(g,side,e)=>{const i=e?shape.line.length-1:0,p=shape.line[i],normal=rightOf(p.tangent??{x:0,y:-1}),d=side==='R'?shape.laneBounds[i][at-1][1]:shape.laneBounds[i][at][0];
           return {x:p.x+normal.x*d,y:p.y+normal.y*d,on:{road:g.road.id,side,f:e}};};
-        (sheet.medians??=[]).push({id:nextId(sheet.medians),type:cuts[n].surface,color:'white',intersectionMedian:cuts[n].owner,points:[point(left,'R',0),point(left,'R',1),point(right,'L',1),point(right,'L',0)]});
+        (sheet.medians??=[]).push({id:nextId(sheet.medians),type:cuts[n].surface,color:cuts[n].color??'white',lean:cuts[n].lean??'right',spacing:cuts[n].spacing??MEDIAN_SPACING_FEET,intersectionMedian:cuts[n].owner,points:[point(left,'R',0),point(left,'R',1),point(right,'L',1),point(right,'L',0)]});
       }
       return groups.map(g=>g.road);
     }
     // Separates a two-way road into two one-way roads, left in place.
-    function splitRoad() {
-      const sheet = sheets.selected;
-      const partner = pairOf(sheet, selectedRoad);
+    function splitOppositeRoads(sheet, road, preserveTangents = false) {
+      const partner = pairOf(sheet, road);
       if (!partner) return;
       const before = solve(sheet);
       for (const end of partner.ends) {
         const joint = jointOf(sheet, end.joint);
-        joint.links = joint.links.filter(link => !(link.pair && [link.a, link.b].includes(partner.id) && [link.a, link.b].includes(selectedRoad.id)));
+        // Preserve the actual tangents/pulls when regrouping creates free
+        // ends. Independently curved intersection mouths can then rotate one
+        // road without straightening the other or moving either far end.
+        for (const item of preserveTangents ? attachments(sheet, joint) : []) {
+          if (item.road !== road && item.road !== partner) continue;
+          const pose = before.get(`${item.road.id}:${item.e}`), other = before.get(`${item.road.id}:${1 - item.e}`);
+          item.end.length ??= Math.hypot(other.x - pose.x, other.y - pose.y) / 3;
+        }
+        joint.links = joint.links.filter(link => !(link.pair && [link.a, link.b].includes(partner.id) && [link.a, link.b].includes(road.id)));
         regroup(sheet, joint, before);
       }
+    }
+    function splitRoad() {
+      if (!pairOf(sheets.selected, selectedRoad)) return;
+      splitOppositeRoads(sheets.selected, selectedRoad);
       changed();
     }
     document.getElementById("splitRoad").addEventListener("click", splitRoad);
@@ -3300,6 +3644,10 @@
       const joint = newJoint(sheet, m, road.id, unit(distance(p012, p123) > 1e-6 ? { x: p123.x - p012.x, y: p123.y - p012.y } : { x: b.x - a.x, y: b.y - a.y }));
       const rename = (at, from, to) => {
         window.StripeMaker.intersections?.rehomeRoad(sheet, from, 1, to, 1);
+        for (const spawn of sheet.vehicleSpawns ?? []) {
+          for (const route of spawn.routes ?? []) if (route.exit.road === from && (route.exit.e ?? 1) === 1) route.exit.road = to;
+          if (spawn.road === from && (spawn.e ?? 0) === 1) spawn.road = to;
+        }
         const far = jointOf(sheet, at);
         far.links.forEach(link => {
           if (link.a === from) link.a = to;
@@ -3432,6 +3780,25 @@
       if (!button) return;
       event.preventDefault();
       openMenu(button, point);
+    });
+    workspace.addEventListener("click", event => {
+      if (!curvePick || event.target.closest("button, input, select")) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      if (!curvePick.target) return;
+      if (press && Math.hypot(event.clientX-press.x,event.clientY-press.y)>4) return;
+      const p = sheets.toImage(event.clientX, event.clientY);
+      if (!curvePick.axis?.length || curvePick.axis.length === 2) curvePick.axis = [p];
+      else {
+        const q = snapCurveAxis(p, curvePick.axis[0]);
+        if (Math.hypot(q.x-curvePick.axis[0].x,q.y-curvePick.axis[0].y)<1) return;
+        curvePick.axis.push(q);
+      }
+      render();
+    }, true);
+    workspace.addEventListener("pointermove", event => {
+      if (!curvePick?.target || curvePick.axis?.length !== 1) return;
+      curvePick.cursor = snapCurveAxis(sheets.toImage(event.clientX,event.clientY),curvePick.axis[0]);
+      drawCurveGuides(sheets.selected, solve(sheets.selected));
     });
     workspace.addEventListener("click", event => {
       const sheet = sheets.selected;
@@ -3574,6 +3941,7 @@
         // Right-click (or Control-click) opens the node menu instead of dragging.
         if (event.button !== 0 || event.ctrlKey) return;
         closeMenu();
+        if (curvePick) { pickCurveNode(node); return; }
         button.setPointerCapture(event.pointerId);
         const was = selectedRoad?.id;
         selectedRoad = node.road;
@@ -3587,6 +3955,7 @@
         // Detaching changes the joints, so it redraws everything.
         if (event.altKey) render();
         else drawSheet({ roads: [was, node.road.id] });
+        window.StripeMaker.selection?.editorChanged();
       });
       button.addEventListener("pointermove", event => {
         if (!drag || !button.hasPointerCapture(event.pointerId)) return;
@@ -3603,7 +3972,7 @@
         const moving = attachments(sheet, joint).map(item => item.road);
         snapTarget = snapLane(sheet, solved, wanted, e, road, lane);
         drag.moved = true;
-        const approach = !snapTarget && window.StripeMaker.intersections?.laneAt(sheet, { road: road.id, e }, wanted);
+        const approach = !snapTarget && window.StripeMaker.intersections?.laneAt(sheet, { road: road.id, e, lane }, wanted);
         if (approach) {
           alignLaneEnd(sheet, { road: road.id, e }, lane, approach.point, approach.angle);
           snapTarget = { ...approach.point, approach };
@@ -3616,6 +3985,7 @@
         const current = lanePoint(sheet, road, e, lane, solve(sheet));
         joint.x += goal.x - current.x;
         joint.y += goal.y - current.y;
+        syncCurve(nodeRef(road, e), true);
         renderSoon({ joints: [joint.id] });
       });
       const finish = event => {
@@ -3643,6 +4013,13 @@
         const joint = jointOf(node.sheet, node.road.ends[node.e].joint);
         joint.x += dx;
         joint.y += dy;
+        syncCurve(nodeRef(node.road, node.e), true);
+      });
+      button.addEventListener("keydown", event => {
+        if (curvePick && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault(); event.stopPropagation();
+          const node = nodeTarget(button); if (node) pickCurveNode(node);
+        }
       });
       // Double-clicking a node shows or hides the curve handle at that end.
       button.addEventListener("dblclick", () => {
@@ -3678,6 +4055,7 @@
       joint.dir ??= travelAt(node.road, node.e, solved);
       node.road.ends[node.e].length ??= Math.hypot(handle.at.x - handle.from.x, handle.at.y - handle.from.y);
       selectedRoad = node.road;
+      syncCurve(nodeRef(node.road,node.e));
       changed();
     }
     function hideCurve(node) {
@@ -3687,6 +4065,7 @@
     // Returns a road end to its default pull; a free end goes straight again.
     function straighten(sheet, road, e) {
       const end = road.ends[e];
+      curveLinks.unlink(sheet, end.curveLink);
       end.length = null;
       delete end.dir;
       const pair = pairOf(sheet, road);
@@ -3737,7 +4116,11 @@
       return [
         { label: curveOpen ? "Hide Curve Handle" : "Curve This End", run: () => (curveOpen ? hideCurve(node) : showCurve(node)) },
         end.length != null && { label: "Straighten", run: () => straighten(sheet, road, e) },
-        { label: e ? "Continue Road From Here" : "Draw Road Into Here", run: () => startDrawing({ [e ? "start" : "end"]: here }) },
+        { label: "Link Curve Handles…", run: () => beginCurvePick(node, "parallel") },
+        { label: "Mirror Curve…", run: () => beginCurvePick(node, "mirror") },
+        curveLinkFor(road,e) && { label: "Unlink Curve Handles", run: () => { curveLinks.unlink(sheet, curveLinkFor(road,e)); changed(); } },
+        curveLinkFor(road,e)?.mode === "mirror" && { label: "Edit Symmetry Line…", run: () => editCurveAxis(nodeRef(road, e)) },
+        { label: window.StripeMaker.traffic.incoming(Boolean(e)) ? "Continue Road From Here" : "Draw Road Into Here", run: () => startDrawing({ [e ? "start" : "end"]: here }) },
         joined && { label: "Pull End Free", run: () => { detach(sheet, road, e); changed(); } },
         "separator",
         !bikeType(road, lane) && { label: "Auto Taper", checked: taper === "auto", run: setTaperMode("auto") },
@@ -3988,6 +4371,7 @@
       }
       end.length = length;
       if (pair) pair.ends[1 - e].length = length;
+      syncCurve(nodeRef(road, e));
     }
     controlButtons.forEach((button, e) => {
       button.addEventListener("pointerdown", event => {
@@ -4003,7 +4387,7 @@
       button.addEventListener("pointerup", event => {
         if (!button.hasPointerCapture(event.pointerId)) return;
         button.releasePointerCapture(event.pointerId);
-        changed(selectedRoad && { joints: [selectedRoad.ends[e].joint] });
+        changed();
       });
       nudgeKeys(button, (dx, dy) => {
         if (!selectedRoad) return false;
@@ -4015,21 +4399,20 @@
       button.addEventListener("dblclick", () => {
         const sheet = sheets.selected;
         if (!selectedRoad) return;
-        const end = selectedRoad.ends[e];
-        const joint = jointOf(sheet, end.joint);
-        end.length = null;
-        delete end.dir;
-        const pair = pairOf(sheet, selectedRoad);
-        if (pair) delete pair.ends[1 - e].dir;
-        if (attachments(sheet, joint).length === 1) joint.dir = null;
-        openCurves.delete(`${selectedRoad.id}:${e}`);
-        changed();
+        straighten(sheet, selectedRoad, e);
       });
     });
 
     window.addEventListener("keydown", event => {
       if (!active() || document.querySelector("dialog[open]")) return;
       const typing = event.target.closest?.("input, select, textarea");
+      if (curvePick && !typing && (event.key === "Escape" || event.key === "Enter")) {
+        event.preventDefault(); event.stopPropagation();
+        if (event.key === "Escape") cancelCurvePick();
+        else if (curvePick.axis?.length === 2 && curvePick.target) applyCurveMirror();
+        else if (event.target.closest?.(".roadNode")) { const node = nodeTarget(event.target.closest(".roadNode")); if (node) pickCurveNode(node); }
+        return;
+      }
       if (menuNode && (event.key === "Escape" || nodeMenu.contains(event.target))) {
         if (event.key !== "Escape") return;
         event.stopPropagation();
@@ -4055,6 +4438,7 @@
 
     new MutationObserver(() => {
       if (!active()) {
+        curvePick = null;
         drawing = null;
         medianDraw = null;
         snapTarget = null;
@@ -4067,6 +4451,7 @@
     });
     // Undo and redo replace the sheet's roads, so selection follows by id.
     document.addEventListener("sheethistory", () => {
+      curvePick = null;
       const sheet = sheets.selected;
       sheet && (sheet.gores ??= []);
       sheet && (sheet.medians ??= []);
@@ -4082,6 +4467,8 @@
       render();
     });
     document.addEventListener("sheetchange", () => {
+      curvePick = null;
+      curveLinks.prune(sheets.selected);
       if (!sheets.selected?.roads?.includes(selectedRoad)) {
         selectedRoad = null;
         selectedLane = null;
@@ -4123,6 +4510,23 @@
         : { x: at.x - normal.x * (e ? -1 : 1) * linkLateral(sheet,road,"R",e),
             y: at.y - normal.y * (e ? -1 : 1) * linkLateral(sheet,road,"R",e) };
       const tapered = here.some(item => [...shapeOf(sheet, item.road, solved).tapers.keys()].some(key => key.startsWith(`${item.e}:`)));
+      // A branch can occupy only part of a road end. The remaining lanes
+      // can meet an intersection even though the whole joint is nonterminal.
+      // Include implicit lane continuations, not just the alignment link
+      // that positions two multi-lane roads beside one another.
+      const across = here.filter(item => item.e !== e && item.end.sign === road.ends[e].sign);
+      const linked = laneLinks(sheet, joint);
+      const receiving = across.flatMap(item => Array.from({ length: item.road.lanes }, (_, lane) => ({
+        p: lanePoint(sheet, item.road, item.e, lane, solved),
+        width: window.StripeMaker.roadWidths.endWidth(sheet, item.road, item.e, lane),
+      })));
+      const freeLanes = Array.from({ length: road.lanes }, (_, lane) => {
+        if (shape.tapers.has(`${e}:${lane}`) || linked.some(link => e
+          ? link.from === road && link.fromLane === lane : link.to === road && link.toLane === lane)) return false;
+        if (!receiving.length) return true;
+        const p = lanePoint(sheet, road, e, lane, solved), width = window.StripeMaker.roadWidths.endWidth(sheet, road, e, lane);
+        return !receiving.some(other => Math.hypot(p.x - other.p.x, p.y - other.p.y) < feetToPixels(sheet, (width + other.width) / 2) - 0.01);
+      });
       const details=(r,end)=>r?Array.from({length:r.lanes},(_,lane)=>({
         width:window.StripeMaker.roadWidths.endWidth(sheet,r,end,lane),
         type:r.laneTypes?.[lane]?.type??'travel',
@@ -4133,7 +4537,7 @@
       })):[];
       return { ...center, angle: Math.atan2(outward.y, outward.x) * 180 / Math.PI,
         incoming: incoming?.lanes ?? 0, outgoing: outgoing?.lanes ?? 0,
-        width: inWidth, outWidth, inDetails:details(incoming,1), outDetails:details(outgoing,0), median, gap, joint: joint.id, terminal: terminal && !tapered,
+        width: inWidth, outWidth, inDetails:details(incoming,1), outDetails:details(outgoing,0), median, gap, joint: joint.id, terminal: terminal && !tapered, freeLanes,
         binding: { road: road.id, e, joint: joint.id },
         ends: here.map(item => ({ road: item.road.id, e: item.e })),
       };
@@ -4158,10 +4562,15 @@
       })();
       joint.x += point.x - end.x; joint.y += point.y - end.y;
       joint.dir = { x: old.x * Math.cos(delta) - old.y * Math.sin(delta), y: old.x * Math.sin(delta) + old.y * Math.cos(delta) };
+      for (const item of attachments(sheet, joint)) if (item.end.dir) {
+        const v = item.end.dir;
+        item.end.dir = { x: v.x * Math.cos(delta) - v.y * Math.sin(delta), y: v.x * Math.sin(delta) + v.y * Math.cos(delta) };
+      }
     }
     // Turns a road end to an approach's direction, then moves it so one of its
     // lanes ends at the given point.
     function alignLaneEnd(sheet, binding, lane, point, angle) {
+      curveLinks.unlink(sheet,roadOf(sheet,binding.road)?.ends[binding.e].curveLink);
       const end = intersectionEnd(sheet, binding);
       if (!end) return;
       moveIntersectionEnd(sheet, binding, end, angle);
@@ -4183,15 +4592,79 @@
         });
         const placementBounds=shape.line.map((p,i)=>shape.laneBounds[i].map((bounds,lane)=>{
           if(!bikeType(road,lane))return bounds;
-          const n=rightOf(p.tangent),project=q=>(q.x-p.x)*n.x+(q.y-p.y)*n.y;
+          // A free/straightened end has a zero Bézier derivative. Use the same
+          // neighboring-sample direction as offset() so the bike riding space
+          // stays aligned with its edges without interrupting the render.
+          const prev=shape.line[Math.max(0,i-1)],next=shape.line[Math.min(shape.line.length-1,i+1)];
+          const n=rightOf(p.tangent??unit({x:next.x-prev.x,y:next.y-prev.y})),project=q=>(q.x-p.x)*n.x+(q.y-p.y)*n.y;
           return [project(markingEdges[lane][i]),project(markingEdges[lane+1][i])];
         }));
         return { road: road.id, line: shape.line, bounds: shape.bounds, laneBounds:shape.laneBounds, placementBounds, markingEdges,
           bikeLanes:Array.from({length:road.lanes},(_,lane)=>Boolean(bikeType(road,lane))) };
       });
     }
-    window.StripeMaker.roadEditor = { splitLaneGroups, diagnostics: () => structuredClone({selectedRoad,selectedLane,selectedGore,selectedMedian,defaults,openCurves:[...openCurves],medianPoints}), render, renderLater: (change = {}) => renderSoon(change),
+    window.StripeMaker.roadEditor = { selectedItem:()=>active() ? selectedMedian!=null?{kind:"medians",id:selectedMedian}:selectedRoad?{kind:"roads",id:selectedRoad.id}:null : null, splitLaneGroups, splitOppositeRoads, diagnostics: () => structuredClone({selectedRoad,selectedLane,selectedGore,selectedMedian,defaults,openCurves:[...openCurves],medianPoints}), render, renderLater: (change = {}) => renderSoon(change),
       roadAt: (sheet, point) => roadAt(sheet, point), medianAt: (sheet, point) => medianAt(sheet, point),
+      // Directed vehicle lanes and their actual lane-to-lane continuations.
+      // Geometric matches at a shared joint include implicit parallel lanes;
+      // coincident roads with different joints never connect.
+      simulatorNetwork(sheet) {
+        const solved = solve(sheet), lanes = [], connections = [], laneChangePairs = [], byKey = new Map();
+        for (const road of sheet.roads ?? []) {
+          const shape = shapeOf(sheet, road, solved), stations = [0];
+          for (let i = 1; i < shape.line.length; i++) stations.push(stations.at(-1) + Math.hypot(shape.line[i].x - shape.line[i - 1].x, shape.line[i].y - shape.line[i - 1].y));
+          const vehicleLanes = Array.from({ length: road.lanes }, (_, lane) => lane).filter(lane => !bikeType(road, lane));
+          const conflicts = vehicleLanes.some((lane, i) => i && lane > vehicleLanes[i - 1] + 1) ? bikeConflicts(sheet, road, shape, solved) : new Map();
+          for (let index = 1; index < vehicleLanes.length; index++) {
+            const from = vehicleLanes[index - 1], to = vehicleLanes[index], blocked = [], crossings = [];
+            if (Array.from({ length: to - from - 1 }, (_, i) => bikeType(road, from + i + 1)).includes('twoWayBike')) continue;
+            for (let i = 1; i < shape.line.length; i++) {
+              const hasGap = k => Array.from({ length: to - from }, (_, j) => from + j).some(lane => shape.laneBounds[k][lane + 1][0] - shape.laneBounds[k][lane][1] > inchesToPixels(sheet, 1));
+              if (hasGap(i - 1) || hasGap(i)) blocked.push([stations[i - 1] / stations.at(-1), stations[i] / stations.at(-1)]);
+            }
+            // FDM 2027 223.3.2 / 223.5.2: cross ordinary bike lanes at
+            // their modeled conflict striping; never drive along a bike lane.
+            // https://www.fdot.gov/roadway/fdm/default.shtm (Chapter 223)
+            for (let bike = from + 1; bike < to; bike++) for (const boundary of [bike, bike + 1]) crossings.push({
+              points: shape.line.map((point, i) => ({ ...point, lateral: shape.laneBounds[i][bike][boundary === bike ? 0 : 1] })),
+              ranges: (conflicts.get(boundary) ?? []).map(([lo, hi]) => [lo, hi]),
+            });
+            laneChangePairs.push({ road: road.id, from, to, blocked, crossings });
+          }
+          for (const lane of vehicleLanes) {
+            const points = offset(shape.line, i => (shape.laneBounds[i][lane][0] + shape.laneBounds[i][lane][1]) / 2);
+            points[0] = lanePoint(sheet, road, 0, lane, solved);
+            points[points.length - 1] = lanePoint(sheet, road, 1, lane, solved);
+            points.forEach((point, i) => {
+              point.laneWidth = shape.laneBounds[i][lane][1] - shape.laneBounds[i][lane][0];
+              point.lateral = (shape.laneBounds[i][lane][0] + shape.laneBounds[i][lane][1]) / 2;
+              point.road = road.id; point.lane = lane; point.station = stations[i]; point.direction = 1;
+            });
+            const open = [0, 1].map(e => {
+              const bounds = shape.laneBounds[e ? shape.line.length - 1 : 0][lane];
+              return bounds[1] - bounds[0] > inchesToPixels(sheet, 1);
+            });
+            const record = { road: road.id, lane, points, open, stations };
+            lanes.push(record); byKey.set(`${road.id}:${lane}`, record);
+          }
+        }
+        const connect = (from, fromLane, to, toLane) => {
+          if (!byKey.get(`${from}:${fromLane}`)?.open[1] || !byKey.get(`${to}:${toLane}`)?.open[0]) return;
+          connections.push({ from: { road: from, lane: fromLane }, to: { road: to, lane: toLane } });
+        };
+        for (const joint of sheet.joints ?? []) {
+          for (const link of laneLinks(sheet, joint)) connect(link.from.id, link.fromLane, link.to.id, link.toLane);
+          const ends = attachments(sheet, joint);
+          for (const a of ends.filter(a => a.e === 1)) for (const b of ends.filter(b => b.e === 0 && b.end.sign === a.end.sign)) {
+            if (a.road === b.road) continue;
+            for (let i = 0; i < a.road.lanes; i++) for (let j = 0; j < b.road.lanes; j++) {
+              const p = byKey.get(`${a.road.id}:${i}`)?.points.at(-1), q = byKey.get(`${b.road.id}:${j}`)?.points[0];
+              if (p && q && Math.hypot(p.x - q.x, p.y - q.y) < inchesToPixels(sheet, 1)) connect(a.road.id, i, b.road.id, j);
+            }
+          }
+        }
+        return { lanes, connections, laneChangePairs };
+      },
       removeRoads: (sheet, roads) => removeRoads(sheet, roads),
       // A colored pavement record's outline, or a lane stretch (fractions), in sheet pixels.
       laneStrip: (sheet, road, lane, from, to) => {
@@ -4208,9 +4681,29 @@
         const shape = shapeOf(sheet, road, lastSolved?.sheet === sheet ? lastSolved.solved : solve(sheet)), margin = inchesToPixels(sheet, PAVEMENT_MARGIN_INCHES);
         return [...boundary(shape, 0, -margin), ...boundary(shape, road.lanes, margin).reverse()];
       },
-      crossSection: sheet => crossSectionOf(sheet, lastSolved?.sheet === sheet ? lastSolved.solved : solve(sheet)), flush: () => refreshTimer && render(), laneTracks, solve, pairOf: (sheet, road) => pairOf(sheet, road), intersectionEnd, intersectionEnds, moveIntersectionEnd, alignLaneEnd,
+      crossSection: sheet => crossSectionOf(sheet, lastSolved?.sheet === sheet ? lastSolved.solved : solve(sheet)), flush: () => refreshTimer && render(), laneTracks, lanePoint, solve, pairOf: (sheet, road) => pairOf(sheet, road), intersectionEnd, intersectionEnds, moveIntersectionEnd, alignLaneEnd,
       pavementMarginFeet: PAVEMENT_MARGIN_INCHES / 12,
+      tidyGores:pruneGores,
+      drawIntersectionGores(sheet,item,layers,solved,cuts=[]) {
+        const candidates=goreCandidates(sheet,solved??solve(sheet));
+        for(const gore of sheet.gores??[])if(gore.intersection===item.id) {
+          const candidate=candidates.get(gore.key);if(candidate)drawGore(sheet,gore,candidate,layers,cuts);
+        }
+      },
+      paintedGoreEdges: (sheet, solved = lastSolved?.sheet === sheet ? lastSolved.solved : solve(sheet)) => {
+        const candidates = goreCandidates(sheet, solved);
+        return (sheet.gores ?? []).flatMap(gore => {
+          const candidate = candidates.get(gore.key);
+          if (!candidate || !(gore.length > 0)) return [];
+          const last = indexAt(candidate.along, feetToPixels(sheet, gore.length));
+          return [candidate.e1.slice(0, last + 1), candidate.e2.slice(0, last + 1)];
+        });
+      },
       markingStyle: { white: WHITE, yellow: YELLOW, lineFeet: LINE_INCHES / 12 },
+      drawMedianHatching,
+      // FDOT 711-001 sheet 8: 8" white outline; double 6" yellow,
+      // 4" clear gap (10" between marking centerlines).
+      paintedMedianStyle: { whiteLineFeet: GORE_LINE_INCHES / 12, doubleOffsetFeet: (DOUBLE_GAP_INCHES + LINE_INCHES) / 12 },
       medianStyle: { grass: GRASS, concrete: CONCRETE, curb: CURB, curbFeet: CURB_INCHES / 12 } };
     render();
   });

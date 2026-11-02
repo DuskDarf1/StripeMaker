@@ -1,0 +1,134 @@
+{
+  "id": "mixed-spiral",
+  "kind": "roundabout",
+  "name": "Mixed spiral regression",
+  "x": 0,
+  "y": 0,
+  "rotation": 0,
+  "approaches": [
+    {
+      "id": "approach-0",
+      "angle": 3.3612267514051837,
+      "incoming": 2,
+      "outgoing": 1,
+      "width": 12,
+      "outWidth": 12,
+      "median": 12,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": 220.74081191129625,
+      "y": -2.263103178177223,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "inLanes-0-0",
+        "inLanes-0-1"
+      ],
+      "outLanes": [
+        "outLanes-0-0"
+      ],
+      "entryGores": {
+        "inLanes-0-1": 6
+      }
+    },
+    {
+      "id": "approach-1",
+      "angle": 90,
+      "incoming": 2,
+      "outgoing": 1,
+      "width": 12,
+      "outWidth": 12,
+      "median": 12,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": 8.710300358935552e-15,
+      "y": 142.25,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "inLanes-1-0",
+        "inLanes-1-1"
+      ],
+      "outLanes": [
+        "outLanes-1-0"
+      ]
+    },
+    {
+      "id": "approach-2",
+      "angle": 180,
+      "incoming": 1,
+      "outgoing": 2,
+      "width": 12,
+      "outWidth": 12,
+      "median": 12,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": -142.25,
+      "y": 1.7420600717871103e-14,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "inLanes-2-0"
+      ],
+      "outLanes": [
+        "outLanes-2-0",
+        "outLanes-2-1"
+      ]
+    },
+    {
+      "id": "approach-3",
+      "angle": 269.2008906861374,
+      "incoming": 1,
+      "outgoing": 1,
+      "width": 12,
+      "outWidth": 12,
+      "median": 48.68831421600832,
+      "radius": 20,
+      "nose": 60,
+      "surface": "grass",
+      "x": -5.081528992643435,
+      "y": -153.3755108437525,
+      "speed": 35,
+      "splitter": 50,
+      "curb": "E",
+      "ar3": 100,
+      "entryGore": 0,
+      "dest": {},
+      "inLanes": [
+        "inLanes-3-0"
+      ],
+      "outLanes": [
+        "outLanes-3-0"
+      ]
+    }
+  ],
+  "movements": [],
+  "roundabout": {
+    "lanes": "auto",
+    "icd": 186.5,
+    "shape": "circle",
+    "ratio": 1,
+    "turn": 0,
+    "widths": null,
+    "apron": 15,
+    "entryRadius": 65,
+    "exitRadius": 65,
+    "exitCurb": true,
+    "spiral": "auto"
+  }
+}

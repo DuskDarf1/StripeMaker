@@ -72,6 +72,36 @@
   // for 12" transverse lines; they get the stop line's 4" on both sides.
   const CONTRAST = { border: 1.5 * IN, block: 1.5 * IN, stopLine: 4 * IN, bar: 4 * IN };
 
+  // MUTCD 11th Edition, Revision 1 (December 2025), §§3B.26–3B.30,
+  // Figures 3B-24–28 and §3H.03/Figure 3H-1. These treatments have no
+  // corresponding detail in 711-001; lettering uses the existing SHS artwork.
+  // https://mutcd.fhwa.dot.gov/pdfs/11th_Editionr1/mutcd11theditionr1hl.pdf
+  const BLOCK = { outline: 12 * IN, hatch: 6 * IN, spacing: 10, length: 40, wordGap: 2 };
+  // 12" is twice the normal 6" line (wide line, §3A.04); hatching is 4–6".
+  // Box length, hatch spacing and compact word gaps are editable starting
+  // geometry, not mandated dimensions. §3B.20 ¶07 exempts these word messages
+  // from the usual four-character-height longitudinal gap.
+  const TICKS = { width: 12 * IN, reach: 18 * IN, count: 12, length: 150 };
+  // Figure 3B-25 gives maximum 12" × 18" ticks. Count and length are editor
+  // defaults; §3B.28 requires progressively reduced spacing, not a fixed rate.
+  const HUMP = { width: 6, length: 12, stripe: 12 * IN, gap: 12 * IN, wide: 9.5, tip: 10.4 * IN,
+    advance: [0, 20, 38, 54, 68, 80, 90, 98], table: 10 };
+  // MUTCD 11th ed. Rev. 1, Figs. 3B-26/27 (pp. 585–586): each 6 ft ×
+  // 6 ft ramp pattern has an outer 12-inch chevron AND an inner triangle,
+  // separated by a 12-inch clear band. C has two chevrons and a separately
+  // dimensioned 10.4-inch terminal triangle within its 9.5 ft × 12 ft footprint.
+  // https://mutcd.fhwa.dot.gov/pdfs/11th_Editionr1/mutcd11theditionr1hl.pdf#page=626
+  // Figure 3B-28: centers 100,80,62,46,32,20,10,2 ft before the leading
+  // edge, lengths 1…8 ft. Twelve-inch bars; the last bar leaves 1.5 ft clear.
+  const VARIANTS = {
+    doNotBlock: [['outline', 'A · Outline'], ['outlineWords', 'B · Outline and message'], ['crosshatch', 'C · Outline and crosshatch'], ['cross', 'C · Outline and X'], ['words', 'D · Message only']],
+    speedHump: [['humpA', 'Hump · Option A'], ['humpB', 'Hump · Option B'], ['humpC', 'Hump · Option C'], ['tableA', 'Table · Option A'], ['tableB', 'Table · Option B'], ['advance', 'Advance warning bars']],
+    crosswalkAesthetic: [['brick', 'Brick'], ['stone', 'Stone'], ['paver', 'Paver'], ['lattice', 'Lattice'], ['mesh', 'Mesh'], ['grid', 'Grid'], ['polygon', 'Polygon'], ['solid', 'Solid color'], ['image', 'Custom image']],
+  };
+  // Figure 3H-1 illustrates materials/patterns, not fabrication dimensions.
+  // These colors depict its earth-tone examples; they are screen previews.
+  const AESTHETIC = { gap: 6 * IN, colors: { brick: '#873f32', rust: '#995735', brown: '#735237', burgundy: '#713c46', clay: '#ae7254', tan: '#b8a583' } };
+
   const symbol = id => app.markingSymbols?.[id];
   const entry = (id, name, group, kind, extra = {}) => ({ id, name, group, kind, ...extra });
   const catalog = [
@@ -79,7 +109,9 @@
     entry('yieldLine', 'Yield line', 'Lines', 'line', { note: "Five 18 × 27 in triangles per lane", source: '711-001 sheet 2' }),
     entry('school', 'School zone', 'Lines', 'line', { note: 'SCHOOL between 24 in lines', source: '711-001 sheet 12' }),
     entry('crosswalk', 'Crosswalk', 'Crosswalks', 'crosswalk', { note: 'Two 12 in transverse lines', source: '711-001 sheet 9' }),
-    entry('crosswalkSpecial', 'Special emphasis crosswalk', 'Crosswalks', 'crosswalk', { note: '24 in bars on lane lines and lane centers', source: '711-001 sheet 9' }),
+    entry('doNotBlock', 'Do not block', 'Traffic calming and areas', 'area', { note: 'Outline, message, or crosshatch', source: 'MUTCD Figure 3B-24' }),
+    entry('speedReduction', 'Speed reduction ticks', 'Traffic calming and areas', 'treatment', { note: 'Progressively closer 12 × 18 in white edge ticks', source: 'MUTCD Figure 3B-25' }),
+    entry('speedHump', 'Speed hump / bump / table', 'Traffic calming and areas', 'treatment', { note: 'Hump, table and advance warning patterns', source: 'MUTCD Figures 3B-26–28' }),
     entry('through', 'Through arrow', 'Arrows', 'symbol', { art: 'through', repeat: ARROW_SPACING }),
     entry('turnLeft', 'Left turn arrow', 'Arrows', 'symbol', { art: 'turnLeft', repeat: ARROW_SPACING }),
     entry('turnRight', 'Right turn arrow', 'Arrows', 'symbol', { art: 'turnLeft', mirror: true, repeat: ARROW_SPACING }),
@@ -120,7 +152,14 @@
   for (const item of catalog) if (['through', 'turnLeft', 'turnThroughLeft', 'uTurn', 'turnLeftRight', 'turnThroughLeftRight'].includes(item.art)) item.dot = true;
   const byId = new Map(catalog.map(item => [item.id, item]));
   // Saved roundabout approach arrows are left turn arrows with the dot.
-  const find = type => byId.get(type === 'roundabout' ? 'turnLeft' : type) ?? null;
+  const find = type => byId.get(type === 'roundabout' ? 'turnLeft' : ['crosswalkAesthetic', 'crosswalkSpecial'].includes(type) ? 'crosswalk' : type) ?? null;
+
+  // Keep older saved aesthetic crossings readable; new ones are ordinary
+  // crosswalks with a surface treatment switched on.
+  const isAesthetic = m => m.type === 'crosswalkAesthetic' || (find(m.type)?.kind === 'crosswalk' && Boolean(m.aesthetic));
+  const variantsFor = m => isAesthetic(m) ? VARIANTS.crosswalkAesthetic : VARIANTS[m.type];
+  const aestheticColor = m => m.tone === 'custom' && /^#[0-9a-f]{6}$/i.test(m.aestheticColor)
+    ? m.aestheticColor : AESTHETIC.colors[m.tone] ?? AESTHETIC.colors.brick;
 
   // Ring helpers.
   const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
@@ -335,6 +374,75 @@
   // direction of travel t. An end with the pavement edge's direction (a.t, b.t)
   // is cut along that edge, so a skewed crosswalk stops at the curb. Black
   // contrast parts come first.
+  // Clip vector polygons to a convex quadrilateral (also used for skewed
+  // crosswalk ends). No SVG patterns or raster textures: PDF stays vector.
+  function clipPolygon(points, boundary) {
+    const area = boundary.reduce((sum, p, i) => { const q = boundary[(i + 1) % boundary.length]; return sum + p[0] * q[1] - q[0] * p[1]; }, 0);
+    const sign = Math.sign(area) || 1;
+    for (let i = 0; i < boundary.length && points.length; i++) {
+      const a = boundary[i], b = boundary[(i + 1) % boundary.length];
+      const cross = p => sign * ((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]));
+      const next = [];
+      for (let j = 0; j < points.length; j++) {
+        const p = points[j], q = points[(j + 1) % points.length], u = cross(p), v = cross(q);
+        if (u >= -1e-9) next.push(p);
+        if ((u < 0) !== (v < 0)) { const f = u / (u - v); next.push([p[0] + f * (q[0] - p[0]), p[1] + f * (q[1] - p[1])]); }
+      }
+      points = next;
+    }
+    return points;
+  }
+  function strokePolygon(a, b, width) {
+    const d = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, x = (b[1] - a[1]) * width / (2 * d), y = (a[0] - b[0]) * width / (2 * d);
+    return [[a[0] + x, a[1] + y], [b[0] + x, b[1] + y], [b[0] - x, b[1] - y], [a[0] - x, a[1] - y]];
+  }
+  function aesthetic(marking, boundary) {
+    const fill = aestheticColor(marking);
+    if(marking.variant==='image')return [{fill:'none',rule:'nonzero',rings:[boundary],image:marking.aestheticImage??null,imageFit:marking.imageFit??'cover'}];
+    const parts = [{ fill, rule: 'nonzero', rings: [boundary] }], style = marking.variant ?? 'brick';
+    if (style === 'solid') return parts;
+    const b = bounds(parts), rings = [], add = p => { const r = clipPolygon(p, boundary); if (r.length >= 3) rings.push(r); };
+    const line = (a, b) => add(strokePolygon(a, b, 0.06));
+    if (style === 'polygon') {
+      const h = Math.sqrt(3);
+      for (let col = Math.floor(b.x0 / 1.5) - 1; col <= Math.ceil(b.x1 / 1.5) + 1; col++)
+        for (let row = Math.floor(b.y0 / h) - 1; row <= Math.ceil(b.y1 / h) + 1; row++) {
+          const cx = col * 1.5, cy = (row + (Math.abs(col % 2) ? 0.5 : 0)) * h;
+          const p = Array.from({length: 6}, (_, i) => [cx + Math.cos(i * Math.PI / 3), cy + Math.sin(i * Math.PI / 3)]);
+          for (let i = 0; i < 6; i++) line(p[i], p[(i + 1) % 6]);
+        }
+    } else if (style === 'stone') {
+      const vertex = (x, y) => [x + 0.35 * Math.sin(x * 3 + y * 7), y + 0.3 * Math.cos(x * 7 - y * 2)];
+      for (let y = Math.floor(b.y0 / 2) * 2 - 2; y <= b.y1 + 2; y += 2)
+        for (let x = Math.floor(b.x0 / 2) * 2 - 2; x <= b.x1 + 2; x += 2) {
+          line(vertex(x, y), vertex(x + 2, y)); line(vertex(x, y), vertex(x, y + 2));
+        }
+    } else if (['paver', 'mesh'].includes(style)) {
+      for (let y = Math.floor(b.y0 / 2) * 2; y <= b.y1 + 2; y += 2)
+        for (let x = Math.floor(b.x0 / 2) * 2; x <= b.x1 + 2; x += 2) {
+          line([x, y], [x + 2, y]); line([x, y], [x, y + 2]);
+          for (const offset of style === 'mesh' ? [0.65, 1.35] : [1]) {
+            if ((Math.round((x + y) / 2) % 2) === 0) line([x + offset, y], [x + offset, y + 2]);
+            else line([x, y + offset], [x + 2, y + offset]);
+          }
+        }
+    } else for (let y = Math.floor(b.y0); y <= b.y1 + 1; y++) {
+      if (style !== 'lattice') {
+        line([b.x0, y], [b.x1, y]);
+        for (let x = Math.floor(b.x0 / 2) * 2 - 2; x <= b.x1 + 2; x += style === 'grid' ? 1 : 2) {
+          const offset = style === 'brick' ? Math.round(y) % 2 : 0;
+          line([x + offset, y], [x + offset, y + 1]);
+        }
+      }
+    }
+    if (style === 'lattice') {
+      const h = b.y1 - b.y0;
+      for (let x = b.x0 - h; x <= b.x1 + h; x += 1.5) for (const direction of [-1, 1]) line([x, b.y0], [x + direction * h, b.y1]);
+    }
+    parts.push({ fill: '#483b32', rule: 'nonzero', rings });
+    return parts;
+  }
+
   function crosswalk(marking, a, b, bars = []) {
     const width = Math.max(CROSSWALK.min, Math.min(CROSSWALK.max, marking.width ?? CROSSWALK.width));
     const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
@@ -346,13 +454,18 @@
       return !t || Math.abs(across) < 0.2 ? base : base - o * (n.x * t.y - n.y * t.x) / across;
     };
     const band = (o0, o1) => [at(cut(a, o0, 0), o0), at(cut(b, o0, length), o0), at(cut(b, o1, length), o1), at(cut(a, o1, 0), o1)];
-    const half = width / 2, contrast = Boolean(marking.contrast), black = [], white = [];
+    const half = width / 2, contrast = Boolean(marking.contrast), black = [], white = [], surface = [];
+    if (isAesthetic(marking)) {
+      const inner = half;
+      const boundary = [[cut(a, -inner, 0), -inner], [cut(b, -inner, length), -inner], [cut(b, inner, length), inner], [cut(a, inner, 0), inner]];
+      surface.push(...aesthetic(marking, boundary).map(part => ({ ...part, imageAngle:Math.atan2(u.y,u.x), rings: part.rings.map(r => r.map(([s, o]) => at(s, o))) })));
+    }
     for (const side of [1, -1]) {
       const [o0, o1] = [side * half, side * (half + CROSSWALK.line)];
       white.push({ fill: WHITE, rule: 'nonzero', rings: [band(o0, o1)] });
       if (contrast) black.push({ fill: BLACK, rule: 'nonzero', contrast: true, rings: [band(o0 - side * CONTRAST.stopLine, o1 + side * CONTRAST.stopLine)] });
     }
-    if (marking.type === 'crosswalkSpecial') {
+    if (marking.enhanced || marking.type === 'crosswalkSpecial') {
       for (const bar of bars) {
         const t = bar.t, along = t.x * n.x + t.y * n.y;
         if (Math.abs(along) < 0.2) continue;  // nearly parallel to the crosswalk
@@ -369,7 +482,77 @@
         if (contrast) black.push({ fill: BLACK, rule: 'nonzero', contrast: true, rings: [ring(barWidth / 2 + CONTRAST.bar)] });
       }
     }
-    return { parts: [...black, ...white], length: width + 2 * CROSSWALK.line };
+    return { parts: [...surface, ...black, ...white], length: width + 2 * CROSSWALK.line };
+  }
+
+  function doNotBlock(marking, lanes) {
+    const left = Math.min(...lanes.map(l => l.left)), right = Math.max(...lanes.map(l => l.right));
+    const variant = marking.variant ?? 'outline', hasWords = ['outlineWords', 'words'].includes(variant);
+    const message = words(marking.message === 'keepClear' ? 'KEEP\nCLEAR' : 'DO\nNOT\nBLOCK', BLOCK.wordGap);
+    const length = Math.max(4, Math.min(1000, Number(marking.extent) || BLOCK.length)), parts = [];
+    const add = rings => parts.push({ fill: WHITE, rule: 'evenodd', rings });
+    const w = BLOCK.outline, box = rect(left + w, w, right - w, length - w);
+    if (variant !== 'words') add([rect(left, 0, right, length), box]);
+    if (['crosshatch', 'cross'].includes(variant)) {
+      const rings = [], line = (a, b) => { const p = clipPolygon(strokePolygon(a, b, BLOCK.hatch), box); if (p.length > 2) rings.push(p); };
+      if (variant === 'cross') { line([left, 0], [right, length]); line([right, 0], [left, length]); }
+      else for (let y = -(right - left); y < length + right - left; y += BLOCK.spacing) for (const sign of [-1, 1]) line([left, y], [right, y + sign * (right - left)]);
+      for (const ring of rings) add([ring]);
+    }
+    if (hasWords) for (const lane of lanes) {
+      const b = bounds(message.parts), scale = Math.min(1, (lane.right - lane.left - 2) / (b.x1 - b.x0)), cx = (lane.left + lane.right) / 2;
+      // Fit the complete message to the editable box interior. This is an
+      // editor sizing behavior, not a prescribed MUTCD word-height dimension.
+      const inset = variant === 'words' ? 0 : w, along = (length - 2 * inset) / (b.y1 - b.y0);
+      for (const p of message.parts) parts.push({ ...p, unit: undefined, rings: p.rings.map(r => r.map(([x, y]) => [cx + x * scale, inset + (y - b.y0) * along])) });
+    }
+    return { parts, length };
+  }
+  function speedReduction(marking, lanes) {
+    const count = Math.max(2, Math.min(100, Math.round(Number(marking.count) || TICKS.count))), length = Math.max(count * 2, Math.min(2000, Number(marking.extent) || TICKS.length));
+    const weights = Array.from({ length: count - 1 }, (_, i) => 1 - 0.75 * i / Math.max(1, count - 2)), sum = weights.reduce((a, b) => a + b, 0);
+    const parts = []; let y = 0;
+    for (let i = 0; i < count; i++) {
+      for (const l of lanes) parts.push({ fill: WHITE, rule: 'nonzero', unit: y + TICKS.width / 2,
+        rings: [rect(l.left, y, l.left + TICKS.reach, y + TICKS.width), rect(l.right - TICKS.reach, y, l.right, y + TICKS.width)] });
+      y += (weights[i] ?? 0) / sum * (length - TICKS.width);
+    }
+    return { parts, length };
+  }
+  function speedHump(marking) {
+    const variant = marking.variant ?? 'humpA', parts = [];
+    // Keep older saved records readable; these duplicates are no longer offered
+    // in the speed-hump menu. New messages/crosswalks use their existing tools.
+    if (['bump', 'hump'].includes(variant)) return words(variant.toUpperCase(), 0);
+    if (variant === 'advance') return { parts: HUMP.advance.map((y, i) => ({ fill: WHITE, rule: 'nonzero', unit: y + 0.5, rings: [rect(-(i + 1) / 2, y, (i + 1) / 2, y + 1)] })), length: 100.5 };
+    const table = variant.startsWith('table') || variant.startsWith('crosswalk'), crossed = variant.startsWith('crosswalk');
+    const middle = Math.max(CROSSWALK.min, Math.min(CROSSWALK.max, Number(marking.tableWidth) || HUMP.table));
+    const length = table ? 12 + middle + (crossed ? 2 * CROSSWALK.line : 0) : HUMP.length;
+    const add = (ring, unit) => parts.push({ fill: WHITE, rule: 'nonzero', rings: [ring], ...(unit == null ? {} : { unit }) });
+    const chevron = (width, height, y) => {
+      const m = 2 * height / width, inset = HUMP.stripe * Math.hypot(1, m), x = width / 2;
+      return [[-x, y], [0, y + height], [x, y], [x - inset / m, y], [0, y + height - inset], [-x + inset / m, y]];
+    };
+    if (variant === 'humpC') {
+      const width = HUMP.wide, height = HUMP.length, slope = 2 * height / width;
+      const pitch = (HUMP.stripe + HUMP.gap) * Math.hypot(1, slope);
+      for (const y of [0, -pitch]) add(clipPolygon(chevron(width, height, y), rect(-width / 2, 0, width / 2, height)));
+      add([[-HUMP.tip / 2, 0], [0, HUMP.tip / 2 * slope], [HUMP.tip / 2, 0]]);
+    } else {
+      const ramp = y => {
+        const height = 6, slope = 2 * height / HUMP.width;
+        const innerTip = height - (HUMP.stripe + HUMP.gap) * Math.hypot(1, slope);
+        add(chevron(HUMP.width, height, y), y + height / 2);
+        add([[-innerTip / slope, y], [0, y + innerTip], [innerTip / slope, y]], y + height / 2);
+      };
+      ramp(0);
+      if (variant.endsWith('B')) ramp(length - 6);
+    }
+    if (crossed) {
+      add(rect(-6, 6, 6, 6 + CROSSWALK.line));
+      add(rect(-6, 6 + CROSSWALK.line + middle, 6, length - 6));
+    }
+    return { parts, length };
   }
 
   // A marking's paint, before contrast: { parts, length } in local feet. Lines need
@@ -387,6 +570,15 @@
       return { ...g, parts: g.parts.map(p => ({ ...p, unit: half })) };
     }
     switch (item.id) {
+      case 'doNotBlock': return doNotBlock(marking, lanes);
+      case 'speedReduction': return speedReduction(marking, lanes);
+      case 'speedHump': {
+        const g = speedHump(marking);
+        if ((marking.variant ?? '').startsWith('crosswalk')) for (const part of g.parts.slice(-2)) {
+          const b = bounds([part]); part.rings = [rect(left, b.y0, right, b.y1)];
+        }
+        return g;
+      }
       case 'stopLine':
         return { parts: [{ fill: WHITE, rule: 'nonzero', rings: [rect(left, 0, right, STOP_LINE)] }], length: STOP_LINE };
       case 'yieldLine': {
@@ -502,7 +694,7 @@
   }
 
   const api = {
-    catalog, find, geometry, build, repeats, bounds, textLines, unsupported, lettering, crosswalk,
+    catalog, find, geometry, build, repeats, bounds, textLines, unsupported, lettering, crosswalk, isAesthetic, variantsFor, aestheticColor, VARIANTS, BLOCK, TICKS, HUMP, AESTHETIC,
     SHIELD, CFX_TOLL, CFX_OPTION, SURFACE, stretches, CROSSWALK, YIELD_AHEAD, LINE_GAP, CONTRAST, MESSAGE_BACK, ARROW_SPACING, TWLTL_SPACING, STOP_LINE, LETTER,
   };
   app.markingCatalog = api;

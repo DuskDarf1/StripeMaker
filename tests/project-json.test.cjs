@@ -24,3 +24,30 @@ test('additive versions and unknown fields are accepted without mutation only wi
  p.minReaderVersion=2;assert.throws(()=>validate(p),/Unsupported project version/);
  p.version=1;p.minReaderVersion=2;assert.throws(()=>validate(p));
 });
+
+
+test('simulator lane exclusions and exit routes round-trip and reject malformed references',()=>{
+ const p=sample();p.sheets[0].data.vehicleSpawns=[{road:1,e:0,excludedLanes:[1],routes:[{lane:0,exit:{road:1,lane:0,e:1}}]}];
+ const before=JSON.stringify(p);assert.equal(validate(p),p);assert.equal(JSON.stringify(p),before);
+ for(const change of [s=>s.e=2,s=>s.excludedLanes=[-1],s=>s.routes={},s=>s.routes[0].lane=0.5,s=>s.routes[0].exit=null,s=>s.routes[0].exit.road='one',s=>s.routes[0].exit.e=4]) {
+  const q=structuredClone(p);change(q.sheets[0].data.vehicleSpawns[0]);assert.throws(()=>validate(q));
+ }
+});
+
+
+test('simulator output, route names and percentages round-trip and reject invalid values',()=>{
+ const p=sample();p.sheets[0].data.vehicleSpawns=[{road:1,outputs:{0:120},routes:[{lane:0,name:'Downtown',percent:75,exit:{road:1,lane:0,e:1}},{lane:0,name:'Airport',percent:25,exit:{road:1,lane:1,e:1}}]}];
+ assert.equal(validate(p),p);
+ for(const change of [s=>s.outputs={0:-1},s=>s.outputs={0:601},s=>s.outputs={0:1.5},s=>s.outputs={oops:10},s=>s.routes[0].percent=101,s=>s.routes[0].percent=-1,s=>s.routes[0].name=10,s=>s.routes[0].name='a'.repeat(81)]){
+  const q=structuredClone(p);change(q.sheets[0].data.vehicleSpawns[0]);assert.throws(()=>validate(q));
+ }
+});
+
+
+test('grouped entrance spawns preserve lane shares and road-wide exit references',()=>{
+ const p=sample();p.sheets[0].data.vehicleSpawns=[{road:1,rate:120,laneShares:{0:75,1:25},routes:[{name:'Downtown',percent:100,exit:{road:1,e:1}}]}];
+ const before=JSON.stringify(p);assert.equal(validate(p),p);assert.equal(JSON.stringify(p),before);
+ for(const change of [s=>s.rate=-1,s=>s.rate=601,s=>s.laneShares={0:101},s=>s.laneShares={bad:10},s=>s.laneShares={0:'50'}]){
+  const q=structuredClone(p);change(q.sheets[0].data.vehicleSpawns[0]);assert.throws(()=>validate(q));
+ }
+});

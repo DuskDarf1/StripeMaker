@@ -265,3 +265,98 @@ test('emphasis bar is 24 inches, with 4-inch contrast on each side',()=>{
  near(span(white)*12,24,1e-9,'white width');
  near(span(black)*12,32,1e-9,'white plus black surround');
 });
+
+test('all traffic-calming and area variants produce finite vector paint', () => {
+  for (const [type, variants] of Object.entries(C.VARIANTS)) for (const [variant] of variants) {
+    const g = C.build({type, variant});
+    assert.ok(g.parts.length && g.length > 0, `${type}/${variant}`);
+    assert.ok(g.parts.flatMap(p=>p.rings.flat()).every(p=>p.every(Number.isFinite)));
+  }
+});
+
+test('Do Not Block A–D retain outlines, messages and six-inch hatching', () => {
+  const lanes = [{left:-12,right:0},{left:0,right:12}];
+  const a = C.geometry({type:'doNotBlock',variant:'outline'},lanes);
+  assert.equal(a.parts.length,1); assert.equal(a.parts[0].rings.length,2);
+  assert.equal(C.bounds(a.parts).x1-C.bounds(a.parts).x0,24);
+  const inner=C.bounds([{rings:[a.parts[0].rings[1]]}]); assert.equal(inner.x0,-11);
+  for(const variant of ['outlineWords','crosshatch','cross','words']) {
+    const g=C.geometry({type:'doNotBlock',variant},lanes);
+    assert.ok(g.parts.length>1); assert.equal(g.parts[0].rings[0].length===4 && g.parts[0].rings.length===2,variant!=='words');
+  }
+  for(const message of ['doNotBlock','keepClear']) for(const extent of [10,40,120]) for(const variant of ['outlineWords','words']) {
+    const g=C.geometry({type:'doNotBlock',variant,message,extent});
+    assert.equal(g.length,extent);
+    const ink=C.bounds(variant==='words'?g.parts:g.parts.slice(1));
+    near(ink.y0,variant==='words'?0:1,1e-8,'message begins at the box interior');
+    near(ink.y1,extent-(variant==='words'?0:1),1e-8,'message fills the box length');
+  }
+});
+
+test('speed reduction ticks keep the specified dimensions and decrease spacing', () => {
+  const g=C.geometry({type:'speedReduction',count:12,extent:150});
+  const stations=g.parts.map(p=>p.unit);
+  for(const p of g.parts) for(const r of p.rings) {
+    const b=C.bounds([{rings:[r]}]); near(b.x1-b.x0,1.5,1e-8,'18 inches into lane'); near(b.y1-b.y0,1,1e-8,'12 inches wide');
+  }
+  const gaps=stations.slice(1).map((p,i)=>p-stations[i]);
+  for(let i=1;i<gaps.length;i++) assert.ok(gaps[i]<gaps[i-1]);
+  assert.equal(g.parts.length,12); near(C.bounds(g.parts).y1,150,1e-8,'series length');
+});
+
+test('humps and advance warning bars follow the dimensioned options', () => {
+  const a=C.geometry({type:'speedHump',variant:'humpA'}),b=C.geometry({type:'speedHump',variant:'humpB'}),c=C.geometry({type:'speedHump',variant:'humpC'});
+  assert.equal(a.length,12); assert.equal(a.parts.length,2); assert.equal(b.parts.length,4);
+  assert.equal(C.bounds(a.parts).x1-C.bounds(a.parts).x0,6);
+  assert.equal(C.bounds(a.parts).y1,6,'A marks the approach half only');
+  assert.equal(C.bounds(b.parts).y1,12,'B marks both halves');
+  const outer=a.parts[0].rings[0],inner=a.parts[1].rings[0];
+  assert.equal(inner.length,3,'the inner triangle from Figure 3B-26 is present');
+  near((outer[1][1]-outer[4][1])/Math.sqrt(5),1,1e-8,'12-inch diagonal band');
+  near((outer[4][1]-inner[1][1])/Math.sqrt(5),1,1e-8,'12-inch clear diagonal gap');
+  near(C.bounds(c.parts).x1-C.bounds(c.parts).x0,9.5,1e-8,'option C width');
+  assert.equal(c.parts.length,3);
+  near(C.bounds([c.parts[2]]).x1-C.bounds([c.parts[2]]).x0,10.4/12,1e-8,'option C terminal triangle');
+  for(const variant of ['tableA','tableB']) {
+    const table=C.geometry({type:'speedHump',variant,tableWidth:14});
+    assert.equal(table.length,26);
+    assert.equal(table.parts.length,variant==='tableA'?2:4);
+    for(const part of table.parts) {
+      const box=C.bounds([part]);
+      assert.ok(box.y1<=6 || box.y0>=20,'no paint in the table center');
+    }
+  }
+  const g=C.geometry({type:'speedHump',variant:'advance'});
+  assert.equal(g.parts.length,8);
+  g.parts.forEach((p,i)=>{const b=C.bounds([p]);assert.equal(b.x1-b.x0,i+1);assert.equal(b.y1-b.y0,1);assert.equal(g.length-p.unit,100-C.HUMP.advance[i]);});
+  assert.equal(C.geometry({type:'speedHump',variant:'crosswalkB',tableWidth:14}).length,28);
+  assert.deepEqual(C.VARIANTS.speedHump.map(([id])=>id),['humpA','humpB','humpC','tableA','tableB','advance']);
+});
+
+test('aesthetic treatments fill the crossing to the transverse lines on skewed ends', () => {
+  for(const [variant] of C.VARIANTS.crosswalkAesthetic) {
+    const a={x:0,y:0,t:{x:0.2,y:1}},b={x:30,y:0,t:{x:-0.15,y:1}};
+    const g=C.crosswalk({type:'crosswalkAesthetic',variant,width:10},a,b);
+    const white=g.parts.filter(p=>p.fill==='#ffffff'),surface=g.parts.filter(p=>p.fill!=='#ffffff');
+    assert.equal(white.length,2);
+    for(const p of surface.flatMap(p=>p.rings.flat())) {
+      assert.ok(Math.abs(p[1])<=5+1e-8);
+      assert.ok(p[0]>=0.2*p[1]-1e-8 && p[0]<=30-0.15*p[1]+1e-8,'texture stays inside skewed ends');
+    }
+  }
+});
+
+
+test('crosswalk treatment toggles preserve white markings and accept custom colors', () => {
+  assert.ok(!C.catalog.some(m => m.id === 'crosswalkAesthetic'));
+  const a={x:0,y:0},b={x:30,y:0},bars=[{x:15,y:0,t:{x:0,y:1}}];
+  for(const type of ['crosswalk','crosswalkSpecial']) {
+    const base={type,width:10,variant:'solid',tone:'custom',aestheticColor:'#346b85'};
+    const plain=C.crosswalk(base,a,b,bars),painted=C.crosswalk({...base,aesthetic:true},a,b,bars);
+    assert.deepEqual(painted.parts.filter(p=>p.fill==='#ffffff'),plain.parts);
+    assert.equal(painted.parts[0].fill,'#346b85');
+    assert.equal(C.crosswalk({...base,aesthetic:true,aestheticColor:'bad'},a,b).parts[0].fill,C.AESTHETIC.colors.brick);
+  }
+  assert.deepEqual(C.crosswalk({type:'crosswalkAesthetic',variant:'stone',tone:'tan'},a,b),
+    C.crosswalk({type:'crosswalk',aesthetic:true,variant:'stone',tone:'tan'},a,b));
+});

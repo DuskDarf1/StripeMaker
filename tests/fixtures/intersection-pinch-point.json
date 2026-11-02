@@ -1,0 +1,131 @@
+{
+  "id": "c77cfcf9-81a1-45a7-adaa-822722c9e08a",
+  "name": "Intersection 4",
+  "x": 7796.2724878076115,
+  "y": 14441.881342018221,
+  "rotation": 0,
+  "approaches": [
+    {
+      "id": "e7f1cc22-fd2d-4f68-ba05-632376cc9572",
+      "angle": 0,
+      "incoming": 0,
+      "outgoing": 3,
+      "width": 12,
+      "outWidth": 12,
+      "median": 0,
+      "radius": 0,
+      "nose": 60,
+      "surface": "grass",
+      "x": 55,
+      "y": 0,
+      "inLanes": [],
+      "outLanes": [
+        "f9544a04-5480-4ee8-bf05-341e201a0c55",
+        "adfb27dc-50b8-4368-b39b-8ba63eb4224c",
+        "2ea0db79-f3ee-4068-ba92-ad99993b1ded"
+      ]
+    },
+    {
+      "id": "e07fa3fb-04b3-440b-8ab3-eb11ef4c5b0f",
+      "angle": 168.34995759455967,
+      "incoming": 3,
+      "outgoing": 0,
+      "width": 12,
+      "outWidth": 12,
+      "median": 0,
+      "radius": 0,
+      "nose": 60,
+      "surface": "grass",
+      "x": -287.06169617453276,
+      "y": 65.15095080937165,
+      "inLanes": [
+        "f70ae8f3-31e8-4b32-b576-58148e33e14f",
+        "056a9794-9fdf-4bd3-9f8c-66e509fc8b9c",
+        "fe01a51f-1e20-48c5-beaf-6d4ba5a05c1f"
+      ],
+      "outLanes": []
+    },
+    {
+      "id": "cc537bb8-73f7-462a-99ed-b42a1029c6f1",
+      "angle": 179.51656406480248,
+      "incoming": 3,
+      "outgoing": 0,
+      "width": 12,
+      "outWidth": 12,
+      "median": 0,
+      "radius": 81.8785918786425,
+      "nose": 60,
+      "surface": "grass",
+      "x": -287.7840913346711,
+      "y": -0.39331145529342326,
+      "inLanes": [
+        "259f6a35-7c04-4348-9d3a-60b1d95504f3",
+        "ea795093-7d29-4416-b18f-70b29e6ab559",
+        "fc468d4e-387e-4425-bc1b-1ef9d50871a8"
+      ],
+      "outLanes": []
+    }
+  ],
+  "movements": [
+    {
+      "id": "8d719146-79be-4313-9241-02943d03f2e3",
+      "from": "cc537bb8-73f7-462a-99ed-b42a1029c6f1",
+      "input": "259f6a35-7c04-4348-9d3a-60b1d95504f3",
+      "to": "e7f1cc22-fd2d-4f68-ba05-632376cc9572",
+      "output": "f9544a04-5480-4ee8-bf05-341e201a0c55",
+      "pullIn": 50,
+      "pullOut": 50,
+      "autoCurve": true
+    },
+    {
+      "id": "06ae9a9e-e449-4847-98f6-d882a5a655e4",
+      "from": "cc537bb8-73f7-462a-99ed-b42a1029c6f1",
+      "input": "ea795093-7d29-4416-b18f-70b29e6ab559",
+      "to": "e7f1cc22-fd2d-4f68-ba05-632376cc9572",
+      "output": "adfb27dc-50b8-4368-b39b-8ba63eb4224c",
+      "pullIn": 50,
+      "pullOut": 50,
+      "autoCurve": true
+    },
+    {
+      "id": "9eefa205-ab4c-41eb-933f-991e41d13e03",
+      "from": "cc537bb8-73f7-462a-99ed-b42a1029c6f1",
+      "input": "fc468d4e-387e-4425-bc1b-1ef9d50871a8",
+      "to": "e7f1cc22-fd2d-4f68-ba05-632376cc9572",
+      "output": "2ea0db79-f3ee-4068-ba92-ad99993b1ded",
+      "pullIn": 50,
+      "pullOut": 50,
+      "autoCurve": true
+    },
+    {
+      "id": "6c027c36-35d3-409d-b0f2-cc7fafd5ea0e",
+      "from": "e07fa3fb-04b3-440b-8ab3-eb11ef4c5b0f",
+      "input": "f70ae8f3-31e8-4b32-b576-58148e33e14f",
+      "to": "e7f1cc22-fd2d-4f68-ba05-632376cc9572",
+      "output": "f9544a04-5480-4ee8-bf05-341e201a0c55",
+      "pullIn": 50,
+      "pullOut": 50,
+      "autoCurve": true
+    },
+    {
+      "id": "b014bc9a-39fb-4062-a2b8-1ad85cd56be3",
+      "from": "e07fa3fb-04b3-440b-8ab3-eb11ef4c5b0f",
+      "input": "056a9794-9fdf-4bd3-9f8c-66e509fc8b9c",
+      "to": "e7f1cc22-fd2d-4f68-ba05-632376cc9572",
+      "output": "adfb27dc-50b8-4368-b39b-8ba63eb4224c",
+      "pullIn": 50,
+      "pullOut": 50,
+      "autoCurve": true
+    },
+    {
+      "id": "b4f79a8e-c368-422b-8a73-f3e87a9798d3",
+      "from": "e07fa3fb-04b3-440b-8ab3-eb11ef4c5b0f",
+      "input": "fe01a51f-1e20-48c5-beaf-6d4ba5a05c1f",
+      "to": "e7f1cc22-fd2d-4f68-ba05-632376cc9572",
+      "output": "2ea0db79-f3ee-4068-ba92-ad99993b1ded",
+      "pullIn": 50,
+      "pullOut": 50,
+      "autoCurve": true
+    }
+  ]
+}

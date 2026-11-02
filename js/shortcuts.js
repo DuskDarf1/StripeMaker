@@ -37,6 +37,8 @@
     ['CutElements', 'Cut selection', 'CTRL+X', null],
     ['PasteElements', 'Paste', 'CTRL+V', null],
     ['DuplicateElements', 'Duplicate selection', 'CTRL+D', null],
+    ['RotateLeft', 'Rotate selection left', '[', () => app.selection?.rotate(-15)],
+    ['RotateRight', 'Rotate selection right', ']', () => app.selection?.rotate(15)],
     ['SelectAll', 'Select all', 'CTRL+A', null],
     ['ClearAll', 'Clear All', 'CTRL+BACKSPACE', click('clearAll')],
     ['ZoomIn', 'Zoom In', '=', () => app.sheets?.zoomBy?.(1.25)],

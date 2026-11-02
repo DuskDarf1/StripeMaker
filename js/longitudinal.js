@@ -24,7 +24,9 @@
     parent?.append(e);
     return e;
   };
-  const keyOf = on => (on.road != null ? `r:${on.road}:${on.k}` : `m:${on.intersection}:${on.movement}:${on.side}`);
+  const keyOf = on => on.road != null ? `r:${on.road}:${on.k}` : on.roundabout
+    ? `m:${on.intersection}:roundabout:${on.approach}:${on.incoming ? "in" : "out"}:${on.k}`
+    : `m:${on.intersection}:${on.movement}:${on.side}`;
 
   // Polyline helpers (sheet pixels).
   function measure(points) {
@@ -69,6 +71,21 @@
 
   // Registry: built each render from the road editor and intersections.
   function begin(sheet, targets) {
+    // Snapping targets are needed on demand when there are no user lines.
+    // Opening the line editor or drawing a road still materializes the same
+    // complete registry; dragging an unmarked intersection need not build it.
+    if (typeof targets === 'function') {
+      const build = targets;
+      if (sheet.lines?.length) return begin(sheet, build());
+      let ready;
+      const lazy = { sheet };
+      for (const key of ['targets', 'centers', 'phases']) Object.defineProperty(lazy, key, {
+        get: () => (ready ??= begin(sheet, build()))[key],
+      });
+      sheet.lines ??= [];
+      return registry = lazy;
+    }
+
     const map = new Map();
     for (const t of targets) {
       if (t.points.length < 2) continue;
@@ -160,7 +177,7 @@
       // Default lines stay off the travel lanes of roads joined to them; a line
       // placed by hand is drawn where it was placed.
       const user = p.line !== base;
-      paint(sheet, slice(target, p.a, p.b), p.line, (start + p.a) / k, parent, user ? [] : polygons, user && p.line.on?.k === 'C' ? {} : options);
+      paint(sheet, slice(target, p.a, p.b).map(q=>app.itemTransform.apply(p.line,q)), p.line, (start + p.a) / k, parent, user ? [] : polygons, user && p.line.on?.k === 'C' ? {} : options);
     }
   }
   function drawMovementLines(sheet, parent) {
@@ -261,10 +278,10 @@
       if (drag?.preview) for (const item of drag.preview) paint(sheet, slice(item.target, item.a, item.b), { ...draft, on: item.target.on }, 0, svg('g', { opacity: '0.8' }, view));
       const line = current(), target = line && registry.targets.get(keyOf(line.on));
       if (!target) return;
-      svg('path', { d: pathData(slice(target, line.from * target.length, line.to * target.length)), class: 'lineSelected', 'vector-effect': 'non-scaling-stroke' }, view);
+      svg('path', { d: pathData(pathOf(line)), class: 'lineSelected', 'vector-effect': 'non-scaling-stroke' }, view);
       const name = S.find(line.style)?.name ?? 'Line';
       for (const end of ['from', 'to']) {
-        const p = pointAt(target, line[end] * target.length), s = sheets.toScreen(p);
+        const p = app.itemTransform.apply(line,pointAt(target, line[end] * target.length)), s = sheets.toScreen(p);
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'markingHandle'; b.dataset.end = end;
         b.setAttribute('aria-label', `${name} ${end === 'from' ? 'start' : 'end'}. Drag along the line, or use the arrow keys (Shift for 10 ft); Delete removes the line.`);
@@ -282,7 +299,7 @@
       app.history.record();
       if (message) tell(message);
     }
-    function select(id) { selected = id; selectedSheet = sheets.selected; updatePanel(); refreshOverlay(); }
+    function select(id) { selected = id; selectedSheet = sheets.selected; updatePanel(); refreshOverlay(); app.selection?.editorChanged(); }
     function remove() {
       const sheet = sheets.selected;
       if (!current()) return;
@@ -305,7 +322,10 @@
       const k0 = target.on.k === 'C' ? 0 : target.on.k, k1 = other ? other.target.on.k : k0;
       const p0 = pointAt(target, s), p1 = pointAt(target, end);
       const out = [];
+      const model = sheets.selected.roads.find(r => r.id === road);
+      const travel = i => i >= 0 && i < model?.lanes && !['bike','bufferedBike','twoWayBike'].includes(model.laneTypes?.[i]?.type);
       for (let k = Math.min(k0, k1); k <= Math.max(k0, k1); k++) {
+        if (!travel(k-1) && !travel(k)) continue;
         const t = registry.targets.get(`r:${road}:${k}`);
         if (!t) continue;
         const a = project(t, p0).s, b = project(t, p1).s;
@@ -480,10 +500,7 @@
       const can = S.contrastable({ ...line, color });
       get('lineContrast').disabled = !can;
       get('lineContrast').checked = can && Boolean(line.contrast);
-      get('lineContrastHint').textContent = !can ? 'Black contrast is for white lines.'
-        : line.style === 'skip' ? '10 ft white, 10 ft black, 20 ft gap. Not used on edge lines.'
-          : style.dot ? 'Every other dot gets a black block of the same length. Not used on edge lines.'
-            : '1.5 in black on both sides. Not used on edge lines.';
+      get('lineContrastHint').textContent = !can ? 'Choose a white line to enable high contrast.' : '';
       if (!sheet) tell('Upload a sheet first.');
       else if (!sheet.inchesPerPixel) tell('Set the sheet’s scale (Sheets › Set Scale) to add markings.');
       else if (!get('lineStatus').textContent || /^(Upload|Set the)/.test(get('lineStatus').textContent)) tell(HINT);
@@ -501,12 +518,13 @@
     // For selection: a user line's path, and the user line near a point.
     function pathOf(line) {
       const target = registry?.targets.get(keyOf(line.on ?? {}));
-      return target ? slice(target, line.from * target.length, line.to * target.length) : [];
+      return target ? slice(target, line.from * target.length, line.to * target.length).map(p=>app.itemTransform.apply(line,p)) : [];
     }
     function lineAt(point, tolerance) {
       for (const line of [...(sheets.selected?.lines ?? [])].reverse()) {
         const target = registry?.targets.get(keyOf(line.on ?? {}));
-        const found = target && project(target, point);
+        const t=line.placementTransform, q=t?app.itemTransform.apply({placementTransform:{angle:-t.angle,x:0,y:0}},{x:point.x-t.x,y:point.y-t.y}):point;
+        const found = target && project(target, q);
         if (found && found.distance <= tolerance && found.s >= line.from * target.length && found.s <= line.to * target.length) return line;
       }
       return null;
@@ -518,7 +536,7 @@
       const found = nearest(point);
       return found && { on: found.target.on, s: found.s, length: found.target.length };
     }
-    Object.assign(app.longitudinal, { refreshOverlay, source, pathOf, lineAt, focus, targetAt });
+    Object.assign(app.longitudinal, { selectedItem:()=>active()&&current()?{kind:"lines",id:selected}:null, refreshOverlay, source, pathOf, lineAt, focus, targetAt });
     updatePanel();
   });
 })();

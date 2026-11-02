@@ -56,6 +56,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     }));
     await page.reload();await page.waitForFunction(()=>StripeMaker.sheets.selected?.surfaces?.length===3);
     assert.equal(new Set((await surfaces()).map(s=>s.span)).size,1);
-    assert.deepEqual(errors,[]);console.log('PASS: multi-node colored pavement, shared white/green phase, undo/redo.');
+    await page.evaluate(()=>{StripeMaker.showEditor('markingsEditor');StripeMaker.markings.showTab('lateral');});
+    await page.click('#chooseMarking');await page.fill('#markingSearch','Red bus lane (solid)');await page.locator('#markingGrid button').first().click();
+    await page.keyboard.down('Shift');await clickAt(550);await clickAt(1200);await page.keyboard.up('Shift');
+    const all=(await surfaces()).filter(s=>s.color==='red');
+    assert.equal(all.length,6,'two travel lanes on each of three linked segments, skipping the interior bike lane');
+    for(const road of [1,2,3])assert.deepEqual(all.filter(s=>s.on.road===road).map(s=>s.on.lane),[0,2]);
+    await page.click('#undoButton');assert.equal((await surfaces()).length,3);
+    await page.click('#redoButton');assert.equal((await surfaces()).length,9);
+    assert.deepEqual(errors,[]);console.log('PASS: multi-node colored pavement, shared white/green phase, Shift all lanes, undo/redo.');
   }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

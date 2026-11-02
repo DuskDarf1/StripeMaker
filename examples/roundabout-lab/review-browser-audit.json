@@ -1,0 +1,778 @@
+{
+  "observedAt": "2026-10-31T17:39:26.081Z",
+  "files": [
+    {
+      "file": "Roundabout Inspection Library.json",
+      "imported": 93,
+      "expected": 93,
+      "reload": true,
+      "exportCount": 93
+    }
+  ],
+  "errors": [],
+  "cases": [
+    {
+      "id": "R001",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R002",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R003",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R004",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R005",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R006",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R007",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R008",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R009",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R010",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R011",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R012",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R013",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R014",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R015",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R016",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R017",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R018",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R019",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R020",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R021",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R022",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R023",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R024",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R025",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R026",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R027",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R028",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R029",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R030",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R031",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R032",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R033",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R034",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R035",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R036",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R037",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R038",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R039",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R040",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R041",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R042",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R043",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R044",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R045",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R046",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R047",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R048",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R049",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R050",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R051",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R052",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R053",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R054",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R055",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R056",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R057",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R058",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R059",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R060",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R061",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R062",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R063",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R064",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R065",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R066",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R067",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R068",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R069",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R070",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R071",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R072",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R073",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R074",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R075",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R076",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R077",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R078",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R079",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R080",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R081",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": [
+        {
+          "path": "joints.1.x",
+          "before": 1053.8666666666666,
+          "after": 1053.8666666666668
+        },
+        {
+          "path": "joints.2.x",
+          "before": 1053.8666666666666,
+          "after": 1053.8666666666668
+        }
+      ]
+    },
+    {
+      "id": "R082",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R083",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R084",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R085",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R086",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R087",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R088",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R089",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R090",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R091",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R092",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    },
+    {
+      "id": "R093",
+      "rendered": true,
+      "finite": true,
+      "idempotent": true,
+      "inputChanges": [],
+      "roundoff": []
+    }
+  ],
+  "summary": {
+    "rendered": 93,
+    "failures": [],
+    "inputChanges": [],
+    "pageErrors": 0,
+    "fileErrors": 0
+  },
+  "comparisonTolerance": 1e-08
+}

@@ -126,3 +126,36 @@ python -m venv /tmp/markings-venv && /tmp/markings-venv/bin/pip install fonttool
 ```
 
 Poppler's `pdftocairo` must be on PATH. No Python package is used by the web app.
+
+## Area and traffic-calming treatments
+
+`js/marking-catalog.js` constructs vector polygons from the [MUTCD 11th Edition,
+Revision 1](https://mutcd.fhwa.dot.gov/pdfs/11th_Editionr1/mutcd11theditionr1hl.pdf):
+
+- Figure 3B-24 / §3B.26: Do Not Block options A–D, including both illustrated
+  crosshatching examples. Outline uses a 12-inch wide white line (twice the
+  normal 6-inch line); interior hatching uses 6 inches. Box length and hatch
+  spacing are starting values, not specified dimensions. Word messages use the
+  existing SHS pavement alphabet, with the compact spacing exception in §3B.20
+  paragraph 07. The editor stretches the complete message longitudinally to
+  fill the box interior (inside its outline); this user-requested sizing is
+  not a prescribed MUTCD letter height.
+- Figure 3B-25 / §3B.28: 12-inch by 18-inch white ticks at both lane edges.
+  Count, overall length and the decreasing spacing progression are editor
+  choices; the MUTCD specifies progressively reduced spacing, not a rate.
+- Figures 3B-26–27 / §3B.29 (PDF pages 626–627): hump options A/B each use a
+  6-foot-wide, 6-foot-long ramp pattern consisting of an outer 12-inch chevron
+  **and an inner white triangle**, with 12 inches of clear space measured normal
+  to the diagonal. A marks the approach half; B repeats it on the departure
+  half. C uses two nested chevrons and the separately dimensioned 10.4-inch
+  terminal triangle in a 9.5-foot-wide, typically 12-foot-long footprint. Table
+  A/B use the corresponding ramp patterns separated by an editable center
+  length, with no crosswalk lines added. The picker omits duplicate raised
+  crosswalk and BUMP/HUMP message entries; older saved variants remain readable.
+- Figure 3B-28 / §3B.30: eight 12-inch bars, 1 through 8 feet wide, at 100, 80,
+  62, 46, 32, 20, 10 and 2 feet before the leading edge.
+- Figure 3H-1 / §3H.03: aesthetic material/pattern examples in earth tones,
+  separated from the transverse crosswalk lines by 6 inches. Tile sizes and
+  screen colors are illustrative, not prescribed fabrication details or a
+  certification of material chromaticity. They remain a separate surface layer
+  beneath the required crosswalk markings.
