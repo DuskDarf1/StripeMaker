@@ -547,13 +547,15 @@
       </div>
       <div class="editorContent">
         <p class="scaleHint">Zoom in and drag the two yellow points across a known distance, then enter that distance in inches and apply.</p>
+        <p id="scaleDistanceHelp" class="scaleHint"><strong>144 inches = 12 ft</strong> (one typical travel lane).</p>
         <div class="scaleReadout">
           <output id="scalePixels" for="scaleInches">0 px</output>
           <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
-          <input id="scaleInches" type="number" min="0.1" step="any" value="144" aria-label="Measured distance in inches" />
+          <input id="scaleInches" type="number" min="0.1" step="any" value="144" aria-label="Measured distance in inches" aria-describedby="scaleDistanceHelp scaleWarning" />
           <span>in</span>
         </div>
         <p id="scaleResult" class="scaleResult" aria-live="polite"></p>
+        <p id="scaleWarning" class="scaleHint" role="status" hidden><strong>Below 100 inches, roads and markings will appear very large.</strong> Check the measured distance before applying.</p>
         <div class="headActions">
           <button type="button" id="applyScale">Apply</button>
           <button type="button" id="cancelScale">Cancel</button>

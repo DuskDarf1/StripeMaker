@@ -634,6 +634,7 @@
     function updateReadout() {
       const pixels = pixelDistance();
       const inches = Number(scaleInches.value);
+      document.getElementById("scaleWarning").hidden=!(inches>0&&inches<100);
       scalePixels.textContent = `${pixels.toFixed(1)} px`;
       const valid = pixels >= 1 && inches > 0;
       document.getElementById("applyScale").disabled = !valid;
