@@ -26,7 +26,7 @@
 
     let tab = 'lateral';
     let selected = null, selectedSheet = null;
-    let hover = null, hoverMarking = null, press = null, drag = null;
+    let hover = null, hoverMarking = null, press = null, drag = null, hoverFrame = 0;
     let crosswalkStart = null;          // a crosswalk's first end, until the second click
     let tracks = new Map(), drawn = new Map(), tracksReady = true;
     // The next marking's settings; a selected marking's settings show instead.
@@ -37,7 +37,7 @@
     const current = () => sheets.selected?.markings?.find(m => m.id === selected) ?? null;
     const model = () => current() ?? draft;
     const copyOptions = (from, to) => {
-      for (const key of ['variant', 'message', 'extent', 'count', 'tableWidth', 'tone', 'enhanced', 'aesthetic', 'aestheticColor', 'aestheticImage', 'imageFit']) if (from[key] != null) to[key] = from[key];
+      for (const key of ['variant', 'message', 'extent', 'count', 'tableWidth', 'tone', 'enhanced', 'forceBars', 'barAngle', 'aesthetic', 'aestheticColor', 'aestheticImage', 'imageFit']) if (from[key] != null) to[key] = from[key];
       return to;
     };
     const ppf = sheet => 12 / sheet.inchesPerPixel;
@@ -62,16 +62,31 @@
         const t = p.tangent ?? { x: b.x - a.x, y: b.y - a.y }, n = Math.hypot(t.x, t.y) || 1;
         return { x: t.x / n, y: t.y / n };
       });
-      return { ...track, along, tangents, length: along.at(-1), count: track.bounds[0].length };
+      // A successful lane hit is at most its largest lateral bound plus the
+      // existing one-pixel longitudinal tolerance from a centerline segment.
+      // These conservative boxes reject distant segments before interpolation;
+      // curved/tapered lanes keep the same exact nearest-lane calculation below.
+      let pickPadding=1,minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+      for(const lanes of track.bounds)for(const [left,right] of lanes)pickPadding=Math.max(pickPadding,Math.abs(left)+1,Math.abs(right)+1);
+      for(const p of line){minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);}
+      const pickBounds={minX:minX-pickPadding,minY:minY-pickPadding,maxX:maxX+pickPadding,maxY:maxY+pickPadding};
+      return { ...track, along, tangents, length: along.at(-1), count: track.bounds[0].length, pickPadding, pickBounds };
     }
+    const trackGeometryKey = sheet => JSON.stringify([sheet.inchesPerPixel,sheet.autoTapers,sheet.roads,sheet.joints,sheet.intersections]);
     function collect(sheet, solved) {
+      const cached = solved?.markingTracks;
+      if (cached && cached.key === trackGeometryKey(sheet)) return cached.tracks;
       const list = [];
       for (const t of app.roadEditor.laneTracks(sheet, solved)) {
         list.push(prepare({ key: `r:${t.road}`, on: { road: t.road }, line: t.line, markingEdges:t.markingEdges,bikeLanes:t.bikeLanes,placementBounds:t.placementBounds,
           bounds: t.laneBounds ?? t.bounds.map(b => b.slice(0, -1).map((left, k) => [left, b[k + 1]])) }));
       }
       for (const t of app.intersections?.laneTracks?.(sheet) ?? []) list.push(prepare(t));
-      return new Map(list.map(t => [t.key, t]));
+      const tracks = new Map(list.map(t => [t.key, t]));
+      // Intersections can normalize attachments while collecting. Subsequent
+      // crosswalk clipping and painting may share these tracks only unchanged.
+      if (solved) solved.markingTracks = { key: trackGeometryKey(sheet), tracks };
+      return tracks;
     }
     const trackKey = on => (on.road != null ? `r:${on.road}` : `i:${on.intersection}:${on.approach}:${on.incoming ? 'in' : 'out'}`);
     const laneIndex = (track, on) => (on.road != null ? on.lane : track.lanes?.indexOf(on.lane));
@@ -106,9 +121,12 @@
       ensureTracks();
       let best = null;
       for (const track of tracks.values()) {
+        const bounds=track.pickBounds,padding=track.pickPadding;
+        if(bounds&&(point.x<bounds.minX||point.x>bounds.maxX||point.y<bounds.minY||point.y>bounds.maxY))continue;
         const { line, along } = track;
         for (let i = 0; i < line.length - 1; i++) {
           const a = line[i], b = line[i + 1], dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy || 1;
+          if(padding!=null&&(point.x<Math.min(a.x,b.x)-padding||point.x>Math.max(a.x,b.x)+padding||point.y<Math.min(a.y,b.y)-padding||point.y>Math.max(a.y,b.y)+padding))continue;
           const f = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / len2));
           const d = along[i] + f * Math.sqrt(len2);
           const p = at(track, d), side = (point.x - p.x) * p.n.x + (point.y - p.y) * p.n.y;
@@ -135,14 +153,18 @@
       const road = marking.on?.road != null ? sheet.roads.find(r => r.id === marking.on.road) : null;
       const laneType=i=>road?.laneTypes?.[i]?.type??track.laneDetails?.[i]?.type;
       const bike = i => ['bike', 'bufferedBike', 'twoWayBike'].includes(laneType(i));
+      const standaloneStop=marking.type==='stopLine'&&road&&Array.from({length:track.count},(_,i)=>bike(i)).every(Boolean);
       const line = ['line', 'area'].includes(kindOf(marking));
       // Repeated symbols each use their own travel-lane frame through curves.
       // They remain one saved/undoable marking.
       if (marking.all) {
         const groups = [];
         for (let i=0;i<track.count;i++) {
-          if (bike(i)) continue;
-          if (line && groups.at(-1)?.at(-1) === i-1) groups.at(-1).push(i);
+          const includeBike = ['stopLine', 'yieldLine'].includes(marking.type);
+          if (bike(i) && !includeBike) continue;
+          // Bike facilities get their own riding-space bar or yield triangle;
+          // never bridge the buffer with a continuous vehicle-lane bar.
+          if (line && !bike(i) && !bike(i-1) && groups.at(-1)?.at(-1) === i-1) groups.at(-1).push(i);
           else groups.push([i]);
         }
         // Split continuous bars/areas around an interior bike lane, too. Merely
@@ -160,6 +182,10 @@
       // 8" gap, 6": 17" from the lane line's center) on the through-lane side,
       // so its markings center there.
       const riding = edges => edges.map(([l, r], i) => {
+        // A standalone facility's stop bar fills its pavement, including the
+        // 8-inch pavement apron beyond traveled way (711-001). Other markings
+        // retain their riding-space placement, and mixed roads retain buffers.
+        if(standaloneStop)return [l-(i===0?8/12*k:0),r+(i===edges.length-1?8/12*k:0)];
         if (laneType(i) !== 'bufferedBike') return [l, r];
         const buffer = 17 / 12 * k;
         const halfStripe = 3 / 12 * k; // 6-inch edge stripe, measured to its center (711-001).
@@ -192,7 +218,7 @@
         };
         const parts = built.parts.map(part => ({ ...part, rings: part.rings.map(r => r.map(place(part.unit))) }));
         const hit = box(parts.flatMap(part => part.rings.flat()), middle.t);
-        return { parts, hit, center: place()([0, built.length / 2]) };
+        return { parts, hit, on: laneRef(track, lane), lanes: marking.laneSubset?.map(i => laneRef(track, i)) ?? [laneRef(track, lane)], center: place()([0, built.length / 2]) };
       }).filter(Boolean);
       const tail = frame(track.length - (back + (marking.repeat?.length ?? 0) + probe.length) * k);
       return { track, lane, length: probe.length, copies, repeatPoint: { x: tail.x, y: tail.y } };
@@ -244,23 +270,30 @@
         return { x: p.x - t.y * offset, y: p.y + t.x * offset };
       });
     }
-    function pavementEdges(sheet) {
+    const pavementCache=new WeakMap();
+    function pavementEdges(sheet, solved) {
+      // The solved geometry belongs to one render. Reuse the exact same edge
+      // samples for every crosswalk end in the current lane-track collection.
+      const edgeKey=()=>trackGeometryKey(sheet);
+      const cached=solved?.markingPavementEdges??pavementCache.get(sheet);
+      if(cached&&cached.tracks===tracks&&cached.key===edgeKey())return cached.edges;
       const margin = 8 / sheet.inchesPerPixel, edges = [];  // edge of traveled way to edge of pavement
       const roads = [...tracks.values()].filter(t => t.on.road != null);
+      const leftEdges=new Map(roads.map(track=>[track,boundaryLine(track,0)]));
       // A two-way road without a median has no pavement edge at its centerline:
       // each side's left edge line runs 10" from the other's, the other way.
       // (A one-way road joined end to start also meets the next road's left
       // edge, but heading the same way.)
       const centered = track => roads.some(other => {
         if (other === track) return false;
-        const p = boundaryLine(track, 0)[0], q = boundaryLine(other, 0).at(-1);
+        const p = leftEdges.get(track)[0], q = leftEdges.get(other).at(-1);
         const t = track.tangents[0], u = other.tangents.at(-1);
         return Math.hypot(p.x - q.x, p.y - q.y) < ppf(sheet) && t.x * u.x + t.y * u.y < -0.5;
       });
       for (const track of roads) {
         const sides = centered(track) ? [['R', track.count, margin]] : [['L', 0, -margin], ['R', track.count, margin]];
         for (const [side, k, extra] of sides) {
-          const points = boundaryLine(track, k).map((p, i) => {
+          const points = (k===0?leftEdges.get(track):boundaryLine(track,k)).map((p, i) => {
             const t = track.tangents[i];
             return { x: p.x - t.y * extra, y: p.y + t.x * extra };
           });
@@ -268,8 +301,13 @@
         }
       }
       for (const edge of app.intersections?.boundaries(sheet).edges ?? [])
-        if (edge.on.side === 'corner' || edge.on.side === 'median' || edge.on.side.startsWith('split-') || edge.on.side.startsWith('gore-') || /^(splitter|apron)-\d+$/.test(edge.on.side))
+        if (edge.on.side === 'corner' || edge.on.side === 'median' || edge.on.side === 'island' || edge.on.side.startsWith('split-') || edge.on.side.startsWith('gore-') || /^(splitter|apron)-\d+$/.test(edge.on.side))
           edges.push({ points: edge, on: { ...edge.on } });
+      // Boundary reconciliation can normalize attachments. Capture its final
+      // inputs, so a later geometry edit cannot reuse an earlier boundary.
+      const stored={key:edgeKey(),tracks,edges};
+      pavementCache.set(sheet,stored);
+      if(solved)solved.markingPavementEdges=stored;
       return edges;
     }
     const lengthOf = points => points.reduce((sum, p, i) => sum + (i ? Math.hypot(p.x - points[i - 1].x, p.y - points[i - 1].y) : 0), 0);
@@ -286,10 +324,10 @@
       }
       return points[0];
     }
-    function snapEnd(sheet, point) {
+    function snapEnd(sheet, point, solved) {
       ensureTracks();
       let best = null;
-      for (const edge of pavementEdges(sheet)) {
+      for (const edge of pavementEdges(sheet, solved)) {
         let walked = 0;
         for (let i = 1; i < edge.points.length; i++) {
           const a = edge.points[i - 1], b = edge.points[i], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
@@ -304,10 +342,11 @@
       if (best.edge.on) end.on = { ...best.edge.on, f: best.s / (lengthOf(best.edge.points) || 1) };
       return end;
     }
-    function endPoint(sheet, end) {
+    function endPoint(sheet, end, solved, edges) {
       if (!end?.on) return end;
       const key = on => {
         if (on?.intersection != null) {
+          if (on.median != null) return `im:${on.intersection}:${on.median}`;
           // Roundabout surface indices change when another splitter appears
           // or a mini center becomes a raised island. The approach and kind
           // identify the curb; its position in the surface list does not.
@@ -316,7 +355,7 @@
         }
         return on?.road != null ? `r:${on.road}:${on.side}` : null;
       };
-      const edge = pavementEdges(sheet).find(e => key(e.on) === key(end.on));
+      const edge = (edges ?? pavementEdges(sheet, solved)).find(e => key(e.on) === key(end.on));
       return edge ? alongEdge(edge.points, end.on.f) : end;
     }
     // Where the crosswalk's centerline crosses each lane line and lane center, with
@@ -332,8 +371,8 @@
       };
       const firstHit = line => {
         for (let i = 1; i < line.length; i++) {
-          const p = hit(line[i - 1], line[i]);
-          if (p) return { ...p, t: unitVector(line[i - 1], line[i]) };
+          const p = hit(line[i-1],line[i]);
+          if (p) return { ...p, t:unitVector(line[i-1],line[i]) };
         }
         return null;
       };
@@ -349,10 +388,14 @@
             return { x: p.x - t.y * offset, y: p.y + t.x * offset };
           }))));
         for (let k = 0; k < track.count; k++) {
-          // Use one full-size emphasis bar across each bike lane, including
-          // its buffer. Its two edge stripes must not become two narrow bars.
+          // FDOT 711-001 sheet 9, Special Emphasis Crosswalk Details:
+          // put 24-inch bars on the bike lane's two boundary lines, rather
+          // than replacing them with a bar in the bike lane's center.
           const [left, right] = at[k];
-          if (left && right) addBar({ x: (left.x + right.x) / 2, y: (left.y + right.y) / 2, t: left.t });
+          if (track.bikeLanes?.[k]) {
+            addBar(left);
+            addBar(right);
+          } else if (left && right) addBar({ x: (left.x + right.x) / 2, y: (left.y + right.y) / 2, t: left.t });
           if (k > 0 && !track.bikeLanes?.[k] && !track.bikeLanes?.[k - 1]) {
             addBar(at[k - 1][1]);
             if (track.paintedGoreBoundaries?.[k]) addBar(left);
@@ -374,12 +417,15 @@
       }));
       return bars;
     }
+    const forceBars = m => m.forceBars ?? (m.barDirection === 'perpendicular');
     const unitVector = (a, b) => { const d = Math.hypot(b.x - a.x, b.y - a.y) || 1; return { x: (b.x - a.x) / d, y: (b.y - a.y) / d }; };
-    function layoutCrosswalk(sheet, marking) {
-      const a = endPoint(sheet, marking.a), b = endPoint(sheet, marking.b), k = ppf(sheet);
+    function layoutCrosswalk(sheet, marking, solved, edges) {
+      const a = endPoint(sheet, marking.a, solved, edges), b = endPoint(sheet, marking.b, solved, edges), k = ppf(sheet);
       if (!a || !b || Math.hypot(b.x - a.x, b.y - a.y) < k) return null;
       const feet = p => ({ x: p.x / k, y: p.y / k });
-      const g = C.crosswalk(marking, { ...feet(a), t: a.t }, { ...feet(b), t: b.t }, barsAcross(a, b, sheet).map(bar => ({ ...feet(bar), t: bar.t, width:bar.width })));
+      const forced = forceBars(marking);
+      const bars = forced ? [] : barsAcross(a, b, sheet);
+      const g = C.crosswalk(marking, { ...feet(a), t: a.t }, { ...feet(b), t: b.t }, bars.map(bar => ({ ...feet(bar), t: bar.t, width:bar.width })));
       const parts = g.parts.map(part => ({ ...part, rings: part.rings.map(r => r.map(([x, y]) => ({ x: x * k, y: y * k }))) }));
       return { crosswalk: true, a, b, length: g.length, copies: [{ parts, hit: box(parts.flatMap(p => p.rings.flat()), unitVector(a, b)), center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }] };
     }
@@ -394,11 +440,12 @@
       if(!crossings.length)return [];
       tracks=collect(sheet,solved);
       const scale=ppf(sheet),cuts=[];
+      const edges = solved && crossings.some(m => m.a?.on || m.b?.on) ? pavementEdges(sheet,solved) : undefined;
       for(const marking of crossings) {
-        const a=endPoint(sheet,marking.a),b=endPoint(sheet,marking.b);
+        const a=endPoint(sheet,marking.a,solved,edges),b=endPoint(sheet,marking.b,solved,edges);
         if(!a||!b)continue;
         const toFeet=p=>({...p,x:p.x/scale,y:p.y/scale});
-        const parts=C.crosswalk({...marking,type:'crosswalk',aesthetic:false,contrast:false},toFeet(a),toFeet(b)).parts;
+        const parts=C.crosswalk({...marking,type:'crosswalk',enhanced:false,aesthetic:false,contrast:false},toFeet(a),toFeet(b)).parts;
         const first=parts[0].rings[0],second=parts[1].rings[0];
         cuts.push([first[0],first[1],second[1],second[0]].map(([x,y])=>app.itemTransform.apply(marking,{x:x*scale,y:y*scale})));
       }
@@ -422,21 +469,34 @@
       for(const key of ['a','b','repeatPoint'])if(placed[key])placed[key]=point(placed[key]);
       return placed;
     }
+    const markingDrawings=new WeakMap();
+    const markingDrawingKey=m=>[JSON.stringify({...m,aestheticImage:m.aestheticImage?{...m.aestheticImage,src:null}:null}),m.aestheticImage?.src];
+    const sameDrawingKey=(a,b)=>a.length===b.length&&a.every((value,i)=>value===b[i]);
+    const drawingGeometryKey=sheet=>JSON.stringify([trackGeometryKey(sheet),sheet.bridges,sheet.gores,sheet.medians,sheet.lines,sheet.surfaces,
+      app.traffic.reversed,app.settings?.get('autoContrast'),app.settings?.get('hideLevelsAbove')]);
     function draw(sheet, parent, solved, place = null) {
       tracksReady = Boolean(sheet.markings?.length || active());
       tracks = tracksReady ? collect(sheet, solved) : new Map();
       drawn = new Map();
       sheet.markings ??= [];
+      const intersectionIds=new Set((sheet.intersections??[]).map(item=>item.id));
+      for(const marking of sheet.markings)if(marking.trafficControl){
+        const expected=marking.type==='stopLine'?'stop':marking.type==='yieldLine'?'yield':null;
+        if(marking.trafficControl.type!==expected)delete marking.trafficControl;
+        else if(marking.trafficControl.intersection!=null&&!intersectionIds.has(marking.trafficControl.intersection))delete marking.trafficControl.intersection;
+      }
       // Markings go with their lane: a removed road, approach, or lane drops them.
       sheet.markings = sheet.markings.filter(m => {
         if (kindOf(m) === 'crosswalk') return true;
         const track = tracks.get(trackKey(m.on ?? {}));
         return track && laneIndex(track, m.on) >= 0 && laneIndex(track, m.on) < track.count;
       });
-      const groups = new Map();
+      const groups = new Map(),entries=[];
       const groupIn = into => groups.get(into) ?? groups.set(into, svg('g', { class: 'laneMarkings' }, into)).get(into);
+      const edges = solved && sheet.markings.some(m => kindOf(m) === 'crosswalk' && (m.a?.on || m.b?.on)) ? pavementEdges(sheet,solved) : undefined;
       for (const marking of sheet.markings) {
-        const placed = transformPlacement(kindOf(marking) === 'crosswalk' ? layoutCrosswalk(sheet, marking) : layout(sheet, marking), marking);
+        const entry={id:marking.id,type:marking.type,crosswalk:kindOf(marking)==='crosswalk',control:JSON.stringify(marking.trafficControl),key:markingDrawingKey(marking),nodes:[]};entries.push(entry);
+        const placed = transformPlacement(kindOf(marking) === 'crosswalk' ? layoutCrosswalk(sheet, marking, solved, edges) : layout(sheet, marking), marking);
         if (!placed) continue;
         const road = marking.on?.road ?? marking.a?.on?.road;
         let shown = false, contrasted = null;
@@ -448,21 +508,55 @@
           // unit gets black contrast (FDM 230.3.1.3) unless it already has it.
           let parts = copy.parts;
           if (into.level > 1 && !marking.contrast && app.settings?.get('autoContrast')) {
-            contrasted ??= transformPlacement(kindOf(marking) === 'crosswalk' ? layoutCrosswalk(sheet, { ...marking, contrast: true }) : layout(sheet, { ...marking, contrast: true }),marking);
+            contrasted ??= transformPlacement(kindOf(marking) === 'crosswalk' ? layoutCrosswalk(sheet, { ...marking, contrast: true }, solved, edges) : layout(sheet, { ...marking, contrast: true }),marking);
             parts = contrasted?.copies[i]?.parts ?? parts;
           }
-          paint(parts, groupIn(into), sheet);
+          const group=groupIn(into),previous=group.lastChild;
+          paint(parts, group, sheet);
+          for(let node=previous?previous.nextSibling:group.firstChild;node;node=node.nextSibling)entry.nodes.push(node);
           shown = true;
         });
         // Markings on hidden levels can't be picked.
         if (shown) drawn.set(marking.id, placed);
       }
       if (!groups.size) groupIn(parent);
+      markingDrawings.set(sheet,{entries,tracks,key:drawingGeometryKey(sheet),group:groups.size===1?groups.values().next().value:null});
       if (hover && !drag) hover = refreshHover(hover.point);
+    }
+    function updateDrawing(sheet) {
+      const saved=markingDrawings.get(sheet),markings=sheet.markings??[];
+      // Crosswalk changes clip road stripes, and elevated markings can move
+      // between slots. Those edits retain the complete drawing path.
+      if(!saved || saved.tracks!==tracks || saved.key!==drawingGeometryKey(sheet) || saved.entries.length!==markings.length ||
+        sheet.bridges?.length || sheet.intersections?.some(item=>(item.level??1)>1) || sheet.roads.some(road=>(road.level??1)>1) ||
+        !saved.group || !sheet.roadLayer?.contains(saved.group))return false;
+      const patches=[];
+      for(let i=0;i<markings.length;i++) {
+        const marking=markings[i],entry=saved.entries[i],key=markingDrawingKey(marking);
+        if(entry.id!==marking.id || entry.type!==marking.type || entry.control!==JSON.stringify(marking.trafficControl) ||
+          entry.nodes.some(node=>node.parentNode!==saved.group))return false;
+        if(sameDrawingKey(entry.key,key))continue;
+        if(entry.crosswalk || !entry.nodes.length)return false;
+        const placed=transformPlacement(layout(sheet,marking),marking);
+        if(!placed)return false;
+        const holder=document.createElementNS(SVG,'g');
+        for(const copy of placed.copies)paint(copy.parts,holder,sheet);
+        const nodes=[...holder.childNodes];if(!nodes.length)return false;
+        patches.push({entry,key,placed,nodes});
+      }
+      for(const {entry,key,placed,nodes} of patches) {
+        // Replace only this marking's paths, at its original position. Retain
+        // the laneMarkings group referenced by the road renderer's layer parts.
+        const anchor=entry.nodes[0];for(const node of nodes)saved.group.insertBefore(node,anchor);
+        entry.nodes.forEach(node=>node.remove());entry.nodes=nodes;entry.key=key;drawn.set(entry.id,placed);
+      }
+      if(hover&&!drag)hover=refreshHover(hover.point);
+      return true;
     }
 
     // Overlay: hover preview, selection outline, and handles (screen pixels).
     function refreshOverlay() {
+      cancelAnimationFrame(hoverFrame);hoverFrame=0;
       if (drag?.handle) return;  // keep the captured handle alive during a drag
       overlay.replaceChildren();
       const sheet = sheets.selected;
@@ -577,8 +671,28 @@
       return { point, shift, layout: placed, marking: found.marking, snapped: found.snapped };
     }
 
+    let dragFrame = 0;
+    function cancelDragFrame() {
+      cancelAnimationFrame(dragFrame);
+      dragFrame = 0;
+    }
+    function drawDrag() {
+      cancelDragFrame();
+      renderMarkings();
+      if (drag?.handle) {
+        const placed = drawn.get(selected);
+        const point = placed && (placed.crosswalk ? placed[drag.part] : drag.part === 'repeat' ? placed.repeatPoint : placed.copies[0].center);
+        if (point) {
+          const s = sheets.toScreen(point);
+          Object.assign(drag.handle.style, { left: `${s.x}px`, top: `${s.y}px` });
+        }
+      }
+      updatePanel();
+    }
+    function renderMarkings() { (app.roadEditor.renderMarkings??app.roadEditor.render)(); }
     function changed(message) {
-      app.roadEditor.render();
+      cancelDragFrame();
+      renderMarkings();
       updatePanel();
       sheets.save(sheets.selected);
       app.history.record();
@@ -628,7 +742,7 @@
       if (event.pointerType === 'touch' && !press) return;
       hover = refreshHover(pointOf(event), event.shiftKey);
       workspace.classList.toggle('markingPlacing', Boolean(hover?.layout || hover?.snap || hoverMarking));
-      refreshOverlay();
+      hoverFrame ||= requestAnimationFrame(refreshOverlay);
     });
     workspace.addEventListener('pointerleave', () => {
       if (drag) return;
@@ -678,11 +792,14 @@
       drag.moved = true;
       const point = pointOf(event), k = ppf(sheet);
       if (kindOf(marking) === 'crosswalk') {
-        if (drag.part === 'a' || drag.part === 'b') marking[drag.part] = snapEnd(sheet, point);
+        // The existing boundary cache validates geometry and the track set.
+        // Both endpoints and all events before a redraw can share it.
+        const geometry = drag.geometry ??= {};
+        if (drag.part === 'a' || drag.part === 'b') marking[drag.part] = snapEnd(sheet, point, geometry);
         else {
           // Grabbing the crosswalk moves both ends (off any edge they were on).
           const shift = p => ({ x: p.x + point.x - drag.start.x, y: p.y + point.y - drag.start.y });  // off its edge: cut square
-          marking.a = shift(endPoint(sheet, drag.before.a)); marking.b = shift(endPoint(sheet, drag.before.b));
+          marking.a = shift(endPoint(sheet, drag.before.a, geometry)); marking.b = shift(endPoint(sheet, drag.before.b, geometry));
         }
       } else if (drag.part === 'repeat') {
         const track = tracks.get(trackKey(marking.on));
@@ -698,15 +815,16 @@
         marking.on = laneRef(found.track, found.lane);
         marking.back = Math.max(0, (found.track.length - found.d) / k - length / 2);
       }
-      app.roadEditor.render();
-      if (drag.handle) {
-        const placed = drawn.get(marking.id);
-        const s = sheets.toScreen(placed.crosswalk ? placed[drag.part] : drag.part === 'repeat' ? placed.repeatPoint : placed.copies[0].center);
-        Object.assign(drag.handle.style, { left: `${s.x}px`, top: `${s.y}px` });
+      // Placement is updated for every event, including the length used by the
+      // next move/repeat edit. Only drawing and panel work wait for the frame.
+      if (kindOf(marking) !== 'crosswalk') {
+        const placed = transformPlacement(layout(sheet, marking), marking);
+        if (placed) drawn.set(marking.id, placed);
       }
-      updatePanel();
+      dragFrame ||= requestAnimationFrame(drawDrag);
     }
     function endDrag(event, cancel = false) {
+      cancelDragFrame();
       const d = drag;
       drag = null;
       const marking = current();
@@ -714,7 +832,7 @@
       if (d.handle?.hasPointerCapture(event.pointerId)) d.handle.releasePointerCapture(event.pointerId);
       if (workspace.hasPointerCapture(event.pointerId)) workspace.releasePointerCapture(event.pointerId);
       if (d.moved) changed();
-      else { app.roadEditor.render(); updatePanel(); }
+      else { renderMarkings(); updatePanel(); }
       overlay.querySelector(`button[data-part="${d.part}"]`)?.focus({ preventScroll: true });
     }
     function nearestAlong(track, point) {
@@ -795,6 +913,7 @@
     function showTab(name) {
       tab = name;
       crosswalkStart = null;
+
       get('markingsLongitudinal').hidden = name !== 'longitudinal';
       get('markingsLateral').hidden = name !== 'lateral';
       for (const [key, button] of Object.entries(tabs)) {
@@ -869,6 +988,7 @@
       // them starts a new marking instead of changing the selected one.
       if (current() && (C.find(current().type)?.kind === 'crosswalk') !== (item.kind === 'crosswalk')) select(null);
       crosswalkStart = null;
+
       if (item.kind === 'surface') {
         select(null);
         draft.type = item.id;
@@ -946,6 +1066,12 @@
     });
     for (const [id, key] of [['markingVariant', 'variant'], ['markingBlockMessage', 'message'], ['markingAestheticTone', 'tone']])
       get(id).addEventListener('change', event => edit(m => { m[key] = event.target.value; }));
+    get('markingForceBars').addEventListener('change', event => edit(m => { m.forceBars = event.target.checked; delete m.barDirection; delete m.barSource; }));
+    pair('markingBarAngle', (m, v) => {
+      m.forceBars = true;
+      m.barAngle = v;
+      delete m.barDirection; delete m.barSource;
+    }, () => model().barAngle ?? 0);
     get('markingEnhanced').addEventListener('change', event => edit(m => {
       m.enhanced = event.target.checked;
       if (m.type === 'crosswalkSpecial') m.type = 'crosswalk';
@@ -1041,6 +1167,12 @@
       const aesthetic = C.isAesthetic(m);
       get('markingEnhancedRow').hidden = kind !== 'crosswalk';
       get('markingEnhanced').checked = Boolean(m.enhanced || m.type === 'crosswalkSpecial');
+      const enhanced = kind === 'crosswalk' && get('markingEnhanced').checked;
+      get('markingForceBarsRow').hidden = !enhanced;
+      get('markingForceBars').checked = Boolean(forceBars(m));
+      const override = enhanced && forceBars(m);
+      get('markingBarAngleRow').hidden = !override;
+      set('markingBarAngle', m.barAngle ?? 0); set('markingBarAngleValue', m.barAngle ?? 0);
       get('markingAestheticToggleRow').hidden = kind !== 'crosswalk';
       get('markingAesthetic').checked = aesthetic;
       get('markingAestheticImageFields').hidden=!aesthetic||m.variant!=='image';
@@ -1135,7 +1267,9 @@
     }).observe(panel, { attributes: true, attributeFilter: ['hidden'] });
     document.addEventListener('sheetview', refreshOverlay);
     for (const event of ['sheetchange', 'sheethistory']) document.addEventListener(event, () => {
+      cancelDragFrame();
       hover = null; drag = null; press = null;
+
       if (selectedSheet !== sheets.selected || !current()) selected = null;
       updatePanel(); refreshOverlay();
     });
@@ -1156,8 +1290,63 @@
       const found = locate(point);
       return found && { on: laneRef(found.track, found.lane), back: (found.track.length - found.d) / ppf(sheets.selected) };
     };
+    // Use the actual painted geometry (including transforms), not the pick box
+    // or an intersection mouth. Hidden display levels still retain controls.
+    function simulatorControls(sheet, {signalStops=false}={}) {
+      const result=[];
+      let solved;
+      for(const marking of sheet.markings??[]) {
+        const virtual=signalStops&&marking.type==='stopLine'&&marking.trafficControl?.unlinked!==true;
+        if(signalStops&&!virtual)continue;
+        const control=virtual?{type:'stop',intersection:marking.trafficControl?.intersection}:marking.trafficControl;
+        if(!control||!['stop','yield'].includes(control.type)||marking.type!==(control.type==='stop'?'stopLine':'yieldLine'))continue;
+        const placed=transformPlacement(layout(sheet,{...marking,contrast:false}),marking);
+        for(const [i,copy] of (placed?.copies??[]).entries()) {
+          const a=copy.hit[0],b=copy.hit[1],length=Math.hypot(b.x-a.x,b.y-a.y);
+          if(!length)continue;
+          const direction={x:(b.x-a.x)/length,y:(b.y-a.y)/length};
+          const points=copy.parts.flatMap(part=>part.rings.flat());
+          const road=sheet.roads.find(r=>r.id===copy.on.road),level=road?.level??1;
+          const incoming=a=>(a.links??[]).some(l=>l.road===copy.on.road&&Boolean(l.e)!==Boolean(app.traffic.reversed));
+          // An explicit standalone override beats both a manual association
+          // and the marking's road/intersection placement. Keep the STOP/YIELD
+          // action itself: only its participation in turn-taking is disabled.
+          let intersection=control.unlinked===true?undefined:control.intersection??copy.on.intersection,inferred=false;
+          if(control.unlinked!==true&&intersection==null&&road){
+            // Signals can use set-back bars on a directly attached approach road.
+            // They are virtual signal gates, never standalone STOP actions; the
+            // nearest matching bar before the mouth is chosen by Controls.attach.
+            // A line ending exactly at an attached incoming road mouth is
+            // unambiguous intersection control, even without a manual link.
+            // Use actual transformed paint, topology and level, never mere
+            // proximity. Set-back/standalone lines retain explicit linking.
+            const dot=p=>p.x*direction.x+p.y*direction.y,n={x:-direction.y,y:direction.x};
+            const front=Math.max(...points.map(dot)),across=points.map(p=>p.x*n.x+p.y*n.y),epsilon=.001*ppf(sheet)/.3048;
+            const end=app.traffic.reversed?0:1;solved??=app.roadEditor.solve(sheet);
+            const atMouth=copy.lanes.every(on=>{
+              const p=app.roadEditor.lanePoint(sheet,road,end,on.lane,solved),cross=p.x*n.x+p.y*n.y;
+              return Math.abs(dot(p)-front)<=epsilon&&cross>=Math.min(...across)-epsilon&&cross<=Math.max(...across)+epsilon;
+            });
+            const candidates=(atMouth||virtual)?(sheet.intersections??[]).filter(item=>(item.level??1)===level).flatMap(item=>item.approaches.filter(incoming).map(()=>item)):[];
+            if(candidates.length===1){intersection=candidates[0].id;inferred=true;}
+          }
+          const item=sheet.intersections?.find(item=>item.id===intersection);
+          if(virtual&&!item?.trafficSignal?.version)continue;
+          const approach=copy.on.approach??item?.approaches.find(incoming)?.id;
+          result.push({id:`${virtual?'signal:':''}${marking.id}:${i}`,marking:marking.id,type:virtual?'signal':control.type,intersection,approach,inferred,
+            on:copy.lanes,controlledLanes:copy.lanes.flatMap(on=>{
+              if(on.intersection!=null)return [on.lane];
+              const a=item?.approaches.find(a=>a.id===approach),link=a?.links?.find(l=>l.road===on.road&&Boolean(l.e)!==Boolean(app.traffic.reversed));
+              const ids=app.traffic.reversed?a?.outLanes:a?.inLanes,index=ids?.indexOf(link?.to);
+              return index>=0?[ids[index+on.lane-link.lane]].filter(Boolean):[];
+            }),direction,points,
+            level:copy.on.road!=null?level:(sheet.intersections?.find(i=>i.id===copy.on.intersection)?.level??item?.level??1)});
+        }
+      }
+      return result;
+    }
     const outlines = id => drawn.get(id)?.copies.map(copy => copy.hit) ?? [];
-    app.markings = { selectedItem:()=>!panel.hidden && tab==='lateral' && current()?{kind:'markings',id:selected}:null, diagnostics: () => structuredClone({selected,tab,draft,crosswalkStart}), draw, crosswalkCuts, refreshOverlay, capture, rehome, openPicker, focusAt, hitAt, anchorAt, outlines, showTab, draftType: () => draft.type, tab: () => tab };
+    app.markings = { simulatorControls, selectedItem:()=>!panel.hidden && tab==='lateral' && current()?{kind:'markings',id:selected}:null, diagnostics: () => structuredClone({selected,tab,draft,crosswalkStart}), draw, updateDrawing, crosswalkCuts, refreshOverlay, capture, rehome, openPicker, focusAt, hitAt, anchorAt, outlines, showTab, draftType: () => draft.type, tab: () => tab };
     showTab('lateral');
     updatePanel();
     app.roadEditor.render();

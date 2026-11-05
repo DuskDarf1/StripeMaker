@@ -58,6 +58,9 @@
   // Width is measured inside
   // the transverse lines: at least 6' at intersections, 10' midblock (note 1).
   const CROSSWALK = { line: 12 * IN, bar: 24 * IN, width: 10, min: 6, max: 30 };
+  // Manual parallel bars use sheet 9's 1/2 W spacing with a nominal 12 ft
+  // lane when no lane geometry is available. This is an editor layout default.
+  const CROSSWALK_PARALLEL_SPACING = 12 / 2;
   // MUTCD 11th Edition Figure 3B-20, Yield Ahead Triangle Symbols.
   const YIELD_AHEAD = {
     fast: { label: '45 mph or greater', width: 6, length: 20, bar: 36 * IN, side: 8 * IN },
@@ -466,7 +469,27 @@
       if (contrast) black.push({ fill: BLACK, rule: 'nonzero', contrast: true, rings: [band(o0 - side * CONTRAST.stopLine, o1 + side * CONTRAST.stopLine)] });
     }
     if (marking.enhanced || marking.type === 'crosswalkSpecial') {
-      for (const bar of bars) {
+      const forced = marking.forceBars ?? (marking.barDirection === 'perpendicular');
+      if (forced) {
+        // Rotate full vector stripes, then clip them to the crossing. This
+        // stays finite and visible even at ±90° (parallel to the crossing).
+        const angle = (Number.isFinite(marking.barAngle) ? Math.max(-90,Math.min(90,marking.barAngle)) : 0) * Math.PI / 180;
+        const t = {x:n.x*Math.cos(angle)-n.y*Math.sin(angle),y:n.x*Math.sin(angle)+n.y*Math.cos(angle)};
+        const p = {x:-t.y,y:t.x}, center = {x:(a.x+b.x)/2,y:(a.y+b.y)/2}, boundary = band(-half,half);
+        const project = axis => boundary.map(([x,y])=>(x-center.x)*axis.x+(y-center.y)*axis.y);
+        const across = project(p), along = project(t), lo = Math.min(...along), hi = Math.max(...along);
+        const first = Math.ceil((Math.min(...across)-CROSSWALK.bar/2+1e-9)/CROSSWALK_PARALLEL_SPACING);
+        const last = Math.floor((Math.max(...across)+CROSSWALK.bar/2-1e-9)/CROSSWALK_PARALLEL_SPACING);
+        const point = (s,d) => [center.x+p.x*s+t.x*d,center.y+p.y*s+t.y*d];
+        for(let i=first;i<=last;i++) {
+          const s=i*CROSSWALK_PARALLEL_SPACING;
+          const ring = halfWidth => clipPolygon([point(s-halfWidth,lo),point(s-halfWidth,hi),point(s+halfWidth,hi),point(s+halfWidth,lo)],boundary);
+          const outline = ring(CROSSWALK.bar/2);
+          if(outline.length<3)continue;
+          white.push({fill:WHITE,rule:'nonzero',rings:[outline]});
+          if(contrast)black.push({fill:BLACK,rule:'nonzero',contrast:true,rings:[ring(CROSSWALK.bar/2+CONTRAST.bar)]});
+        }
+      } else for (const bar of bars) {
         const t = bar.t, along = t.x * n.x + t.y * n.y;
         if (Math.abs(along) < 0.2) continue;  // nearly parallel to the crosswalk
         const p = { x: -t.y, y: t.x };
@@ -476,9 +499,14 @@
           const l = (o - ((q.x - a.x) * n.x + (q.y - a.y) * n.y)) / along;
           return [q.x + t.x * l, q.y + t.y * l];
         });
-        const ring = e => { const [p0, p1] = corners(-e), [q0, q1] = corners(e); return [p0, p1, q1, q0]; };
+        const ring = e => {
+          const [p0, p1] = corners(-e), [q0, q1] = corners(e), points = [p0, p1, q1, q0];
+          return points;
+        };
         const barWidth=bar.width??CROSSWALK.bar;
-        white.push({ fill: WHITE, rule: 'nonzero', rings: [ring(barWidth / 2)] });
+        const outline = ring(barWidth / 2);
+        if (outline.length < 3) continue;
+        white.push({ fill: WHITE, rule: 'nonzero', rings: [outline] });
         if (contrast) black.push({ fill: BLACK, rule: 'nonzero', contrast: true, rings: [ring(barWidth / 2 + CONTRAST.bar)] });
       }
     }

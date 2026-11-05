@@ -76,7 +76,7 @@
       const route = hover && routeBetween(sheet,start,hover);
       for (const segment of route ?? [{road:start.road,lane:start.lane,from:start.f,to:Math.min(1,start.f+1e-4)}]) {
         for (const lane of lanesFor(segment.road,segment.lane,all)) {
-          const strip = app.roadEditor.laneStrip(sheet,segment.road,lane,segment.from,segment.to);
+          const strip = app.roadEditor.laneStrip(sheet,segment.road,lane,segment.from,segment.to,item().color);
           svg('path', { d: pathData(strip), fill: C.SURFACE[item().color], opacity: '0.6', stroke: '#ffdf00', 'stroke-width': '2', 'vector-effect': 'non-scaling-stroke' }, view);
         }
       }

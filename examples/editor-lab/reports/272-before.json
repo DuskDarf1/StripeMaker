@@ -1,0 +1,133 @@
+{
+  "counts": {
+    "roads": 104,
+    "joints": 92,
+    "intersections": 16,
+    "markings": 120,
+    "signs": 16,
+    "medians": 0,
+    "gores": 0,
+    "lines": 0,
+    "surfaces": 0,
+    "bridges": 0
+  },
+  "scenarios": [
+    {
+      "scenario": "sign",
+      "setupMs": 11709.899999976158,
+      "item": "sign-3-2",
+      "links": 256,
+      "connected": 120,
+      "total": 120,
+      "domNodes": 1188,
+      "pressMs": 2528.550292,
+      "moveMs": 20456.619833,
+      "releaseMs": 2597.361208000002,
+      "events": {
+        "count": 8,
+        "p50": 2574.0151250000017,
+        "p95": 2600.206833999997,
+        "max": 2600.206833999997,
+        "over33ms": 8
+      },
+      "frames": {
+        "count": 17,
+        "p50": 16.700000000000728,
+        "p95": 2583.2999999999993,
+        "max": 2583.2999999999993,
+        "over33ms": 8
+      },
+      "geometryHash": "fd8e8374bc5088ed3e31e0e94d18811d89cd0bdb92419176c8ab4ba0df44e124",
+      "svgHash": "09ad068c2d990dba77bbabc489ee380f1bc0d0e8f146153c84fa5ab1a650d76f",
+      "snapshots": []
+    },
+    {
+      "scenario": "marking",
+      "setupMs": 11793.599999964237,
+      "item": "arrow-1",
+      "links": 256,
+      "connected": 120,
+      "total": 120,
+      "domNodes": 1188,
+      "pressMs": 3.2459170000001905,
+      "moveMs": 17381.893709,
+      "releaseMs": 2472.849624999999,
+      "events": {
+        "count": 8,
+        "p50": 2479.3894580000015,
+        "p95": 2525.8643330000014,
+        "max": 2525.8643330000014,
+        "over33ms": 7
+      },
+      "frames": {
+        "count": 15,
+        "p50": 16.700000000000728,
+        "p95": 2516.600000000002,
+        "max": 2516.600000000002,
+        "over33ms": 7
+      },
+      "geometryHash": "22543b2b3de06b05a617ba69ac637d6d29c860374ee548a00c429ef7f37c2127",
+      "svgHash": "9101cd55842c487d94a21767974ee3b5a2596b518e09e73f55a595c17181eff3",
+      "snapshots": []
+    },
+    {
+      "scenario": "node",
+      "setupMs": 14613.699999988079,
+      "item": 1,
+      "links": 256,
+      "connected": 120,
+      "total": 120,
+      "domNodes": 1192,
+      "pressMs": 95.9945000000007,
+      "moveMs": 940.200416000007,
+      "releaseMs": 3364.665417000011,
+      "events": {
+        "count": 8,
+        "p50": 115.1472919999942,
+        "p95": 131.52758300000278,
+        "max": 131.52758300000278,
+        "over33ms": 8
+      },
+      "frames": {
+        "count": 16,
+        "p50": 99.89999999999418,
+        "p95": 100.09999999999127,
+        "max": 100.09999999999127,
+        "over33ms": 8
+      },
+      "geometryHash": "4083ead627aa7affa96b765810842730654b6a6f7a63543df3a231c121a6fa34",
+      "svgHash": "f771aae7ed76ef30977152af484a4127a20b58991eb3fca44bdcd977c738e341",
+      "snapshots": []
+    },
+    {
+      "scenario": "intersection",
+      "setupMs": 12004,
+      "item": "dense-519",
+      "links": 256,
+      "connected": 120,
+      "total": 120,
+      "domNodes": 1189,
+      "pressMs": 5.894709000000148,
+      "moveMs": 20859.71254199998,
+      "releaseMs": 2622.346375000023,
+      "events": {
+        "count": 8,
+        "p50": 2603.7432499999995,
+        "p95": 2648.5460420000018,
+        "max": 2648.5460420000018,
+        "over33ms": 8
+      },
+      "frames": {
+        "count": 17,
+        "p50": 16.70000000001164,
+        "p95": 2633.1340000000055,
+        "max": 2633.1340000000055,
+        "over33ms": 8
+      },
+      "geometryHash": "42ad4a11297790c87847f55644f3bd96d8220045db75d873c9e5f01803eac8f1",
+      "svgHash": "9a9cea945ba4fcbc832f97751392649df9eb6a89bac0eda0be3f0def92945c13",
+      "snapshots": []
+    }
+  ],
+  "errors": []
+}

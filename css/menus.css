@@ -37,6 +37,10 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 label { font-size: 0.75rem; }
 .fieldRow { display: flex; align-items: center; gap: 0.4rem; margin: 0.35rem 0; }
 .fieldRow > label { flex: 0 0 8.5rem; text-align: right; }
+.fieldRow.elementAddRow > label { flex: 0 0 auto; }
+.elementAddRow > .dimensionInputs { flex: 1; min-width: 0; }
+.elementAddRow .nativeSelectTrigger { min-width: 0; width: 100%; }
+.elementAddRow > button { flex: 0 0 auto; padding: .25rem; }
 .fieldRow > input:not([type="checkbox"]), .fieldRow > select { flex: 1; width: 100%; }
 .editorContent button, .headsMenu button { padding: 0.25rem 0.4rem; font-size: 0.7rem; }
 .editorContent button:hover, .headsMenu button:enabled:hover { background: var(--selectedColor); }
@@ -104,7 +108,7 @@ hr { border: 0; border-top: 1px solid rgba(var(--baseColor), 0.45); margin: 0.75
 #sheetStatus:empty { display: none; }
 
 /* Sheet viewer: the stage keeps its padded fit area; the image pans beyond it. */
-#workspace { position: relative; overflow: hidden; }
+#workspace { position: relative; overflow: hidden; -webkit-user-select: none; user-select: none; }
 #workspace.hasSheet { cursor: grab; touch-action: none; }
 #workspace.hasSheet.panning { cursor: grabbing; }
 .sheetImage {
@@ -375,6 +379,10 @@ button.medianPoint:focus-visible { outline: 2px solid var(--textColor); outline-
 .downloadLabel { display: block; margin-top: 0.5rem; }
 #downloadMenu .dimensionInputs, #settingsMenu .dimensionInputs { margin: 0.25rem 0; }
 #downloadStatus:empty { display: none; }
+.downloadAreaOverlay { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+.downloadAreaOverlay.drawing { pointer-events: auto; cursor: crosshair; touch-action: none; }
+.downloadAreaOverlay:focus-visible { outline: 2px solid var(--textColor); outline-offset: -2px; }
+.downloadAreaOverlay svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 
 /* SignalMaker's action status (Undone. / Redone.) above the toolbar. */
 #actionStatus {

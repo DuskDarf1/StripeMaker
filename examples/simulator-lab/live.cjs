@@ -21,7 +21,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     s.joints.push({id:2*i+1,x:100,y:100+i*240,dir:{x:1,y:0},root:i+1,links:[]},{id:2*i+2,x:30100,y:100+i*240,dir:{x:1,y:0},root:i+1,links:[]});
     s.vehicleSpawns.push({road:i+1,rate:600,routes:[{name:'Corridor exit',percent:100,exit:{road:i+1,e:1}}]});
    }
-   app.settings.set('simulationSpeed',30);app.roadEditor.render();app.showEditor('simulatorEditor');
+   Object.assign(app.sheets.selected,{speedZones:app.sheets.selected.roads.map(road=>({id:'lab-speed-'+road.id,road:road.id,from:0,to:1,mph:30}))});app.roadEditor.render();app.showEditor('simulatorEditor');
    window.frameSamples=[];window.longTasks=[];let previous;
    new PerformanceObserver(list=>longTasks.push(...list.getEntries().map(e=>e.duration))).observe({type:'longtask',buffered:true});
    function sample(now){if(previous)frameSamples.push(now-previous);previous=now;requestAnimationFrame(sample);}requestAnimationFrame(sample);

@@ -7,7 +7,7 @@
   let current = null;
   const pickers = new Map();
   let sequence = 0;
-  app.createNativeSelectPicker = (select, label, { colorForValue, textStyleForValue, minMenuWidth = 180 } = {}) => {
+  app.createNativeSelectPicker = (select, label, { colorForValue, textStyleForValue, iconForValue, minMenuWidth = 180 } = {}) => {
     const id = `native-select-${++sequence}`;
     const lifetime=new AbortController(),signal=lifetime.signal;
     const listen=(target,type,callback,capture=false)=>target.addEventListener(type,callback,{capture,signal});
@@ -24,7 +24,8 @@
     trigger.setAttribute('aria-controls', id);
     trigger.setAttribute('aria-expanded', 'false');
     const swatchMarkup = colorForValue ? '<span class="colorPickerSwatch" aria-hidden="true"></span>' : '';
-    trigger.innerHTML = swatchMarkup + '<span class="symbolPickerLabel"></span><svg class="symbolPickerCaret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.25 9.25l4.75 4.75 4.75-4.75"/></svg>';
+    const iconMarkup = iconForValue ? '<span class="nativeSelectIcon" aria-hidden="true"></span>' : '';
+    trigger.innerHTML = swatchMarkup + iconMarkup + '<span class="symbolPickerLabel"></span><svg class="symbolPickerCaret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.25 9.25l4.75 4.75 4.75-4.75"/></svg>';
     wrapper.append(trigger);
     select.classList.add('pickerSource');
     select.tabIndex=-1;
@@ -103,16 +104,18 @@
       const options = entries();
       const option = options.find(item => item.value === select.value);
       updateLabel(trigger.querySelector('.symbolPickerLabel'), option);
+      if(iconForValue)trigger.querySelector('.nativeSelectIcon').innerHTML=iconForValue(select.value);
       if (colorForValue) updateSwatch(trigger.querySelector('.colorPickerSwatch'), select.value);
       trigger.setAttribute('aria-label', `${labelText()}: ${option?.textContent??''}`);
       menu.setAttribute('aria-label',labelText());
       wrapper.hidden=select.hidden;
-      for(const attr of ['aria-describedby','title']){const value=select.getAttribute(attr);if(value!==null)trigger.setAttribute(attr,value);else trigger.removeAttribute(attr);}
+      for(const attr of ['aria-describedby','title','data-help']){const value=select.getAttribute(attr);if(value!==null)trigger.setAttribute(attr,value);else trigger.removeAttribute(attr);}
       trigger.disabled = select.matches(':disabled');
       if (trigger.disabled || wrapper.hidden) close();
       if (open) {
         [...menu.children].forEach((row, index) => {
           updateLabel(row.querySelector('.symbolPickerLabel'), options[index]);
+          if(iconForValue)row.querySelector('.nativeSelectIcon').innerHTML=iconForValue(options[index]?.value);
           const selected = options[index]?.value === select.value;
           row.classList.toggle('selected', selected);
           row.setAttribute('aria-selected', String(selected));
@@ -130,7 +133,7 @@
       // Modal dialogs live in the browser top layer; their menu must live there too.
       (select.closest('dialog[open]')??document.body).append(menu);
       const options = entries();
-      menu.innerHTML = options.map((option, index) => `<button type="button" id="${id}-${index}" class="symbolPickerItem${option.value === select.value ? ' selected' : ''}" role="option" aria-selected="${option.value === select.value}" tabindex="-1" data-native-index="${index}" ${disabled(option) ? 'disabled aria-disabled="true"' : ''}>${swatchMarkup}<span class="symbolPickerLabel">${escape(option.textContent)}</span><span class="symbolPickerCheck" aria-hidden="true">${option.value === select.value ? '✓' : ''}</span></button>`).join('');
+      menu.innerHTML = options.map((option, index) => `<button type="button" id="${id}-${index}" class="symbolPickerItem${option.value === select.value ? ' selected' : ''}" role="option" aria-selected="${option.value === select.value}" tabindex="-1" data-native-index="${index}" ${disabled(option) ? 'disabled aria-disabled="true"' : ''}>${swatchMarkup}${iconMarkup}<span class="symbolPickerLabel">${escape(option.textContent)}</span><span class="symbolPickerCheck" aria-hidden="true">${option.value === select.value ? '✓' : ''}</span></button>`).join('');
       open = true;
       wrapper.classList.add('open');
       trigger.setAttribute('aria-expanded', 'true');
@@ -241,7 +244,7 @@
   document.addEventListener('DOMContentLoaded',()=>{
     const enhance=select=>{
       if(pickers.has(select)||select.multiple||select.size>1)return;
-      const picker=app.createNativeSelectPicker(select,select.id||'Choose an option');pickers.set(select,picker);
+      const picker=app.createNativeSelectPicker(select,select.id||'Choose an option',{iconForValue:select.pickerIconForValue});pickers.set(select,picker);
     };
     const scan=node=>{
       if(node.nodeType!==1||node.namespaceURI!=='http://www.w3.org/1999/xhtml')return;

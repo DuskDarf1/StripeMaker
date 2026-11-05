@@ -1,0 +1,41 @@
+const assert=require('node:assert/strict'),path=require('node:path');const {pathToFileURL}=require('node:url');
+const P=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+(async()=>{const webkit=process.env.BROWSER==='webkit',executablePath=webkit?process.env.WEBKIT_PATH:process.env.CHROME_PATH;
+ const browser=await P[webkit?'webkit':'chromium'].launch({headless:true,...(executablePath?{executablePath}:{})});
+ try{
+  const page=await browser.newPage({viewport:{width:1400,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(process.env.STRIPEMAKER_URL||pathToFileURL(path.resolve(__dirname,'../index.html')).href);await page.waitForFunction(()=>StripeMaker.sheets.ready);await page.locator('#blankSheet').evaluate(b=>b.click());await page.waitForFunction(()=>StripeMaker.sheets.selected);
+  await page.evaluate(()=>{const A=StripeMaker,s=A.sheets.selected;s.inchesPerPixel=12;s.view={x:0,y:0,scale:1,fitted:false};s.roads=[];s.joints=[];s.vehicleSpawns=[];
+   for(let i=0;i<2;i++){s.roads.push({id:i+1,lanes:i===0?2:1,laneWidth:12,ends:[{joint:i*2+1,sign:1},{joint:i*2+2,sign:1}]});s.joints.push({id:i*2+1,x:600,y:400+i*200,dir:{x:1,y:0},root:i+1,links:[]},{id:i*2+2,x:1200,y:400+i*200,dir:{x:1,y:0},root:i+1,links:[]});s.vehicleSpawns.push({road:i+1,routes:[{exit:{road:i+1,e:1},percent:100}]});}
+   A.settings.set('simulationTemperature',0);Object.assign(A.sheets.selected,{speedZones:A.sheets.selected.roads.map(road=>({id:'test-speed-'+road.id,road:road.id,from:0,to:1,mph:0}))});A.sheets.zoomBy(1);A.roadEditor.render();A.history.rebase();A.showEditor('simulatorEditor');
+   const advance=A.simulatorVehicles.Engine.prototype.advance;A.simulatorVehicles.Engine.prototype.advance=function(seconds){window.testEngine=this;return advance.call(this,seconds);};
+  });
+  const choose=async name=>{await page.locator('#simulationSpeedOverlay').setChecked(name!=='None');};
+  await page.clock.install();await page.click('#playSimulation');await page.clock.runFor(100);await page.click('#pauseSimulation');
+  await page.evaluate(()=>{const A=StripeMaker,e=testEngine;Object.assign(A.sheets.selected,{speedZones:A.sheets.selected.roads.map(road=>({id:'test-speed-'+road.id,road:road.id,from:0,to:1,mph:30}))});A.simulator.refreshOverlay();const route=e.sources.get('1:0').routes[0];
+   e.cars=[{speed:0,factor:1},{speed:22,factor:1},{speed:44,factor:1},{speed:35.2,factor:.8}].map((v,i)=>{const c={id:100+i,source:'1:0',route,path:route.path,pathDistance:100+i*100,distance:100+i*100,speed:v.speed,stoppedSeconds:i===0?2.5:0,driver:{...A.simulatorDrivers.BASELINE,speedFactor:v.factor},committed:new Set(),decisionAt:0,hue:i*60};e.updateCar(c);return c;});A.simulator.refreshOverlay(false);
+  });
+  const cars=await page.evaluate(()=>JSON.stringify(testEngine.cars.map(c=>({id:c.id,x:c.x,y:c.y,speed:c.speed,driver:c.driver}))));
+  await choose('Speed (MPH)');assert.equal(await page.locator('.simulatorSpeed').count(),4);assert(await page.locator('#simulationSpeedLegend').isVisible());assert(await page.locator('.simulatorDensity').isHidden());
+  assert.deepEqual(await page.locator('.simulatorSpeed').allTextContents(),['0.0','15.0','30.0','24.0']);
+  const colors=await page.locator('.simulatorSpeed').evaluateAll(nodes=>nodes.map(n=>n.style.color));assert.notEqual(colors[0],colors[1]);assert.notEqual(colors[1],colors[2]);assert.equal(colors[2],colors[3],'each driver uses their own target');
+  await page.locator('#simulationStoppedOverlay').check();assert.deepEqual(await page.locator('.simulatorStoppedTime').allTextContents(),['2.5 s','0.0 s','0.0 s','0.0 s']);
+  const speedTransform=await page.locator('.simulatorSpeed').first().getAttribute('style'),stoppedTransform=await page.locator('.simulatorStoppedTime').first().getAttribute('style');assert.notEqual(speedTransform,stoppedTransform,'simultaneous labels stack');
+  const transforms=await page.locator('.simulatorSpeed').evaluateAll(nodes=>nodes.map(n=>n.style.transform));
+  await page.evaluate(()=>{StripeMaker.sheets.selected.view.x+=30;StripeMaker.sheets.zoomBy(1);});await page.clock.runFor(20);assert.notDeepEqual(await page.locator('.simulatorSpeed').evaluateAll(nodes=>nodes.map(n=>n.style.transform)),transforms);
+  assert.equal(await page.evaluate(()=>JSON.stringify(testEngine.cars.map(c=>({id:c.id,x:c.x,y:c.y,speed:c.speed,driver:c.driver})))),cars,'overlay and view changes never change physics');
+  await page.locator('#simulationDensityOverlay').check();assert(await page.locator('.simulatorDensity').isVisible());assert.equal(await page.locator('.simulatorSpeed').count(),4);
+  assert.equal(await page.evaluate(()=>JSON.stringify(testEngine.cars.map(c=>({id:c.id,x:c.x,y:c.y,speed:c.speed,driver:c.driver})))),cars);
+  await page.screenshot({path:'/tmp/stripemaker-speed-overlay.png'});
+  await page.locator('#simulationDensityOverlay').uncheck();
+  await choose('None');assert.equal(await page.locator('.simulatorSpeed').count(),0);assert.equal(await page.locator('.simulatorStoppedTime').count(),4);await choose('Speed (MPH)');
+  await page.evaluate(()=>{testEngine.cars.shift();StripeMaker.settings.set('simulationOverlays',StripeMaker.settings.get('simulationOverlays'));});assert.equal(await page.locator('.simulatorSpeed').count(),3);assert.equal(await page.locator('.simulatorStoppedTime').count(),3);
+  await page.click('#clearSimulation');assert.equal(await page.locator('.simulatorSpeed').count(),0);assert.equal(await page.locator('.simulatorStoppedTime').count(),0);
+  await page.locator('#simulationDensityOverlay').check();assert(await page.locator('.simulatorDensity').isVisible());assert(await page.locator('.simulatorSpeeds').isVisible());
+  await page.click('#playSimulation');await page.clock.runFor(300);assert((await page.locator('.simulatorSpeed').count())>0);assert(!await page.locator('#simulationSpeedOverlay').isDisabled());assert(!await page.locator('#simulationDensityOverlay').isDisabled());await page.click('#pauseSimulation');
+  const portable=await page.evaluate(()=>StripeMaker.projectJSON.snapshot());assert.deepEqual(portable.settings.simulationOverlays.sort(),['density','speed','stopped']);
+  await choose('None');await page.locator('#simulationDensityOverlay').uncheck();await page.evaluate(project=>StripeMaker.projectJSON.load(project,{applySettings:true}),portable);assert(await page.locator('#simulationSpeedOverlay').isChecked());
+  await page.clock.runFor(700);await page.reload();await page.waitForFunction(()=>StripeMaker.sheets.ready);await page.evaluate(()=>StripeMaker.showEditor('simulatorEditor'));assert(await page.locator('#simulationSpeedOverlay').isChecked());assert(await page.locator('#simulationDensityOverlay').isChecked());assert(await page.locator('#simulationStoppedOverlay').isChecked());assert.deepEqual(errors,[]);
+  console.log(`PASS ${webkit?'WebKit':'Chromium'} MPH labels, personal target gradient, view tracking, no physics mutation, removal, clear, import and reload.`);
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

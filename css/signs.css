@@ -12,6 +12,15 @@
 }
 #signPicker:not([open]) { display: none; }
 #signPicker h3 { margin: 0; }
+#signPicker .signPickerHeader { display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
+#signPicker .signMakerLink {
+  display: flex; align-items: center; justify-content: center; gap: .35rem;
+  margin-left: auto; padding: .5rem; border: 0; background: rgb(var(--inputColor));
+  color: var(--textColor); font-family: "Inter", sans-serif; font-weight: 500;
+  font-size: 1.25rem; text-decoration: none; cursor: pointer;
+}
+#signPicker .signMakerLink:hover { background: var(--selectedColor); }
+#signPicker .signMakerLink:focus-visible { outline: 2px solid var(--textColor); outline-offset: 2px; }
 #signPicker .iconGrid {
   display: grid;
 /* in #sm-links */
@@ -95,3 +104,5 @@
 #assemblyCandidate { touch-action:none; cursor:grab; }
 #assemblyCandidate img { width:3rem; height:3rem; object-fit:contain; pointer-events:none; }
 @media (max-width:768px) { #signAssemblyEditor { width:100%; } }
+.signArrowRotate { position: absolute; transform: translate(-50%,-50%); pointer-events: auto; cursor: grab; }
+#signText { min-width: 0; flex: 1; resize: vertical; font: inherit; }

@@ -88,8 +88,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal((await state())[0].contrast, 'block');
 
     // Escape deselects; choose a stop line and Shift-click to span both lanes.
-    await page.locator('.markingHandle').focus(); await page.keyboard.press('Escape');
-    assert.equal(await page.locator('.markingHandle').count(), 0);
+    await page.locator('.markingHandle[data-part]').focus(); await page.keyboard.press('Escape');
+    assert.equal(await page.locator('.markingHandle[data-part]').count(), 0);
     await page.locator('#chooseMarking').click();
     await page.locator('#markingSearch').fill('stop line');
     await page.locator('#markingGrid button').first().click();
@@ -113,7 +113,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert(Math.abs(sides.diagonals[0] - sides.diagonals[1]) < 0.1, 'square corners');
 
     // A two-line word message near the curve.
-    await page.locator('.markingHandle').focus(); await page.keyboard.press('Escape');
+    await page.locator('.markingHandle[data-part]').focus(); await page.keyboard.press('Escape');
     await page.locator('#chooseMarking').click(); await page.locator('#markingSearch').fill('word');
     assert.equal(await page.locator('#markingGrid button').count(), 1);
     await page.locator('#markingGrid button').first().click();
@@ -125,7 +125,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(marks[2].type, 'word'); assert.equal(marks[2].text, 'LEFT\nONLY');
 
     // A route shield.
-    await page.locator('.markingHandle').focus(); await page.keyboard.press('Escape');
+    await page.locator('.markingHandle[data-part]').focus(); await page.keyboard.press('Escape');
     await page.locator('#chooseMarking').click(); await selectChoice(page.locator('#markingCategory'),'Route shields');
     await page.locator('#markingGrid button').first().click();
     await page.locator('#markingRoute').fill('275');
@@ -142,7 +142,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal((await state()).length, 4);
 
     // Keyboard: move along the lane and to the other lane; Delete removes.
-    await page.locator('.markingHandle').focus();
+    await page.locator('.markingHandle[data-part]').focus();
     const before = (await state())[3];
     await page.keyboard.press('ArrowLeft');
     assert.equal((await state())[3].on.lane, 0);
@@ -188,7 +188,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       const len = Math.hypot(b.x - a.x, b.y - a.y), tx = (b.x - a.x) / len, ty = (b.y - a.y) / len;
       return { x: a.x + (b.x - a.x) * f - ty * c, y: a.y + (b.y - a.y) * f + tx * c, on: t.on };
     });
-    await page.locator('.markingHandle').count().then(n => n && page.locator('.markingHandle').focus().then(() => page.keyboard.press('Escape')));
+    await page.locator('.markingHandle[data-part]').count().then(n => n && page.locator('.markingHandle[data-part]').focus().then(() => page.keyboard.press('Escape')));
     await page.locator('#chooseMarking').click(); await page.locator('#markingSearch').fill('stop line');
     await page.locator('#markingGrid button').first().click();
     at = await client(approach);

@@ -1,0 +1,31 @@
+const assert=require('node:assert/strict'),path=require('node:path'),{pathToFileURL}=require('node:url');
+const P=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+(async()=>{const webkit=process.env.BROWSER==='webkit',browser=await P[webkit?'webkit':'chromium'].launch({headless:true,...((webkit?process.env.WEBKIT_PATH:process.env.CHROME_PATH)?{executablePath:webkit?process.env.WEBKIT_PATH:process.env.CHROME_PATH}:{})});
+try{const page=await browser.newPage({viewport:{width:1400,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+await page.goto(pathToFileURL(path.resolve(__dirname,'../index.html')).href);await page.waitForFunction(()=>StripeMaker.sheets.ready);await page.click('button[aria-controls="sheetsMenu"]');await page.click('#blankSheet');await page.waitForFunction(()=>StripeMaker.sheets.selected);
+await page.evaluate(()=>{const A=StripeMaker,s=A.sheets.selected;Object.assign(s,{inchesPerPixel:2,roads:[{id:1,lanes:2,laneWidth:12,ends:[{joint:1,sign:1},{joint:2,sign:1}]}],joints:[{id:1,x:450,y:550,dir:{x:1,y:0},root:1,links:[]},{id:2,x:1250,y:550,dir:{x:1,y:0},root:1,links:[]}],vehicleSpawns:[{road:1,routes:[{exit:{road:1,e:1},percent:100}]}],view:{x:0,y:0,scale:1}});A.settings.set('simulationTemperature',0);A.settings.set('simulationSpeed',30);A.sheets.zoomBy(1);A.roadEditor.render();A.history.rebase();A.showEditor('simulatorEditor');});
+assert.equal(await page.locator('#simulationSpeedValue').count(),0,'no global speed control');
+for(const id of ['speedZoneMph','speedZoneMphValue']){assert.equal(await page.locator('#'+id).getAttribute('min'),'0');assert.equal(await page.locator('#'+id).getAttribute('max'),'85');assert.equal(await page.locator('#'+id).getAttribute('step'),'0.1');}
+await page.click('#addSpeedZone');assert.equal(await page.locator('#addSpeedZone').getAttribute('aria-pressed'),'true');
+const coords=await page.evaluate(()=>{const A=StripeMaker,s=A.sheets.selected,g=A.roadEditor.crossSection(s)(s.roads[0]),b=document.getElementById('previewStage').getBoundingClientRect();return [.25,.75].map(f=>{const a=g.line[0],c=g.line.at(-1),q=A.sheets.toScreen({x:a.x+(c.x-a.x)*f,y:a.y+(c.y-a.y)*f});return {x:b.left+q.x,y:b.top+q.y};});});
+await page.mouse.move(coords[0].x,coords[0].y);await page.mouse.down();await page.mouse.move(coords[1].x,coords[1].y,{steps:12});await page.mouse.up();
+assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.speedZones.length),1);
+await page.fill('#speedZoneMphValue','12.5');await page.locator('#speedZoneMphValue').blur();assert.equal(await page.locator('#speedZoneMph').inputValue(),'12.5');assert(await page.locator('.simulatorSpeedZones text').allTextContents().then(a=>a.includes('12.5 mph')));
+assert(await page.locator('.simulatorSpeedZones path').evaluateAll(paths=>paths.every(p=>p.getAttribute('stroke')==='#ffcc00')),'all zone borders are yellow');
+assert.equal(await page.locator('.simulatorSpeedZones path').count(),3,'all default/zone sections have outlines');
+await page.click('#undoButton');assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.speedZones[0].mph),30);await page.click('#redoButton');assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.speedZones[0].mph),12.5);
+// Undo restores the data while keeping the mode available; select the zone again.
+await page.mouse.click((coords[0].x+coords[1].x)/2,coords[0].y);assert.equal(await page.locator('#removeSpeedZone').isEnabled(),true);
+const decorated=await page.evaluate(()=>{const A=StripeMaker,s=A.sheets.selected,g=A.simulator.network(s),route=[...g.search(g.entrances[0]).values()][0];const points=A.speedZones.decoratePlayback(route.points),p=A.simulatorVehicles.preparePath(points);return {zones:p.zoneLimits.filter(z=>Number.isFinite(z.limit))};});assert(decorated.zones.length>0);
+const exported=await page.evaluate(async()=>{const p=await StripeMaker.projectJSON.snapshot('selected');StripeMaker.projectJSON.validate(p);return p.sheets[0].data.speedZones;});assert.equal(exported[0].mph,12.5);
+await page.keyboard.press('Escape');assert(await page.locator('.simulatorSpeedZones').isHidden());
+await page.click('#playSimulation');assert(await page.locator('#addSpeedZone').isDisabled());await page.click('#pauseSimulation');assert(await page.locator('#addSpeedZone').isEnabled());
+await page.click('#addSpeedZone');await page.mouse.click((coords[0].x+coords[1].x)/2,coords[0].y);await page.click('#removeSpeedZone');assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.speedZones.length),0);
+await page.click('#undoButton');assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.speedZones.length),1);
+await page.screenshot({path:`/tmp/stripemaker-speed-zones-${webkit?'webkit':'chromium'}.png`});
+await page.evaluate(()=>StripeMaker.sheets.save(StripeMaker.sheets.selected));await page.waitForTimeout(800);await page.reload();await page.waitForFunction(()=>StripeMaker.sheets.ready&&StripeMaker.sheets.selected);assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.speedZones[0].mph),12.5);
+await page.evaluate(()=>StripeMaker.showEditor('simulatorEditor'));await page.click('#addSpeedZone');
+await page.mouse.click(coords[0].x-80,coords[0].y);await page.fill('#speedZoneMphValue','60');await page.locator('#speedZoneMphValue').blur();assert(await page.locator('.simulatorSpeedZones text').allTextContents().then(a=>a.includes('60 mph')));
+assert.equal(await page.evaluate(()=>StripeMaker.settings.snapshot().simulationSpeed),undefined);
+assert.deepEqual(errors,[]);console.log(`PASS ${webkit?'WebKit':'Chromium'} speed-zone drag, boxed sections, MPH editing, routing, playback lock, removal, undo/redo and reload.`);
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

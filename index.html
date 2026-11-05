@@ -22,15 +22,31 @@
   <script src="js/levels.js"></script>
   <script src="js/simulator-lane-changes.js"></script>
   <script src="js/simulator-routing.js"></script>
+  <script src="js/simulator-signals.js"></script>
+  <script src="js/simulator-controls.js"></script>
+  <script src="js/simulator-zones.js"></script>
+  <script src="js/simulator-curves.js"></script>
+  <script src="js/simulator-gaps.js"></script>
+  <script src="js/simulator-collisions.js"></script>
   <script src="js/simulator-drivers.js"></script>
   <script src="js/simulator-vehicles.js"></script>
+  <script src="js/simulator-volumes.js"></script>
+  <script src="js/simulator-density.js"></script>
   <script src="js/simulator.js"></script>
+  <script src="js/signal-assets/dimensions.js"></script>
+  <script src="js/signal-assets/signal-model.js"></script>
+  <script src="js/signal-assets/signal-renderer.js"></script>
+  <script src="js/signal-head-editor.js"></script>
+  <script src="js/signal-editor.js"></script>
   <script src="js/intersection-geometry.js"></script>
   <script src="js/roundabout-geometry.js"></script>
   <script src="js/intersections.js"></script>
   <script src="js/sign-designs.js"></script>
   <script src="js/sign-layout.js"></script>
+  <script src="fonts/osifont-outlines.js"></script>
+  <script src="js/engineering-text.js"></script>
   <script src="js/signs.js"></script>
+  <script src="js/match-lines.js"></script>
   <script src="assets/markings/symbols.js"></script>
   <script src="assets/markings/font.js"></script>
   <script src="assets/markings/cfx.js"></script>
@@ -42,10 +58,12 @@
   <script src="js/project-json.js"></script>
   <script src="js/selection.js"></script>
   <script src="js/main.js"></script>
+  <script src="js/action-instructions.js"></script>
   <link href="css/page.css" rel="stylesheet" />
   <link href="css/form.css" rel="stylesheet" />
   <link href="css/menus.css" rel="stylesheet" />
   <link href="css/signs.css" rel="stylesheet" />
+  <link href="css/signals.css" rel="stylesheet" />
   <link href="css/markings.css" rel="stylesheet" />
   <link href="css/select-picker.css" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
@@ -64,17 +82,27 @@
         </h2>
       </div>
       <div class="editorContent">
-        <div class="headActions">
+        <div class="fieldRow elementAddRow">
+          <label for="elementToAdd">Add</label>
+          <select id="elementToAdd"><option value="road">Road</option><option value="median">Median</option><option value="bike">Standalone bike lane</option><option value="track">Standalone two-way bike track</option><option value="roadBike">Bike lane on selected road</option><option value="roadTrack">Two-way track on selected road</option><option value="match">Match line</option></select>
+          <button type="button" id="addElement" aria-label="Add selected element" title="Add selected element"><span class="material-symbols-outlined" aria-hidden="true">add</span></button>
+        </div>
+        <div hidden>
           <button type="button" id="addRoad" aria-pressed="false">Add Road</button>
           <button type="button" id="addMedian" aria-pressed="false">Add Median</button>
-          <button type="button" id="deleteRoad" disabled>Delete</button>
+          <button type="button" id="openMatchLines">Match Lines</button>
         </div>
+        <div hidden><button type="button" id="addStandaloneBikeLane" aria-pressed="false">Add Standalone Bike Lane</button></div>
+        <div class="headActions"><button type="button" id="deleteRoad" disabled>Delete</button></div>
+        <div id="standaloneBikeTypeRow" class="fieldRow" hidden><label for="standaloneBikeType">Standalone bike lane</label><select id="standaloneBikeType"><option value="bike">One-way bike lane</option><option value="twoWayBike">Two-way bike track</option></select></div>
         <p id="elementsHint" class="elementsHint" aria-live="polite"></p>
         <div id="bikeSetup" hidden>
           <h3>Bike lane conflicts</h3>
           <div id="bikeSetupLaneRow" class="fieldRow"><label for="bikeSetupLane">Bike lane</label><select id="bikeSetupLane"></select></div>
           <div id="bikeConflictRow" class="fieldRow"><label for="bikeConflict">Situation</label><select id="bikeConflict" aria-describedby="bikeConflictHelp bikeConflictStatus"><option value="auto">Automatic</option><option value="drop">Lane drops to right turn</option><option value="separate">Right-turn lane added</option><option value="freeflow">Free-flow ramp crossing</option><option value="channelized">Curbed turn crossing</option></select></div>
           <div id="bikeSpeedRow" class="fieldRow"><label for="bikeSpeed">Design speed (mph)</label><select id="bikeSpeed"><option value="0">Use drawn taper</option><option>35</option><option>40</option><option>45</option><option>50</option><option>55</option><option>60</option><option>65</option></select></div>
+          <div id="bikeConflictLengthRow" class="fieldRow" hidden><label for="bikeConflictLength">Conflict length (ft)</label><input id="bikeConflictLength" type="number" min="1" step="1" value="100" aria-describedby="bikeConflictLengthHelp" /></div>
+          <p id="bikeConflictLengthHelp" class="fieldHint">Includes both dotted sections and the crossover gap; limited to the road length.</p>
           <div id="bikeCrossoverRow" class="fieldRow" hidden><label for="bikeCrossover">Continue markings through crossover</label><input id="bikeCrossover" type="checkbox" aria-describedby="bikeCrossoverHelp" /></div>
           <p id="bikeCrossoverHelp" class="fieldHint" hidden>Continues both dotted edges and any colored pavement you placed through the crossover gap.</p>
           <p id="bikeConflictHelp" class="fieldHint"></p>
@@ -121,10 +149,12 @@
           <button type="button" id="splitRoad">Split into One-Way Roads</button>
         </div>
         <div class="headActions bikeActions">
-          <button type="button" id="addBikeLane" disabled title="Adds a bike lane on the selected road's outer edge (each side of a two-way road). Bike lanes carry into joined roads; a turn lane added outside one makes a keyhole.">Add Bike Lane</button>
-          <button type="button" id="addBikeTrack" disabled title="Adds a two-way bike track on the selected road's outer edge.">Add Two-Way Track</button>
+          <button type="button" id="addBikeLane" hidden disabled>Add Bike Lane</button>
+          <button type="button" id="addBikeTrack" hidden disabled>Add Two-Way Track</button>
           <label class="bikeBuffered" title="Toggle the buffer on the selected road's bike lanes."><input id="bufferedBike" type="checkbox" checked /> Buffered</label>
         </div>
+        <div class="fieldRow"><label for="keepWidthAtJoins">Keep lanes wide through turns</label><input id="keepWidthAtJoins" type="checkbox" aria-describedby="keepWidthAtJoinsHint" /></div>
+        <p id="keepWidthAtJoinsHint" class="fieldHint">Keep the full driveway width through the curve, right up to the main road’s edge.</p>
         <div class="fieldRow"><label for="perLaneWidths">Per Lane widths</label><input id="perLaneWidths" type="checkbox" /></div>
         <p id="perLaneWidthsHint" class="fieldHint" hidden>Select a lane node to adjust its widths.</p>
         <div id="laneFields" hidden>
@@ -283,6 +313,8 @@
           </div>
           <div id="markingSpeedFields" class="fieldRow" hidden><label for="markingSpeed">Speed limit</label><select id="markingSpeed"><option value="fast">45 mph or greater</option><option value="slow">Less than 45 mph</option></select></div>
           <div id="markingEnhancedRow" class="fieldRow" hidden><label for="markingEnhanced">Enhanced crosswalk</label><input id="markingEnhanced" type="checkbox" /></div>
+          <div id="markingForceBarsRow" class="fieldRow" hidden><label for="markingForceBars">Force bars</label><input id="markingForceBars" type="checkbox" /></div>
+          <div id="markingBarAngleRow" class="fieldRow" hidden><label for="markingBarAngle">Angle (°)</label><div class="dimensionInputs"><input id="markingBarAngle" type="range" min="-90" max="90" step="1" value="0" title="0° is perpendicular to the crossing" /><input id="markingBarAngleValue" type="number" min="-90" max="90" step="1" value="0" aria-label="Crosswalk bar angle in degrees" title="0° is perpendicular to the crossing" /></div></div>
           <div id="markingAestheticToggleRow" class="fieldRow" hidden><label for="markingAesthetic">Aesthetic treatment</label><input id="markingAesthetic" type="checkbox" /></div>
           <div id="markingVariantFields" class="fieldRow" hidden><label for="markingVariant">Treatment</label><select id="markingVariant"></select></div>
           <div id="markingBlockMessageFields" class="fieldRow" hidden><label for="markingBlockMessage">Message</label><select id="markingBlockMessage"><option value="doNotBlock">DO NOT BLOCK</option><option value="keepClear">KEEP CLEAR</option></select></div>
@@ -332,19 +364,36 @@
       </div>
     </section>
 
+    <section id="matchLineEditor" class="editor" aria-labelledby="matchLineTitle" hidden>
+      <div class="editorBar"><h2 id="matchLineTitle" class="editorTitle" tabindex="-1">Match Lines</h2></div>
+      <div class="editorContent">
+        <div class="headActions"><button id="addMatchLine" type="button">Add Match Line</button><button id="finishMatchRoads" type="button" hidden>Use Selected Road Ends</button><button id="cancelMatchLine" type="button" hidden>Cancel</button></div>
+        <p id="matchLineStatus" class="elementsHint" role="status">Select road ends, then switch sheets to place their continuation.</p>
+        <div class="fieldRow"><label for="matchLineName">Name</label><input id="matchLineName" type="text" maxlength="80" value="A-A" /></div>
+        <div id="matchPlacementFields" hidden>
+          <div class="fieldRow"><label for="matchStubLength">Continuation (ft)</label><input id="matchStubLength" type="number" min="10" max="1000" step="5" value="100" /></div>
+          <div class="fieldRow"><label for="matchPlacementAngle">Placement rotation (°)</label><div class="dimensionInputs"><input id="matchPlacementAngle" type="range" min="-180" max="180" step="1" value="0" /><input id="matchPlacementAngleValue" type="number" min="-180" max="180" step="1" value="0" aria-label="Match line placement rotation in degrees" /></div></div>
+        </div>
+        <div id="matchLineList" class="headActions"></div>
+        <button id="deleteMatchLine" type="button" disabled>Delete Paired Match Lines</button>
+        <p class="fieldHint">Click both directions separately for a divided roadway. Placing on another sheet creates editable road continuations. Click a placed match line to visit its other sheet. Select it in this list to rename or remove it.</p>
+      </div>
+    </section>
     <section id="signsEditor" class="editor" aria-labelledby="signsTitle" hidden>
       <div class="editorBar"><h2 id="signsTitle" class="editorTitle" tabindex="-1"><span class="material-symbols-outlined" aria-hidden="true">signpost</span> Signs</h2></div>
       <div class="editorContent">
-        <div class="headActions"><button type="button" id="addSign" aria-pressed="false">Add Sign</button><button type="button" id="uploadSign">Upload Sign</button><button type="button" id="deleteSign" disabled>Delete</button></div>
+        <div class="headActions"><button type="button" id="addSign" aria-pressed="false">Add Sign</button><button type="button" id="uploadSign">Upload Sign</button><button type="button" id="addText">Add Text</button><button type="button" id="deleteSign" disabled>Delete</button></div>
         <p id="signStatus" class="elementsHint" role="status"></p>
         <button type="button" id="openAssemblyEditor">Assembly Editor</button>
+        <div id="textElementFields" hidden><div class="fieldRow"><label for="signText">Text</label><textarea id="signText" rows="3" maxlength="2000">TEXT</textarea></div><p class="fieldHint">Place the arrow tip, then the text.</p></div>
         <div id="signDetailsHome"><button type="button" id="chooseSign">Choose Sign</button>
         <div id="signCurrent"><img id="signPreview" alt="" hidden /><p id="signName">Loading signs…</p></div>
         <div id="signLegendFields"></div></div>
         <div class="fieldRow"><label for="signSize">Callout size (%)</label><input id="signSize" type="number" min="25" max="2000" step="5" value="100" /></div>
         <div class="fieldRow"><label for="signRotation">Face rotation (°)</label><div class="dimensionInputs"><input id="signRotation" type="range" min="0" max="360" step="1" value="0" /><input id="signRotationValue" type="number" min="0" max="360" step="1" value="0" aria-label="Face rotation in degrees" /></div></div>
-        <p class="signInstructions">Choose a sign, click its arrow tip location, then click where to show the sign face. Drag either end to move it.</p>
-        <p class="signInstructions">Search official names, codes, and published variants. Paste an image to use it as a sign. Add signs to an assembly and arrange them by row and column.</p>
+        <div class="fieldRow"><label for="signArrowRotation">Arrowhead rotation (°)</label><div class="dimensionInputs"><input id="signArrowRotation" type="range" min="0" max="360" step="1" value="0" /><input id="signArrowRotationValue" type="number" min="0" max="360" step="1" value="0" aria-label="Arrowhead rotation in degrees" /></div></div>
+        <p class="signInstructions">Click the arrow tip location, then place the sign or text. Drag either end to move it. The two rotation handles turn the face and arrowhead independently.</p>
+        <p id="signCatalogHelp" class="signInstructions">Search official names, codes, and published variants. Paste an image to use it as a sign. Add signs to an assembly and arrange them by row and column.</p>
       </div>
     </section>
     <section id="signAssemblyEditor" class="editor" aria-labelledby="signAssemblyTitle" hidden>
@@ -371,14 +420,45 @@
           <span class="material-symbols-outlined" aria-hidden="true">directions_car</span>
           Simulator
         </h2>
+        <div class="simulatorPanelActions">
+          <button type="button" id="pauseMinimizedSimulation" hidden title="Pause simulation and reopen its controls">Pause</button>
+          <button type="button" id="minimizeSimulator" hidden aria-expanded="true" aria-controls="simulatorContent" aria-label="Minimize simulator panel" title="Minimize the panel while playback continues">Minimize</button>
+        </div>
       </div>
-      <div class="editorContent">
-        <div class="fieldRow"><label for="simulationSpeed">Speed (mph)</label><div class="dimensionInputs"><input id="simulationSpeed" type="range" min="0" max="999" step="0.1" value="30" /><input id="simulationSpeedValue" type="number" min="0" max="999" step="0.1" value="30.0" aria-label="Speed in miles per hour" /></div></div>
+      <div class="editorContent" id="simulatorContent">
+        <div class="fieldRow"><label for="simulationTemperature">Temperature</label><div class="dimensionInputs"><input id="simulationTemperature" type="range" min="0" max="100" step="1" value="40" aria-describedby="simulationTemperatureHint" /><input id="simulationTemperatureValue" type="number" min="0" max="100" step="1" value="40" aria-label="Driver temperature" aria-describedby="simulationTemperatureHint" /></div></div>
+        <p id="simulationTemperatureHint" class="fieldHint">Acceleration and braking vary between drivers for intersection starts, red-light approaches and turns. Other variation: ±20%; quick drivers: 13.3% (~1.6× acceleration/braking).</p>
+        <div class="fieldRow"><label for="simulationPlaybackRate">Playback (×)</label><div class="dimensionInputs"><input id="simulationPlaybackRate" type="range" min="1" max="5" step="0.1" value="1" /><input id="simulationPlaybackRateValue" type="number" min="1" max="5" step="0.1" value="1.0" aria-label="Simulation playback multiplier" /></div></div>
         <div class="headActions"><button type="button" id="playSimulation">Play</button><button type="button" id="pauseSimulation" disabled>Pause</button></div>
+        <div class="headActions"><button type="button" id="clearSimulation" disabled>Clear Simulation</button></div>
+        <div id="simulationOverlays" role="group" aria-label="Overlays">
+          <div class="fieldRow"><label for="simulationDensityOverlay">Density overlay</label><input id="simulationDensityOverlay" type="checkbox" /></div>
+          <div class="fieldRow"><label for="simulationSpeedOverlay">Speed overlay (MPH)</label><input id="simulationSpeedOverlay" type="checkbox" /></div>
+          <div class="fieldRow"><label for="simulationStoppedOverlay">Time stopped overlay</label><input id="simulationStoppedOverlay" type="checkbox" /></div>
+        </div>
+        <p id="simulationDensityLegend" class="fieldHint" hidden><span class="simulatorDensityScale" aria-hidden="true"></span>Low → High density · 100-ft lane sections</p>
+        <p id="simulationSpeedLegend" class="fieldHint" hidden>MPH · Green: target speed · Red: stopped</p>
         <div class="headActions"><button type="button" id="createVehicleSpawnPoint" aria-pressed="false">Create Vehicle Spawn Point</button></div>
+        <div class="headActions"><button type="button" id="addSpeedZone" aria-pressed="false">Modify Speed Zones</button></div>
+        <div id="speedZoneFields" hidden>
+          <div class="fieldRow"><label for="speedZoneMph">Speed limit (mph)</label><div class="dimensionInputs"><input id="speedZoneMph" type="range" min="0" max="85" step="0.1" value="30" /><input id="speedZoneMphValue" type="number" min="0" max="85" step="0.1" value="30" aria-label="Zone speed limit in miles per hour" /></div></div>
+          <p class="fieldHint">Drag along a road to set a section. Click a boxed section to edit its limit. Unassigned sections start at 30 mph. Click a boxed section to set its speed.</p>
+          <div class="headActions"><button type="button" id="removeSpeedZone" disabled>Remove Speed Zone</button></div>
+        </div>
+        <div class="headActions"><button type="button" id="addTrafficSignal" aria-pressed="false">Add Traffic Signal</button></div>
+        <div id="signalEditorFields" hidden></div>
+        <div class="headActions"><button type="button" id="addStopControl" aria-pressed="false">Add STOP control</button><button type="button" id="addYieldControl" aria-pressed="false">Add YIELD control</button></div>
+        <div id="simulatorControlFields" hidden>
+          <h3 id="simulatorControlTitle">STOP control</h3>
+          <div class="fieldRow"><label for="simulatorControlIntersection">Intersection</label><select id="simulatorControlIntersection" aria-describedby="simulatorControlHint"><option value="">Not linked</option></select></div>
+          <p id="simulatorControlHint" class="fieldHint">Choose a nearby intersection to link this control.</p>
+          <div class="headActions"><button type="button" id="removeSimulatorControl">Remove Control</button></div>
+        </div>
         <div class="headActions"><button type="button" id="removeVehicleSpawnPoint" disabled>Remove Spawn Point</button><button type="button" id="removeVehicleExitRoute" disabled>Remove Exit Route</button></div>
         <div id="simulatorSpawnFields" hidden>
-          <div class="fieldRow"><label for="vehicleSpawnRate">Output (cars/min)</label><input id="vehicleSpawnRate" type="number" min="0" max="600" step="1" value="12" /></div>
+          <div class="fieldRow simulatorVolumeRow"><label for="vehicleSpawnRate">Output (vehicles)</label><div class="dimensionInputs simulatorVolumeInputs"><input id="vehicleSpawnRate" type="number" min="0" max="600" step="any" value="12" /><span>per</span><select id="vehicleSpawnRateUnit" aria-label="Entrance volume unit"><option value="seconds">second</option><option value="minutes" selected>minute</option><option value="hours">hour</option><option value="days">day</option><option value="AADT">AADT</option></select></div></div>
+          <div class="fieldRow"><label for="simulatorRouteVolumeMode">Route demand</label><select id="simulatorRouteVolumeMode"><option value="percent">Percentages</option><option value="total">Sum of volumes</option><option value="weights">Relative volumes</option></select></div>
+          <p id="simulatorVolumeHint" class="fieldHint" hidden></p>
         </div>
         <div id="simulatorLanes" aria-label="Spawn lane distribution" hidden></div>
         <div id="simulatorRoutes" aria-label="Spawn exit routes"></div>
@@ -496,6 +576,11 @@
       <button type="button" data-format="png" aria-pressed="true">PNG</button>
       <button type="button" data-format="pdf" aria-pressed="false">PDF</button>
     </div>
+    <div class="headActions">
+      <button type="button" id="downloadSelectArea" disabled>Select Area</button>
+      <button type="button" id="downloadWholeSheet" disabled>Whole Sheet</button>
+    </div>
+    <p id="downloadAreaStatus" class="headPopoverHint" role="status">Whole sheet</p>
     <label for="downloadWidth" class="downloadLabel">Width (px)</label>
     <div class="dimensionInputs">
       <input id="downloadWidth" type="range" min="500" max="4096" step="1" value="4096" aria-describedby="downloadSize" />
@@ -526,8 +611,8 @@
     <p id="drawingOpacityHint" class="headPopoverHint">Lower to see the sheet beneath the drawing.</p>
     <label for="signArrowWeight" class="downloadLabel">Sign arrow thickness (%)</label>
     <div class="dimensionInputs">
-      <input id="signArrowWeight" type="range" min="25" max="400" step="5" value="100" />
-      <input id="signArrowWeightValue" type="number" min="25" max="400" step="5" value="100" aria-label="Sign arrow thickness in percent" />
+      <input id="signArrowWeight" type="range" min="1" max="400" step="1" value="100" />
+      <input id="signArrowWeightValue" type="number" min="1" max="400" step="1" value="100" aria-label="Sign arrow thickness in percent" />
     </div>
     <label for="hideLevelsAbove" class="downloadLabel">Hide levels above</label>
     <select id="hideLevelsAbove" aria-describedby="hideLevelsAboveHint">
@@ -661,7 +746,10 @@
   </nav>
   <!-- SignalMaker / SignMaker v2.2 searchable icon selector (GPL-3.0). -->
   <dialog id="signPicker" aria-labelledby="signPickerTitle">
-    <h3 id="signPickerTitle">Select a Sign</h3>
+    <div class="signPickerHeader">
+      <h3 id="signPickerTitle">Select a Sign</h3>
+      <a class="signMakerLink" href="https://hwysignmaker.com" target="_blank" rel="noopener noreferrer">Open SignMaker<span class="material-symbols-outlined" aria-hidden="true">open_in_new</span></a>
+    </div>
     <input id="signSearch" type="search" placeholder="Search signs by code, name, or variant…" aria-label="Search signs by code, name, or variant" />
     <select id="signCategory" aria-label="Sign category"><option value="">All signs</option><option>Regulatory</option><option>Warning and object markers</option><option>Temporary traffic control</option><option>School</option><option>Guide and route signs</option><option>Florida route signs</option></select>
     <div id="signGrid" class="iconGrid" role="group" aria-label="MUTCD signs"></div>

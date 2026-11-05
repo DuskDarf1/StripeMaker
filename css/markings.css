@@ -64,6 +64,17 @@
 .simulatorOverlay .simulatorGhost { opacity: .5; pointer-events: none; }
 .simulatorOverlay .simulatorExit { background: #fff; color: #000; border: 2px solid #000; font-size: 20px; line-height: 1; }
 .simulatorRouteHit { pointer-events: stroke; cursor: pointer; }
+.simulatorOverlay .simulatorSignal { position: absolute; display: grid; place-items: center; width: 28px; height: 28px; transform: translate(-50%, -50%); background: rgb(var(--inputColor)); color: var(--textColor); border-radius: 0; }
+.simulatorSignal .material-symbols-outlined { font-size: 24px; }
+.simulatorOverlay .simulatorSignalTarget { cursor: pointer; opacity: .6; }
+#workspace.simulatorSignalPlacing { cursor: crosshair; }
+.simulatorOverlay .simulatorControl { width: 18px; height: 18px; background: transparent; cursor: pointer; }
+.simulatorControlTarget { opacity: .5; }
+.simulatorControl[aria-pressed="true"] { outline: 2px solid var(--selectedColor); outline-offset: 2px; }
+#workspace.simulatorControlPlacing { cursor: crosshair; }
+.simulatorDensity { pointer-events: none; }
+.simulatorDensity svg { overflow: hidden; pointer-events: none; }
+.simulatorDensityScale { display: inline-block; width: 3rem; height: .6rem; margin-right: .3rem; background: linear-gradient(to right, hsl(120 80% 42%), hsl(60 80% 42%), hsl(0 80% 42%)); }
 .simulatorRouteHit:focus-visible { stroke: var(--selectedColor); stroke-opacity: .5; outline: none; }
 
 /* Same compact panel width as the Elements editor; keep help wrapping. */
@@ -71,6 +82,9 @@
 @media (max-width: 768px) { #simulatorEditor { width: 100%; } }
 
 .simulatorCars { z-index: 7; overflow: hidden; }
+.simulatorVolumeRow > label { flex-basis: 6rem; }
+.simulatorVolumeInputs input[type="number"] { width: 5rem; min-width: 0; flex: 1; }
+.simulatorVolumeInputs select { min-width: 0; flex: 1; }
 .simulatorCar { position: absolute; left: 0; top: 0; transform-origin: center; pointer-events: none; }
 
 /* SignalMaker's indication fieldsets, scoped to the spawn route list. */
@@ -79,3 +93,16 @@
 
 /* Keep simulator sprites and handles beneath SignalMaker's editor panels. */
 #workspace.simulatorActive #previewStage { isolation: isolate; }
+
+.simulatorSpeeds, .simulatorStoppedTimes { z-index: 8; overflow: hidden; pointer-events: none; }
+.simulatorSpeed, .simulatorStoppedTime { position: absolute; left: 0; top: 0; pointer-events: none; white-space: nowrap; font: 700 12px "Inter", sans-serif; font-variant-numeric: tabular-nums; text-shadow: -1px -1px 1px #000, 1px -1px 1px #000, -1px 1px 1px #000, 1px 1px 1px #000; }
+
+.simulatorStoppedTime { color: #fff; }
+/* Match-line controls reuse the road-node/editor conventions. */
+.matchLineOverlay { z-index: 10; pointer-events: none; }
+.matchLineOverlay svg { width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.matchLineHit { pointer-events: stroke; cursor: pointer; }
+.matchLineHit:focus-visible { stroke: #0099ff88; outline: none; }
+.matchEnd { position: absolute; transform: translate(-50%,-50%); pointer-events: auto; width: 1.3rem; height: 1.3rem; min-width: 0; padding: 0; border-radius: 50%; background: var(--hotbarColor); border: 1px solid var(--textColor); color: var(--textColor); }
+.matchEnd[aria-pressed="true"] { background: var(--selectedColor); }
+#matchLineList { flex-direction: column; margin-top: .6rem; }

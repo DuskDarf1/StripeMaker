@@ -400,7 +400,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       const item = StripeMaker.sheets.selected.intersections[0],
         at = StripeMaker.sheets.toScreen(item),
         r = document.getElementById("previewStage").getBoundingClientRect();
-      return { x: at.x + r.left, y: at.y + r.top };
+      // A prior sheet median can leave its rotation handle over the center.
+      // Pick actual intersection pavement, not that unrelated control.
+      for(const [dx,dy] of [[0,0],[25,0],[-25,0],[0,25],[0,-25],[40,40]]) {
+        const p={x:at.x+r.left+dx,y:at.y+r.top+dy};
+        if(document.elementFromPoint(p.x,p.y)?.classList.contains('intersectionHit'))return p;
+      }
+      throw Error('No visible intersection pavement near the center.');
     });
     await page.mouse.click(centerPoint.x, centerPoint.y);
     const sheetPanel = page.locator("#intersectionEditor");

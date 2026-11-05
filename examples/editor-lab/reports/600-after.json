@@ -1,0 +1,156 @@
+{
+  "browser": "153.0.8010.12",
+  "gridSize": 6,
+  "counts": {
+    "roads": 228,
+    "joints": 198,
+    "intersections": 36,
+    "markings": 264,
+    "signs": 36,
+    "medians": 0,
+    "gores": 0,
+    "lines": 0,
+    "surfaces": 0,
+    "bridges": 0,
+    "intersectionMedians": 36
+  },
+  "scenarios": [
+    {
+      "scenario": "sign",
+      "setupMs": 2663.199999988079,
+      "item": "sign-2-2",
+      "links": 576,
+      "connected": 264,
+      "total": 264,
+      "domNodes": 2632,
+      "pressMs": 59.21812499999987,
+      "moveMs": 495.7663329999996,
+      "releaseMs": 6.352250000000822,
+      "events": {
+        "count": 30,
+        "p50": 16.77141699999993,
+        "p95": 19.643750000000182,
+        "max": 19.818207999999686,
+        "over33ms": 0
+      },
+      "frames": {
+        "count": 30,
+        "p50": 16.699999999999818,
+        "p95": 16.799999999999727,
+        "max": 16.800000000000182,
+        "over33ms": 0
+      },
+      "geometryHash": "6e4e01bc25304193605b4594063231544bf501aa84533b4fe75aea0c40ad1bf3",
+      "svgHash": "3c14ec2c3553ce5a3934ba75c400ea3e746843e4a46ce25688153b92ffbe8e6e",
+      "snapshots": [],
+      "comparison": {
+        "identicalSVG": true,
+        "maxNumericDelta": 0,
+        "roundingDifferences": 0
+      }
+    },
+    {
+      "scenario": "marking",
+      "setupMs": 2542.400000035763,
+      "item": "arrow-1",
+      "links": 576,
+      "connected": 264,
+      "total": 264,
+      "domNodes": 2632,
+      "pressMs": 5.913375000000087,
+      "moveMs": 490.55041699999947,
+      "releaseMs": 4.6365420000001905,
+      "events": {
+        "count": 30,
+        "p50": 16.712499999999636,
+        "p95": 17.791709000000083,
+        "max": 19.772540999999364,
+        "over33ms": 0
+      },
+      "frames": {
+        "count": 29,
+        "p50": 16.699999999999818,
+        "p95": 16.700000000000728,
+        "max": 16.800000000000182,
+        "over33ms": 0
+      },
+      "geometryHash": "43b47ce67489507dcba06619ce0f06be3bcfabf34213fdf8ad3d6ed2cc0184b5",
+      "svgHash": "3cea3e3985792005f8927c80c3afdda48b50262d47a032e3470091092b72822b",
+      "snapshots": [],
+      "comparison": {
+        "identicalSVG": true,
+        "maxNumericDelta": 0,
+        "roundingDifferences": 0
+      }
+    },
+    {
+      "scenario": "node",
+      "setupMs": 2664.600000023842,
+      "item": 1,
+      "links": 576,
+      "connected": 264,
+      "total": 264,
+      "domNodes": 2636,
+      "pressMs": 50.64716700000099,
+      "moveMs": 1724.8982919999999,
+      "releaseMs": 109.81570900000042,
+      "events": {
+        "count": 30,
+        "p50": 51.83062499999869,
+        "p95": 75.55537500000173,
+        "max": 76.5182079999995,
+        "over33ms": 30
+      },
+      "frames": {
+        "count": 63,
+        "p50": 16.80000000000109,
+        "p95": 50,
+        "max": 50.100000000000364,
+        "over33ms": 8
+      },
+      "geometryHash": "92b84b98641e0a084a67b119d9168f92a76a50bd53f2e1eb6c33e9553bf20b9e",
+      "svgHash": "036a086c27e7bb218fcfe60fbbef8e7f631a64dcd998210124e0ea50469ffad2",
+      "snapshots": [],
+      "comparison": {
+        "identicalSVG": true,
+        "maxNumericDelta": 0,
+        "roundingDifferences": 0
+      }
+    },
+    {
+      "scenario": "intersection",
+      "setupMs": 2558.699999988079,
+      "item": "dense-519",
+      "links": 576,
+      "connected": 264,
+      "total": 264,
+      "domNodes": 2633,
+      "pressMs": 7.33770899999945,
+      "moveMs": 2573.5208749999983,
+      "releaseMs": 58.919583999999304,
+      "events": {
+        "count": 30,
+        "p50": 83.59929199999897,
+        "p95": 100.79508300000089,
+        "max": 110.83316700000069,
+        "over33ms": 30
+      },
+      "frames": {
+        "count": 62,
+        "p50": 16.799999999999272,
+        "p95": 66.79999999999927,
+        "max": 83.40000000000146,
+        "over33ms": 30
+      },
+      "geometryHash": "921138e8ae72e6a632b07d293b61617f87fa66ffcba52eeff6db6b426381aba1",
+      "svgHash": "40ea8267694a005c6d6635e09ab674b969f7eb962ece774448bbffb504ae668f",
+      "snapshots": [],
+      "comparison": {
+        "identicalSVG": true,
+        "maxNumericDelta": 0,
+        "roundingDifferences": 0
+      }
+    }
+  ],
+  "errors": []
+}

@@ -4,20 +4,43 @@
   const KEY = 'stripemaker-settings-v1';
   // Drawing opacity and sign leader arrow thickness (percent), the highest level drawn (0: all), and
   // black contrast for markings on elevated levels (concrete bridge decks).
-  const defaults = { drawingOpacity: 100, signArrowWeight: 100, hideLevelsAbove: 0, autoContrast: true, leftHandTraffic: false, simulationSpeed: 30, keybindMode: 'all' };
+  const defaults = { drawingOpacity: 100, signArrowWeight: 100, hideLevelsAbove: 0, autoContrast: true, leftHandTraffic: false, simulationTemperature: 40, simulationPlaybackRate: 1, simulationOverlay: 'none', simulationOverlays: [], keybindMode: 'all' };
   let values = { ...defaults };
-  try { Object.assign(values, JSON.parse(localStorage.getItem(KEY) ?? '{}')); } catch {}
+  let stored={};
+  try { stored=JSON.parse(localStorage.getItem(KEY)??'{}')??{};Object.assign(values,stored); } catch {}
+  const validArrowWeight=value=>Number.isFinite(value)&&value>=1&&value<=400;
+  if(!validArrowWeight(values.signArrowWeight))values.signArrowWeight=defaults.signArrowWeight;
   const validOpacity = value => Number.isFinite(value) && value >= 0 && value <= 100;
   if(typeof values.leftHandTraffic!=='boolean')values.leftHandTraffic=false;
   if (!validOpacity(values.drawingOpacity)) values.drawingOpacity = defaults.drawingOpacity;
-  const validSpeed = value => Number.isFinite(value) && value >= 0 && value <= 999;
-  if (!validSpeed(values.simulationSpeed)) values.simulationSpeed = defaults.simulationSpeed;
+  // Discard the retired global speed; local road zones own speeds.
+  delete values.simulationSpeed;
+  const validTemperature = value => Number.isInteger(value) && value >= 0 && value <= 100;
+  if (!validTemperature(values.simulationTemperature)) values.simulationTemperature = defaults.simulationTemperature;
+  const validPlaybackRate = value => Number.isFinite(value) && value >= 1 && value <= 5;
+  if (!validPlaybackRate(values.simulationPlaybackRate)) values.simulationPlaybackRate = defaults.simulationPlaybackRate;
+  if (!['none','density','speed','stopped'].includes(values.simulationOverlay)) values.simulationOverlay = defaults.simulationOverlay;
+  const overlayNames=['density','speed','stopped'];
+  const validOverlays=value=>Array.isArray(value)&&value.every(name=>overlayNames.includes(name));
+  values.simulationOverlays=validOverlays(stored.simulationOverlays)?[...new Set(stored.simulationOverlays)]:values.simulationOverlay==='none'?[]:[values.simulationOverlay];
   const settings = {
-    snapshot: () => ({...defaults,...values}),
-    get: key => values[key] ?? defaults[key],
+    snapshot: () => ({...defaults,...values,simulationOverlays:[...values.simulationOverlays]}),
+    get: key => key==='simulationOverlays'?[...values.simulationOverlays]:values[key] ?? defaults[key],
     set(key, value) {
+      if(key==='simulationOverlays') {
+        if(!validOverlays(value))return;value=[...new Set(value)];
+        values.simulationOverlay=value.length===1?value[0]:'none';
+      }
+      // Accept older projects and development tools with a single overlay.
+      if(key==='simulationOverlay') {
+        if(!['none',...overlayNames].includes(value))return;
+        values.simulationOverlays=value==='none'?[]:[value];
+      }
+      if(key==='signArrowWeight'&&!validArrowWeight(value))return;
       if (key === 'drawingOpacity' && !validOpacity(value)) return;
-      if (key === 'simulationSpeed') { if (!validSpeed(value)) return; value = Math.round(value * 10) / 10; }
+      if (key === 'simulationTemperature' && !validTemperature(value)) return;
+      if (key === 'simulationPlaybackRate') { if (!validPlaybackRate(value)) return; value = Math.round(value * 10) / 10; }
+      if (key === 'simulationSpeed') return; // Legacy project setting, intentionally ignored.
       values[key] = value;
       try { localStorage.setItem(KEY, JSON.stringify(values)); } catch {}
       document.dispatchEvent(new CustomEvent('settingschange', { detail: { key } }));
@@ -60,7 +83,7 @@
     const contrast = document.getElementById('autoContrast');
     contrast.checked = settings.get('autoContrast');
     contrast.addEventListener('change', () => settings.set('autoContrast', contrast.checked));
-    document.addEventListener('settingschange', event => { show();traffic.checked=settings.get('leftHandTraffic');levels.value=String(settings.get('hideLevelsAbove'));contrast.checked=settings.get('autoContrast');if(!['drawingOpacity','simulationSpeed'].includes(event.detail?.key))window.StripeMaker.roadEditor?.render(); });
+    document.addEventListener('settingschange', event => { show();traffic.checked=settings.get('leftHandTraffic');levels.value=String(settings.get('hideLevelsAbove'));contrast.checked=settings.get('autoContrast');if(!['drawingOpacity','simulationSpeed','simulationTemperature','simulationPlaybackRate','simulationOverlay','simulationOverlays'].includes(event.detail?.key))window.StripeMaker.roadEditor?.render(); });
     show();
   });
 })();

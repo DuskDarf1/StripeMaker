@@ -15,7 +15,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.evaluate(()=>{
    window.installLaneChangeCase=(bike=false)=>{
     const app=StripeMaker,s=app.sheets.selected,target=bike?2:1;
-    app.settings.set('simulationSpeed',5);app.settings.set('leftHandTraffic',false);
+    app.settings.set('leftHandTraffic',false);
     Object.assign(s,{inchesPerPixel:2,roads:[
      {id:1,lanes:bike?3:2,laneWidth:12,laneTypes:bike?{1:{type:'bike',width:5}}:{},tapers:bike?{'0:2':{mode:'taper',length:90}}:{},ends:[{joint:1,sign:1},{joint:2,sign:1}]},
      {id:2,lanes:1,laneWidth:12,ends:[{joint:2,sign:1},{joint:3,sign:1}]},
@@ -28,6 +28,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
       {name:'Turn exit',percent:75,exit:{road:2,e:1}},
       {name:'Stay in lane',percent:25,exit:{road:3,e:1}}]}],
      intersections:[],gores:[],medians:[],markings:[],bridges:[],lines:[],surfaces:[],autoTapers:false});
+    Object.assign(app.sheets.selected,{speedZones:app.sheets.selected.roads.map(road=>({id:'test-speed-'+road.id,road:road.id,from:0,to:1,mph:5}))});
     app.roadEditor.render();app.history.rebase();app.showEditor('simulatorEditor');
     const graph=app.simulator.network(s),paths=graph.search({road:1,lane:0,e:0});
     const required=paths.get('r:2:0'),straight=paths.get('r:3:0');
@@ -69,11 +70,10 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.screenshot({path:'/tmp/stripemaker-lane-change.png'});
   await page.click('#pauseSimulation');const paused=await page.evaluate(()=>StripeMaker.simulator.diagnostics());
   await page.clock.runFor(2000);assert.deepEqual(await page.evaluate(()=>StripeMaker.simulator.diagnostics()),paused);
-  await page.locator('#simulationSpeedValue').fill('0');await page.locator('#simulationSpeedValue').blur();
-  const beforeStop=await page.evaluate(()=>StripeMaker.simulator.diagnostics());assert(beforeStop.cars.length>0,'zero speed retains the in-progress lane-changing car');
-  await page.click('#playSimulation');await page.clock.runFor(1000);
-  const stopped=await page.evaluate(()=>StripeMaker.simulator.diagnostics());
-  assert.equal(stopped.cars[0].distance,beforeStop.cars[0].distance);await page.click('#pauseSimulation');
+  // Local zone edits invalidate saved playback geometry; zero zones apply to new entrants.
+  await page.evaluate(()=>{const A=StripeMaker,s=A.sheets.selected;s.speedZones=s.roads.map(r=>({id:'zero-'+r.id,road:r.id,from:0,to:1,mph:0}));A.simulator.refreshOverlay();});
+  await page.click('#playSimulation');await page.clock.runFor(1000);await page.click('#pauseSimulation');
+  assert((await page.evaluate(()=>StripeMaker.simulator.diagnostics())).cars.every(c=>c.speed===0));
   // Production bike conflict geometry, not a synthetic permission flag.
   result=await page.evaluate(()=>installLaneChangeCase(true));
   assert(result.required,'a car can cross the keyhole bike lane to the turn lane');

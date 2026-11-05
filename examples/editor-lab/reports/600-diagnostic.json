@@ -1,0 +1,110 @@
+{
+  "browser": "153.0.8010.12",
+  "gridSize": 6,
+  "counts": {
+    "roads": 228,
+    "joints": 198,
+    "intersections": 36,
+    "markings": 264,
+    "signs": 36,
+    "medians": 0,
+    "gores": 0,
+    "lines": 0,
+    "surfaces": 0,
+    "bridges": 0,
+    "intersectionMedians": 36
+  },
+  "scenarios": [
+    {
+      "scenario": "node",
+      "setupMs": 2796.599999964237,
+      "item": 1,
+      "links": 576,
+      "connected": 264,
+      "total": 264,
+      "domNodes": 2636,
+      "pressMs": 50.6441249999998,
+      "moveMs": 795.9324579999993,
+      "releaseMs": 138.96016599999984,
+      "events": {
+        "count": 12,
+        "p50": 66.27337499999976,
+        "p95": 70.41858300000058,
+        "max": 70.41858300000058,
+        "over33ms": 12
+      },
+      "frames": {
+        "count": 26,
+        "p50": 33.30000000000018,
+        "p95": 50,
+        "max": 50,
+        "over33ms": 7
+      },
+      "geometryHash": "b708975fa4526b2dd8946aa8eb56ba984bda9c310b3d1c28e55bc807ebd60dea",
+      "svgHash": "759e0202f2482a467731b619ff5150c85ce7dc1b912641da5654a4a3d2b5dd54",
+      "snapshots": [],
+      "work": {
+        "animationCallbacks": {
+          "count": 39,
+          "p50": 0.016,
+          "p95": 43.57,
+          "max": 45.463,
+          "over33ms": 12
+        },
+        "pointerMoves": {
+          "count": 12,
+          "p50": 4.467,
+          "p95": 5.265,
+          "max": 5.265,
+          "over33ms": 0
+        }
+      }
+    },
+    {
+      "scenario": "intersection",
+      "setupMs": 2569.300000011921,
+      "item": "dense-519",
+      "links": 576,
+      "connected": 264,
+      "total": 264,
+      "domNodes": 2633,
+      "pressMs": 7.48412499999904,
+      "moveMs": 1008.9137499999997,
+      "releaseMs": 61.30249999999978,
+      "events": {
+        "count": 12,
+        "p50": 83.33795900000041,
+        "p95": 97.464833,
+        "max": 97.464833,
+        "over33ms": 12
+      },
+      "frames": {
+        "count": 24,
+        "p50": 66.59999999999854,
+        "p95": 66.70000000000073,
+        "max": 66.80000000000018,
+        "over33ms": 12
+      },
+      "geometryHash": "b59477238470e94a140ade830d7cc652a4e67800698319cd064ed56c4c3dc690",
+      "svgHash": "ed5a0c2d08aeb4bfb871125eb637d9bfa64186b8559bd62072fbc03ddac859eb",
+      "snapshots": [],
+      "work": {
+        "animationCallbacks": {
+          "count": 37,
+          "p50": 0.015,
+          "p95": 74.627,
+          "max": 77.016,
+          "over33ms": 12
+        },
+        "pointerMoves": {
+          "count": 12,
+          "p50": 0.149,
+          "p95": 0.209,
+          "max": 0.209,
+          "over33ms": 0
+        }
+      }
+    }
+  ],
+  "errors": []
+}

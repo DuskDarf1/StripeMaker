@@ -2,6 +2,15 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {validate}=require('../js/project-json.js');
 const sample=()=>({format:'StripeMakerProject',version:1,selectedSheet:1,settings:{},shortcuts:{},sheets:[{id:1,width:30000,height:30000,file:{name:'blank.png',base64:'AAAA'},data:{name:'Test',blank:true,width:30000,height:30000,inchesPerPixel:2,view:{x:0,y:0,scale:1},roads:[{id:1,lanes:2,laneWidth:12,ends:[{joint:1,sign:1},{joint:2,sign:1}],laneTypes:{1:{type:'bufferedBike',width:7,conflict:'drop'}}}],joints:[{id:1,x:0,y:0,links:[]},{id:2,x:100,y:0,links:[]}],gores:[],medians:[],intersections:[],signs:[],markings:[],lines:[],bridges:[],surfaces:[],autoTapers:false}}]});
+test('destination volume modes and fractional output survive project JSON; malformed demand is rejected',()=>{
+ const p=sample();p.sheets[0].data.vehicleSpawns=[{road:1,rate:.125,rateUnit:'hours',routeVolumeMode:'total',routes:[{exit:{road:1,e:1},percent:100,volume:{amount:180,unit:'AADT'}}]}];
+ const saved=JSON.stringify(p);assert.equal(validate(p),p);assert.equal(JSON.stringify(p),saved);
+ for(const change of [s=>s.rateUnit='weeks',s=>s.routeVolumeMode='bogus',s=>s.routes[0].volume.unit='weeks',s=>s.routes[0].volume.amount=-1,s=>delete s.routes[0].volume,s=>s.routes[0].volume.amount=864001]){
+  const q=structuredClone(p);change(q.sheets[0].data.vehicleSpawns[0]);assert.throws(()=>validate(q));
+ }
+ const s=p.sheets[0].data.vehicleSpawns[0];s.routes[0].volume={amount:400,unit:'minutes'};s.routes.push({...s.routes[0]});assert.throws(()=>validate(p),/total|limit/i);
+ s.routeVolumeMode='weights';assert.equal(validate(p),p,'relative weights do not sum to entrance output');
+});
 test('project validation preserves all nested geometry fields without normalizing',()=>{
  const p=sample(),before=JSON.stringify(p);assert.equal(validate(p),p);assert.equal(JSON.stringify(p),before);
 });
@@ -49,5 +58,32 @@ test('grouped entrance spawns preserve lane shares and road-wide exit references
  const before=JSON.stringify(p);assert.equal(validate(p),p);assert.equal(JSON.stringify(p),before);
  for(const change of [s=>s.rate=-1,s=>s.rate=601,s=>s.laneShares={0:101},s=>s.laneShares={bad:10},s=>s.laneShares={0:'50'}]){
   const q=structuredClone(p);change(q.sheets[0].data.vehicleSpawns[0]);assert.throws(()=>validate(q));
+ }
+});
+
+test('match lines and text persist while malformed annotation geometry is rejected',()=>{
+ const p=sample(),d=p.sheets[0].data;
+ d.matchLines=[{id:'a',name:'A-A',x:100,y:200,angle:90,width:80,peerSheet:2,peerId:'b',roads:[{road:1,e:1}]}];
+ d.signs=[{text:'SEE SHEET 2',arrowRotation:270}];
+ const before=JSON.stringify(p);assert.equal(validate(p),p);assert.equal(JSON.stringify(p),before);
+ for(const change of [d=>d.matchLines[0].width=-1,d=>d.matchLines[0].roads[0].e=2,d=>d.matchLines[0].peerSheet='two',d=>d.matchLines.push(d.matchLines[0]),d=>d.signs[0].text=123,d=>d.signs[0].arrowRotation='left']){
+  const q=structuredClone(p);change(q.sheets[0].data);assert.throws(()=>validate(q));
+ }
+});
+
+test('median Bézier vectors round-trip and reject malformed controls',()=>{
+ const p=sample();p.sheets[0].data.medians=[{id:1,points:[{x:0,y:0,curve:{in:{x:-10,y:2},out:{x:20,y:-4}}},{x:100,y:0},{x:100,y:50}]}];
+ const before=JSON.stringify(p);assert.equal(validate(p),p);assert.equal(JSON.stringify(p),before);
+ for(const invalid of [{}, {in:{x:NaN,y:0},out:{x:0,y:0}}, {in:{x:0,y:0},out:null}]){const q=structuredClone(p);q.sheets[0].data.medians[0].points[0].curve=invalid;assert.throws(()=>validate(q),/median points|non-finite/);}
+});
+
+test('intersection medians preserve local geometry and anchors; malformed islands are rejected',()=>{
+ const G=require('../js/intersection-geometry.js'),p=sample(),item=G.create();
+ item.medians=[{id:G.id(),type:'painted',color:'yellow',lean:'right',spacing:20,points:[
+  {x:-5,y:-5,on:{approach:item.approaches[0].id,side:'median',f:.5}},
+  {x:5,y:-5,curve:{in:{x:-1,y:0},out:{x:1,y:0}}},{x:0,y:5}]}];
+ p.sheets[0].data.intersections=[item];const saved=JSON.stringify(p);assert.equal(validate(p),p);assert.equal(JSON.stringify(p),saved);
+ for(const edit of [m=>m.points.pop(),m=>m.type='unknown',m=>m.points[0].on.f=2,m=>m.points[1].curve.out.x='bad',m=>m.spacing=-1]){
+  const q=structuredClone(p);edit(q.sheets[0].data.intersections[0].medians[0]);assert.throws(()=>validate(q),/intersection medians/);
  }
 });

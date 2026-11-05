@@ -165,3 +165,32 @@ button {
   .editor { width: 100%; min-width: 0; max-width: 100%; }
   .editorContent { max-height: 48dvh; padding: 0.75rem; }
 }
+
+/* Action instructions fixed at the top right; original live regions stay readable
+   by assistive technology. Match SignalMaker's blue editor surfaces. */
+#actionInstruction {
+  position: fixed;
+  top: max(.75rem, env(safe-area-inset-top));
+  right: max(.75rem, env(safe-area-inset-right));
+  z-index: 4900;
+  max-width: min(22rem, calc(100vw - 1.5rem));
+  padding: .4rem .55rem;
+  background: var(--hotbarColor);
+  color: var(--textColor);
+  border: 1px solid rgba(var(--baseColor), .5);
+  font: 400 .7rem/1.4 "Inter", sans-serif;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  user-select: none;
+}
+.actionInstructionSource {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+}

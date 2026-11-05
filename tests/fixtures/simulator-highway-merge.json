@@ -1,0 +1,359 @@
+{
+  "data": {
+    "name": "Simulation Test--Highway merge",
+    "inchesPerPixel": 2,
+    "roads": [
+      {
+        "id": 1,
+        "lanes": 4,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "ends": [
+          {
+            "joint": 1,
+            "sign": 1,
+            "length": null
+          },
+          {
+            "joint": 5,
+            "sign": 1,
+            "length": 2793.2914866568676
+          }
+        ],
+        "tapers": {},
+        "widthProfiles": [
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0,
+            "to": 0.17999471690238497
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0,
+            "to": 0.17999471690238497
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0,
+            "to": 0.17999471690238497
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0,
+            "to": 0.17999471690238497
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "lanes": 1,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "ends": [
+          {
+            "joint": 3,
+            "sign": 1,
+            "length": 2258.0307612093293
+          },
+          {
+            "joint": 5,
+            "sign": 1,
+            "length": 1862.2271021310096
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "lanes": 5,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "laneWidths": {},
+        "laneEndWidths": {},
+        "laneTypes": {},
+        "ends": [
+          {
+            "joint": 5,
+            "sign": 1,
+            "length": 1871.6903328689816
+          },
+          {
+            "joint": 6,
+            "sign": 1,
+            "length": 2348.968485606902
+          }
+        ],
+        "tapers": {
+          "1:4": {
+            "mode": "taper",
+            "length": 300
+          }
+        },
+        "widthProfiles": [
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.17999471690238497,
+            "to": 0.4279969257496302
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.17999471690238497,
+            "to": 0.4279969257496302
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.17999471690238497,
+            "to": 0.4279969257496302
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.17999471690238497,
+            "to": 0.4279969257496302
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "lanes": 4,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "laneWidths": {},
+        "laneEndWidths": {},
+        "laneTypes": {},
+        "ends": [
+          {
+            "joint": 6,
+            "sign": 1,
+            "length": 7102.3383457800355
+          },
+          {
+            "joint": 2,
+            "sign": 1,
+            "length": null
+          }
+        ],
+        "tapers": {},
+        "widthProfiles": [
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.4279969257496302,
+            "to": 1
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.4279969257496302,
+            "to": 1
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.4279969257496302,
+            "to": 1
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.4279969257496302,
+            "to": 1
+          }
+        ]
+      }
+    ],
+    "joints": [
+      {
+        "id": 1,
+        "x": 2809.9394622276554,
+        "y": 10166.686108998845,
+        "dir": null,
+        "root": 1,
+        "links": []
+      },
+      {
+        "id": 2,
+        "x": 28966.281005647725,
+        "y": 10145.333993453196,
+        "dir": null,
+        "root": 4,
+        "links": []
+      },
+      {
+        "id": 3,
+        "x": 3537.991815353368,
+        "y": 14263.319636327538,
+        "root": 2,
+        "links": [],
+        "dir": {
+          "x": 0.00619178466936549,
+          "y": -0.9999808307175735
+        }
+      },
+      {
+        "id": 5,
+        "x": 7517.9038580047145,
+        "y": 10163.472393528107,
+        "dir": {
+          "x": 0.9999996668056643,
+          "y": -0.000816326258616919
+        },
+        "root": 1,
+        "links": [
+          {
+            "a": 1,
+            "ai": 0,
+            "b": 3,
+            "bi": 0
+          },
+          {
+            "a": 3,
+            "ai": 4,
+            "b": 2,
+            "bi": 0,
+            "pair": false,
+            "feed": true
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "x": 14004.769406175074,
+        "y": 10193.806532974293,
+        "dir": {
+          "x": 0.9999996668056642,
+          "y": -0.000816326258616933
+        },
+        "root": 3,
+        "links": [
+          {
+            "a": 3,
+            "ai": 0,
+            "b": 4,
+            "bi": 0
+          }
+        ]
+      }
+    ],
+    "gores": [
+      {
+        "key": "1:1|2:1",
+        "length": 204.6013004124737,
+        "spacing": 20
+      }
+    ],
+    "medians": [],
+    "autoTapers": false,
+    "intersections": [],
+    "signs": [],
+    "markings": [
+      {
+        "id": "d262ab3b-7e7b-42d3-8ad9-61f29afd2b12",
+        "type": "mergeLeft",
+        "on": {
+          "road": 3,
+          "lane": 4
+        },
+        "back": 357.67593919347456,
+        "repeat": {
+          "length": 661.7029988708643,
+          "spacing": 250
+        }
+      },
+      {
+        "id": "d8a86775-27a9-4401-aeb8-fd400cd2263f",
+        "type": "word",
+        "on": {
+          "road": 3,
+          "lane": 4
+        },
+        "back": 380.97587937514345,
+        "text": "MERGE",
+        "gap": 32,
+        "repeat": {
+          "length": 636.4132210487062,
+          "spacing": 250
+        }
+      }
+    ],
+    "lines": [
+      {
+        "id": "cbfd666a-55a4-4baa-b3cb-f22bdd845467",
+        "style": "dottedInterchange",
+        "color": "white",
+        "on": {
+          "road": 3,
+          "k": 4
+        },
+        "from": 0,
+        "to": 1
+      }
+    ],
+    "bridges": [],
+    "surfaces": [],
+    "speedZones": [],
+    "vehicleSpawns": [
+      {
+        "road": 2,
+        "routes": [
+          {
+            "exit": {
+              "road": 4,
+              "e": 1
+            },
+            "percent": 100
+          }
+        ]
+      },
+      {
+        "road": 1,
+        "routes": [
+          {
+            "exit": {
+              "road": 4,
+              "e": 1
+            },
+            "percent": 100
+          }
+        ],
+        "rate": 50
+      }
+    ],
+    "blank": true,
+    "width": 30000,
+    "height": 30000
+  },
+  "settings": {
+    "drawingOpacity": 100,
+    "signArrowWeight": 25,
+    "hideLevelsAbove": 0,
+    "autoContrast": true,
+    "leftHandTraffic": false,
+    "simulationSpeed": 70,
+    "simulationTemperature": 20,
+    "simulationPlaybackRate": 1,
+    "simulationOverlay": "speed",
+    "simulationOverlays": [
+      "speed"
+    ],
+    "keybindMode": "undo-redo"
+  }
+}

@@ -96,12 +96,12 @@
       if (!item) return [];
       if (kind === 'roads') return [app.roadEditor.outline(s, item)];
       if (kind === 'intersections') return [app.intersections.outlineOf(s, item)];
-      if (kind === 'medians') return [item.points];
+      if (kind === 'medians') return [app.roadEditor.medianOutline(s,item)];
       if (kind === 'markings') return app.markings.outlines(id);
       if (kind === 'lines') return [app.longitudinal.pathOf(item)].filter(p => p.length);
       if (kind === 'surfaces') {
         const road = roadOf(item.on.road);
-        return road ? [app.roadEditor.laneStrip(s, road, item.on.lane, item.from, item.to).map(p=>app.itemTransform.apply(item,p))] : [];
+        return road ? [app.roadEditor.laneStrip(s, road, item.on.lane, item.from, item.to, item.color).map(p=>app.itemTransform.apply(item,p))] : [];
       }
       const box = app.signs?.box(item);
       if (!box) return [];
@@ -157,8 +157,7 @@
         selection.set('roads',withPartners(selection.get('roads')));
       }
     }
-    function bounds() {
-      const points=KINDS.flatMap(kind=>[...selection.get(kind)].flatMap(id=>shapes(kind,id).flat()));
+    function bounds(points = KINDS.flatMap(kind=>[...selection.get(kind)].flatMap(id=>shapes(kind,id).flat()))) {
       if(!points.length)return null;
       const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
       const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
@@ -187,10 +186,10 @@
       const onMoved=on=>on&&(roadIds.has(on.road)||interIds.has(on.intersection));
       for(const median of s.medians??[])if(selection.get('medians').has(median.id))for(const p of median.points) {
         point(p);if(p.on&&!onMoved(p.on))delete p.on;
+        if(p.curve)for(const side of ['in','out'])p.curve[side]=vector(p.curve[side]);
       }
       for(const sign of s.signs??[])if(selection.get('signs').has(sign.id)) {
-        point(sign);const post={x:sign.postX,y:sign.postY};point(post);
-        sign.postX=post.x;sign.postY=post.y;sign.rotation=((sign.rotation??0)+degrees+360)%360;
+        point(sign);sign.rotation=((sign.rotation??0)+degrees+360)%360;
       }
       for(const kind of ['markings','lines','surfaces'])for(const item of s[kind]??[]) {
         const baseMoves=onMoved(item.on)||(item.a?.on&&item.b?.on&&onMoved(item.a.on)&&onMoved(item.b.on));
@@ -276,6 +275,7 @@
       });
       const endRoad = end => Number(end.split(':')[0]);
       const gores = (s.gores ?? []).filter(g => g.intersection ? interIds.has(g.intersection) : g.key.split('|').every(end => roadIds.has(endRoad(end)))).map(clone);
+      const speedZones=(s.speedZones??[]).filter(z=>roadIds.has(z.road)).map(clone);
       const bridges = (s.bridges ?? []).filter(b => roadIds.has(b.road)).map(clone);
       const intersections = (s.intersections ?? []).filter(item => interIds.has(item.id)).map(item => {
         const copy = clone(item);
@@ -308,7 +308,7 @@
       const points = [...joints, ...intersections, ...medians.flatMap(m => m.points), ...signs];
       if(!points.length)for(const kind of ['markings','lines','surfaces'])for(const id of ids(kind))points.push(...shapes(kind,id).flat());
       const center = points.length ? { x: points.reduce((t, p) => t + p.x, 0) / points.length, y: points.reduce((t, p) => t + p.y, 0) / points.length } : null;
-      return { roads, joints, gores, bridges, intersections, markings, lines, medians, signs, surfaces, loose, center, inchesPerPixel: s.inchesPerPixel };
+      return { roads, joints, gores, bridges, speedZones, intersections, markings, lines, medians, signs, surfaces, loose, center, inchesPerPixel: s.inchesPerPixel };
     }
     function copy() {
       useEditorSelection();
@@ -368,6 +368,8 @@
         bridge.road = roadMap.get(bridge.road);
         bridge.id = uuid();
       }
+      const zoneSpans=new Map();
+      for(const zone of c.speedZones??[]){zone.road=roadMap.get(zone.road);zone.id=uuid();if(zone.span)zone.span=zoneSpans.get(zone.span)??zoneSpans.set(zone.span,uuid()).get(zone.span);}
       const spans = new Map();
       for (const bridge of c.bridges) bridge.span = spans.get(bridge.span) ?? spans.set(bridge.span, uuid()).get(bridge.span);
       // Intersections.
@@ -400,7 +402,12 @@
       const looseMarkings = new Set(c.loose.markings.map(m => m.id)), looseLines = new Set(c.loose.lines.map(l => l.id));
       const lane = at && app.markings?.anchorAt(at), target = at && app.longitudinal?.targetAt(at);
       const firstBack = c.loose.markings[0]?.back ?? 0, pastedLoose = [];
+      const signalMarkingMap=new Map();
       for (const m of c.markings) {
+        if(m.trafficControl?.intersection!=null){
+          const linked=interMap.get(m.trafficControl.intersection);
+          if(linked)m.trafficControl.intersection=linked;else delete m.trafficControl.intersection;
+        }
         if (looseMarkings.has(m.id)) {
           pastedLoose.push(m);
           if (lane && m.on) { m.on = clone(lane.on); m.back = Math.max(0, lane.back + (m.back ?? 0) - firstBack); }
@@ -410,8 +417,9 @@
           remapOn(m.on);
           for (const end of [m.a, m.b]) if (end?.on) { remapOn(end.on); if (end.x != null) move(end); }
         }
-        m.id = uuid();
+        const oldMarking=m.id;m.id = uuid();signalMarkingMap.set(oldMarking,m.id);
       }
+      for(const i of c.intersections)if(i.trafficSignal?.version){i.trafficSignal.peds=i.trafficSignal.peds.filter(p=>signalMarkingMap.has(p.marking));for(const p of i.trafficSignal.peds)p.marking=signalMarkingMap.get(p.marking);if(interMap.has(i.trafficSignal.coordination.reference))i.trafficSignal.coordination.reference=interMap.get(i.trafficSignal.coordination.reference);}
       for (const l of c.lines) {
         if (looseLines.has(l.id)) pastedLoose.push(l);
         if (looseLines.has(l.id) && target) {
@@ -422,7 +430,7 @@
       }
       for (const median of c.medians) {
         median.id = nextNumber(s.medians) + c.medians.indexOf(median);
-        for (const p of median.points) { move(p); remapOn(p.on); }
+        for (const p of median.points) { move(p); remapOn(p.on); if(p.curve)for(const side of ['in','out'])p.curve[side]=scaleBack(p.curve[side]); }
       }
       // Colored pavement goes with its road, or (copied alone) onto the lane under the pointer.
       const surfaceSpans = new Map();
@@ -458,6 +466,7 @@
       s.joints.push(...c.joints);
       (s.gores ??= []).push(...c.gores);
       (s.bridges ??= []).push(...c.bridges);
+      (s.speedZones??=[]).push(...c.speedZones??[]);
       (s.intersections ??= []).push(...c.intersections);
       (s.markings ??= []).push(...c.markings);
       (s.lines ??= []).push(...c.lines);
@@ -566,12 +575,19 @@
       if (!s?.inchesPerPixel || (!total() && !drag?.box)) return;
       const root = svg('svg', { 'aria-hidden': 'true' }, selectionGuides);
       const view = svg('g', { transform: `translate(${s.view.x} ${s.view.y}) scale(${s.view.scale})` }, root);
+      const geometryKey = () => JSON.stringify([s.inchesPerPixel, s.autoTapers, s.roads, s.joints, s.gores, s.intersections, s.medians]);
+      const before = geometryKey();
+      const points = [];
       for (const kind of KINDS) for (const id of selection.get(kind)) {
         for (const shape of shapes(kind, id)) {
+          for (const point of shape) points.push(point);
           svg('path', { d: pathData(shape, kind !== 'lines'), class: 'selectionOutline', 'vector-effect': 'non-scaling-stroke' }, view);
         }
       }
-      const box=bounds();
+      // These exact outlines already supply the rotation handle's bounds. Do
+      // not rebuild their road/median geometry a second time in this refresh,
+      // unless resolving an attachment normalized the underlying model.
+      const box=bounds(before === geometryKey() ? points : undefined);
       if(box && total()>selection.get('lines').size) {
         const p=sheets.toScreen({x:box.x,y:box.top});
         rotationHandle.hidden=false;

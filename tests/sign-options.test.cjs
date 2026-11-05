@@ -36,7 +36,7 @@ test('triangular sign sizes collapse and no catalog family retains dimensions',(
 });
 
 test('standalone selector excludes overhead and guide-board D/E layouts',()=>{
- for(const code of ['E1-1','E4-1','E6-1','E8-2','E11-1','D15-1','D9-18']) assert(!D.standalone(signs.find(e=>e.code===code)),code);
+ for(const code of ['E1-1','E4-1','E6-1','E8-2','E11-1','D15-1','D9-18','R3-48','R3-48a']) assert(!D.standalone(signs.find(e=>e.code===code)),code);
  for(const code of ['E5-1','E8-2a','D1-1','D3-1','D9-1','D11-1']) assert(D.standalone(signs.find(e=>e.code===code)),code);
 });
 test('route-number digit counts are one design family per shield style',()=>{

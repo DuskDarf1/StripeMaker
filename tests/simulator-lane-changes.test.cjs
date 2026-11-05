@@ -86,3 +86,29 @@ test('prepares on an upstream road when the final approach is too short to chang
  const path=graph(f).search({road:1,lane:0,e:0}).get('r:3:0');
  assert(path);assert.equal(path.laneChanges.length,1);assert.equal(path.laneChanges[0].road,1);
 });
+
+test('optional slow route reaches a nearby exit without shortening personal maneuver time',()=>{
+ const f=fixture({length:100}),options={speed:50,pixelsPerFoot:1,allowSlowLaneChanges:true};
+ const g=build(f.sheet,f.roads,{ports:[],movements:[]},false,()=>null,options),path=g.search({road:1,lane:0,e:0}).get('r:2:0');
+ assert(path?.slowLaneChanges);
+ assert(V.preparePath(path.points).maneuverLimits.some(x=>Number.isFinite(x.limit)),'baseline fallback geometry also carries its slower speed target');
+ for(const duration of [4,6.28,10]) {
+  const points=g.personalize(path,{duration,acceleration:.73},()=>.5,()=>0,50),prepared=V.preparePath(points),change=prepared.maneuvers[0];
+  assert(points);assert(prepared.maneuverLimits.some(x=>Number.isFinite(x.limit)));
+  const cap=prepared.maneuverLimits.find(x=>Number.isFinite(x.limit)).limit;
+  assert((change.end-change.start)/cap>=duration-1e-6,'distance/speed preserves each personal duration');
+  const B=require('../js/simulator-collisions.js');
+  const car={path:prepared,pathDistance:50,driver:{roundaboutFactor:1.5,speedFactor:1.5}};
+  assert(B.desiredSpeed(car,75,2,1)<=cap,'temperature cannot multiply the personal cap again');
+  car.pathDistance=prepared.length-1;assert(B.desiredSpeed(car,75,2,1)>cap,'cap releases after the preparation road');
+ }
+ const fast=fixture(),base=graph(fast).search({road:1,lane:1,e:0}).get('r:2:0');
+ const normal=build(fast.sheet,fast.roads,{ports:[],movements:[]},false,()=>null,{speed:10,pixelsPerFoot:1,allowSlowLaneChanges:true}).search({road:1,lane:1,e:0}).get('r:2:0');
+ assert.deepEqual(normal,base,'existing normal-speed routes remain preferred');
+});
+test('slow preparation still rejects solid bike boundaries and raised lane separators',()=>{
+ for(const options of [{acrossBike:true,range:null},{blocked:true}]) {
+  const f=fixture(options),g=build(f.sheet,f.roads,{ports:[],movements:[]},false,()=>null,{speed:100,pixelsPerFoot:1,allowSlowLaneChanges:true});
+  assert.equal(g.search({road:1,lane:0,e:0}).size,0);
+ }
+});

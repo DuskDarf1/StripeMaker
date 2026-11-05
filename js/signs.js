@@ -15,12 +15,12 @@
     const invalidFields = new Set();
     let groups = [], choiceValues = {}, choiceSize = 100, fieldsFor = null;
     let catalog = [], loading, selected = null, selectedSheet = null, choice = null;
-    let choiceImage=null, choicePanels=[], choiceRotation=0, choicePanelScale=100, partIndex=0, appendPanel=false, pasteRequest=0, candidate=null, assemblyDrag=null, suppressAssemblyClick=false;
+    let choiceText=null, choiceImage=null, choicePanels=[], choiceRotation=0, choicePanelScale=100, partIndex=0, appendPanel=false, pasteRequest=0, candidate=null, assemblyDrag=null, suppressAssemblyClick=false;
     let placement = null, dragging = null, choosingFor = null;
     const current = () => sheets.selected?.signs?.find(s => s.id === selected);
     const part = () => current() ? L.parts(current())[partIndex] ?? current() : null;
-    const entryFor = sign => sign?.image ? { id:'image', code:'Image', name:sign.image.name??'Pasted image', box:[sign.image.width,sign.image.height], src:sign.image.src } : designs.get(sign?.design);
-    const draft = () => ({design:choice,image:choiceImage,panels:choicePanels,values:choiceValues,size:choiceSize,scale:choicePanelScale,rotation:choiceRotation});
+    const entryFor = sign => typeof sign?.text==='string' ? {id:'text',code:'Text',name:sign.text,box:[app.engineeringText.layout(sign.text).width,app.engineeringText.layout(sign.text).height]} : sign?.image ? { id:'image', code:'Image', name:sign.image.name??'Pasted image', box:[sign.image.width,sign.image.height], src:sign.image.src } : designs.get(sign?.design);
+    const draft = () => ({...(choiceText!=null?{text:choiceText}:{}),design:choice,image:choiceImage,panels:choicePanels,values:choiceValues,size:choiceSize,scale:choicePanelScale,rotation:choiceRotation});
     const assemblyPanel=get('signAssemblyEditor');
     const active = () => !panel.hidden || !assemblyPanel.hidden;
     const tell = text => { get('signStatus').textContent = text; get('assemblyStatus').textContent=text; };
@@ -82,7 +82,7 @@
     }
     const fields = id => app.signArtwork?.[id]?.fields ?? [];
     const values = () => part() ? part().values??{} : choiceValues;
-    const drawnPaths = sign => D.compose(artwork.get(sign.design)??[],fields(sign.design),sign.values,app.signAlphabets,designs.get(sign.design)?.box);
+    const drawnPaths = sign => typeof sign.text==='string'?app.engineeringText.paths(sign.text):D.compose(artwork.get(sign.design)??[],fields(sign.design),sign.values,app.signAlphabets,designs.get(sign.design)?.box);
     function updateLegendFields(entry, sign) {
       const specs=fields(entry?.id), target=get('signLegendFields');
       const key=`${sign?.id??"draft"}:${partIndex}:${entry&&D.routeFamily(entry)?D.familyKey(entry):entry?.id}:${specs.length}`;
@@ -132,11 +132,14 @@
       }
     }
     function updatePanel() {
-      const root=current(),sign=part(),entry=entryFor(sign??draft());
+      const root=current(),sign=part(),entry=entryFor(sign??draft()),textMode=typeof (sign??draft()).text==='string';
+      get('textElementFields').hidden=!textMode;get('signCatalogHelp').hidden=textMode;get('signDetailsHome').hidden=textMode;get('openAssemblyEditor').disabled=!root||textMode;get('addText').disabled=!sheets.selected;
+      if(textMode&&document.activeElement!==get('signText'))get('signText').value=(sign??draft()).text;
+      for(const suffix of ['', 'Value']){const input=get('signArrowRotation'+suffix);input.disabled=!root;if(document.activeElement!==input)input.value=root?((root.arrowRotation??Math.atan2(root.postY-root.y,root.postX-root.x)*180/Math.PI)+360)%360:0;}
       updateLegendFields(entry,sign);
       get('addSign').disabled=!sheets.selected || !entry || invalidFields.size>0;
       get('addSign').setAttribute('aria-pressed',String(Boolean(placement)));
-      get('deleteSign').disabled=!sign;get('openAssemblyEditor').disabled=!root;
+      get('deleteSign').disabled=!sign;get('openAssemblyEditor').disabled=!root||textMode;
       get('signSize').disabled=!entry;
       if(document.activeElement!==get('signSize'))get('signSize').value=root?.size??choiceSize;
       get('signName').textContent=entry?label(entry):'Choose a sign to begin.';
@@ -144,7 +147,7 @@
       if(entry){
         const model=sign??draft();
         if(model.image)get('signPreview').src=model.image.src;
-        else if(artwork.has(entry.id)){
+        else if(textMode||artwork.has(entry.id)){
           const preview=document.createElementNS(SVG,'svg');preview.setAttribute('xmlns',SVG);preview.setAttribute('viewBox',`0 0 ${entry.box[0]+D.expansion(fields(entry.id),model.values,app.signAlphabets)} ${entry.box[1]}`);
           for(const attrs of drawnPaths(model))svg('path',attrs,preview);
           get('signPreview').src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(preview));
@@ -166,10 +169,16 @@
       renderAssembly();
       if(!sheets.selected)tell('Upload a sheet first.');
     }
-    function changed() { app.roadEditor.render(); updatePanel(); sheets.save(sheets.selected); app.history.record(); }
+    // Sign edits do not change road geometry. Keep every pointer edit, while
+    // painting the latest pose only once per frame. A committed/canceled gesture
+    // paints synchronously and cancels its queued callback before saving.
+    let dragFrame=0,previewFrame=0;
+    function cancelDragFrame() { cancelAnimationFrame(dragFrame);dragFrame=0; }
+    function renderSigns() { (app.roadEditor.renderSigns??app.roadEditor.render)(); }
+    function changed() { cancelDragFrame();renderSigns(); updatePanel(); sheets.save(sheets.selected); app.history.record(); }
     function measure(part,root) {
       const entry=entryFor(part),base=root.width*(root.size??100)/100*(part.scale??100)/100;
-      const widen=part.image?0:D.expansion(fields(part.design),part.values,app.signAlphabets);
+      const widen=part.image||typeof part.text==='string'?0:D.expansion(fields(part.design),part.values,app.signAlphabets);
       return {width:base*((entry?.box[0]??100)+widen)/(entry?.box[0]??100),height:base*(entry?.box[1]??100)/(entry?.box[0]??100)};
     }
     const dimensions = sign => L.layout(sign,measure);
@@ -188,11 +197,12 @@
           const sheet=sheets.selected,weight=(app.settings?.get('signArrowWeight')??100)/100;
           const stroke=(sheet?Math.hypot(sheet.width,sheet.height)/900:Math.max(.5,width/55))*weight;
           const a=Math.min(stroke*7,(distance-start)*.6);
-          const base={x:sign.postX-u.x*a*.8,y:sign.postY-u.y*a*.8};
+          const headU=sign.arrowRotation==null?u:L.rotate(1,0,sign.arrowRotation),headV={x:-headU.y,y:headU.x};
+          const base={x:sign.postX-headU.x*a*.8,y:sign.postY-headU.y*a*.8};
           const d=`M${sign.x} ${sign.y} L${base.x} ${base.y}`;
           svg('path',{d,fill:'none',stroke:'#ffffff','stroke-width':stroke*2.5},group);
           svg('path',{d,fill:'none',stroke:'#000000','stroke-width':stroke},group);
-          svg('path',{d:`M${sign.postX} ${sign.postY} L${sign.postX-u.x*a+v.x*a*.45} ${sign.postY-u.y*a+v.y*a*.45} L${sign.postX-u.x*a-v.x*a*.45} ${sign.postY-u.y*a-v.y*a*.45} Z`,fill:'#000000',stroke:'#ffffff','stroke-width':stroke*.75,'stroke-linejoin':'round'},group);
+          svg('path',{d:`M${sign.postX} ${sign.postY} L${sign.postX-headU.x*a+headV.x*a*.45} ${sign.postY-headU.y*a+headV.y*a*.45} L${sign.postX-headU.x*a-headV.x*a*.45} ${sign.postY-headU.y*a-headV.y*a*.45} Z`,fill:'#000000',stroke:'#ffffff','stroke-width':stroke*.75,'stroke-linejoin':'round'},group);
 
         }
       }
@@ -205,8 +215,8 @@
           // same matrix, preserving rotation, alpha and assembly position.
           const matrix=[c.x*item.width,c.y*item.width,-c.y*item.height,c.x*item.height,sign.x+origin.x,sign.y+origin.y];
           svg('image',{href:part.image.src,width:1,height:1,preserveAspectRatio:'none',transform:`matrix(${matrix.join(' ')})`},group);
-        }else if(artwork.has(part.design)){
-          const k=item.width/(entry.box[0]+D.expansion(fields(part.design),part.values,app.signAlphabets));
+        }else if(typeof part.text==='string'||artwork.has(part.design)){
+          const k=item.width/(entry.box[0]+(typeof part.text==='string'?0:D.expansion(fields(part.design),part.values,app.signAlphabets)));
           for(const original of drawnPaths(part)){
             const attrs={...original,d:L.path(original.d,k,left,top,angle,sign.x,sign.y)};
             if(attrs['stroke-width'])attrs['stroke-width']=+attrs['stroke-width']*k;
@@ -214,12 +224,54 @@
           }
         }
       }
+      return group;
     }
+    const signDrawings=new WeakMap();
+    // Keep embedded image bytes as a string reference instead of repeatedly
+    // copying base64 into JSON while comparing unchanged callouts.
+    const drawingKey=sign=>[JSON.stringify({...sign,image:sign.image?{...sign.image,src:null}:null,panels:null}),sign.image?.src,
+      ...(sign.panels??[]).flatMap(drawingKey)];
+    const drawingStyle=sheet=>JSON.stringify([sheet.width,sheet.height,sheets.selected?.width,sheets.selected?.height,app.settings?.get('signArrowWeight'),app.traffic.reversed]);
+    // Catalog/artwork/lettering scripts can finish after the first paint. Keep
+    // their references in the key too, so a partially loaded assembly is never
+    // retained after its remaining faces or editable legends become available.
+    const drawingAssets=sign=>[app.engineeringText,app.engineeringGlyphs,app.signAlphabets,
+      ...L.parts(sign).flatMap(part=>{
+        if(typeof part.text==='string')return ['text'];
+        if(part.image)return ['image'];
+        const entry=designs.get(part.design),data=app.signArtwork?.[part.design];
+        return ['design',entry,entry?.box[0],entry?.box[1],artwork.get(part.design),data,data?.fields];
+      })];
+    const sameKey=(a,b)=>a.length===b.length&&a.every((value,i)=>value===b[i]);
     function draw(sheet, parent) {
-      for (const sign of sheet.signs ?? []) drawOne(sign, parent);
+      const style=drawingStyle(sheet),saved=signDrawings.get(sheet);
+      const entries=(sheet.signs??[]).map((sign,i)=>{
+        const key=drawingKey(sign),assets=drawingAssets(sign),previous=saved?.entries[i];
+        if(saved?.style===style&&previous?.id===sign.id&&previous.node&&sameKey(previous.key,key)&&sameKey(previous.assets,assets)){
+          parent.append(previous.node);return previous;
+        }
+        return {id:sign.id,key,assets,node:drawOne(sign,parent)};
+      });
+      signDrawings.set(sheet,{entries,style});
+    }
+    function updateDrawing(sheet) {
+      const saved=signDrawings.get(sheet),signs=sheet.signs??[];
+      if(!saved || saved.style!==drawingStyle(sheet) || saved.entries.length!==signs.length)return false;
+      // Structural edits use the complete renderer, preserving layer ordering.
+      if(saved.entries.some((entry,i)=>entry.id!==signs[i].id || !entry.node || !sheet.roadLayer?.contains(entry.node) || !entryFor(signs[i])))return false;
+      signs.forEach((sign,i)=>{
+        const entry=saved.entries[i],key=drawingKey(sign),assets=drawingAssets(sign);
+        if(sameKey(entry.key,key)&&sameKey(entry.assets,assets))return;
+        const holder=document.createElementNS(SVG,'g'),next=drawOne(sign,holder);
+        // Keep the group identity: the road renderer retains it in its ordered
+        // layer parts, and must still remove it on a later partial redraw.
+        entry.node.replaceChildren(...next.childNodes);entry.key=key;entry.assets=assets;
+      });
+      return true;
     }
     function focusHandle(id, part) { overlay.querySelector(`[data-sign="${id}"][data-part="${part}"]`)?.focus({ preventScroll:true }); }
     function refreshOverlay() {
+      cancelAnimationFrame(previewFrame);previewFrame=0;
       if (dragging) return; // Keep the capturing element alive throughout a drag.
       overlay.replaceChildren(); overlay.classList.toggle('drawing', Boolean(placement));
       const sheet = sheets.selected; if (!sheet) return;
@@ -237,11 +289,13 @@
           const handle = document.createElement('button'); handle.type='button';handle.className='signPost';
           handle.dataset.sign=sign.id;handle.dataset.part='post';handle.setAttribute('aria-label',`${entry.code} arrow tip location`);
           Object.assign(handle.style,{left:`${post.x}px`,top:`${post.y}px`});overlay.append(handle);
+          const turn=document.createElement('button');turn.type='button';turn.className='markingHandle signArrowRotate';turn.dataset.sign=sign.id;turn.dataset.part='arrowRotate';turn.setAttribute('aria-label','Rotate arrowhead. Drag or use Left and Right arrow keys.');turn.innerHTML='<span class="material-symbols-outlined" aria-hidden="true">rotate_right</span>';
+          const offset=L.rotate(0,-32,sign.arrowRotation??Math.atan2(sign.postY-sign.y,sign.postX-sign.x)*180/Math.PI);Object.assign(turn.style,{left:`${post.x+offset.x}px`,top:`${post.y+offset.y}px`});overlay.append(turn);
         }
       }
       if (placement?.post && placement.cursor) {
         const screenSVG = svg('svg', {}, overlay);
-        const s = { ...draft(), x:placement.cursor.x,y:placement.cursor.y,postX:placement.post.x,postY:placement.post.y,width:80/sheet.view.scale,size:choiceSize,values:choiceValues };
+        const s = { ...draft(), x:placement.cursor.x,y:placement.cursor.y,postX:placement.post.x,postY:placement.post.y,width:(choiceText!=null?app.engineeringText.layout(choiceText).width/app.engineeringGlyphs.units*24:80)/sheet.view.scale,size:choiceSize,values:choiceValues };
         const preview = svg('g',{transform:`translate(${sheet.view.x} ${sheet.view.y}) scale(${sheet.view.scale})`},screenSVG);
         drawOne(s,preview,true);
       }
@@ -273,7 +327,7 @@
           try {
             await loadArt(entry.id);
             if (!picker.open || choosingFor !== target) return;
-            choice=entry.id;choiceImage=null;choicePanelScale=100;
+            choiceText=null;choice=entry.id;choiceImage=null;choicePanelScale=100;
             const sign = target?.sheet === sheets.selected && sheets.selected.signs?.find(s => s.id === target.id);
             if(sign){
               if(appendPanel){candidate={design:choice,values:{},scale:100};}
@@ -306,16 +360,19 @@
     picker.addEventListener('close',() => {choosingFor=null;get('chooseSign').focus({preventScroll:true});});
     get('addSign').addEventListener('click',async () => {
       if (placement) {placement=null;refreshOverlay();updatePanel();tell('Placement canceled.');return;}
-      const sheet=sheets.selected, model=current()??draft(),design=model.design;if (!sheet || (!design&&!model.image))return;
+      const sheet=sheets.selected, model=current()??draft(),design=model.design;if (!sheet || (!design&&!model.image&&typeof model.text!=='string'))return;
       try {await loadParts(model);} catch(error) {tell(error.message);return;}
       if (sheets.selected !== sheet || !active())return;
-      choice=design;choiceImage=model.image??null;choicePanels=structuredClone(model.panels??[]);choiceValues=structuredClone(model.values??{});choiceSize=model.size??choiceSize;choicePanelScale=model.scale??100;choiceRotation=model.rotation??0;selected=null;partIndex=0;placement={};refreshOverlay();updatePanel();tell('Click the arrow tip location.');
+      choiceText=model.text??null;choice=design;choiceImage=model.image??null;choicePanels=structuredClone(model.panels??[]);choiceValues=structuredClone(model.values??{});choiceSize=model.size??choiceSize;choicePanelScale=model.scale??100;choiceRotation=model.rotation??0;selected=null;partIndex=0;placement={};refreshOverlay();updatePanel();tell('Click the arrow tip location.');
     });
     function remove() {
       if (!current())return;
       sheets.selected.signs=sheets.selected.signs.filter(s=>s.id!==selected);selected=null;changed();tell('Sign deleted.');
     }
     get('deleteSign').addEventListener('click',remove);
+    get('addText').onclick=()=>{if(!sheets.selected)return;choiceText=get('signText').value.trim()||'TEXT';choiceImage=null;choicePanels=[];choiceValues={};choiceRotation=0;choiceSize=100;selected=null;partIndex=0;placement={};refreshOverlay();updatePanel();tell('Click the text arrow tip, then click where to place the lettering.');};
+    get('signText').oninput=event=>{const text=event.target.value.slice(0,2000);if(current()&&typeof current().text==='string'){const sign=current(),before=app.engineeringText.layout(sign.text),after=app.engineeringText.layout(text);sign.width*=after.width/before.width;sign.text=text;changed();}else{choiceText=text;refreshOverlay();}};
+    for(const suffix of ['', 'Value'])get('signArrowRotation'+suffix).oninput=event=>{if(!current()||!event.target.checkValidity())return;current().arrowRotation=event.target.valueAsNumber;changed();};
     get('signSize').addEventListener('input',event=>{
       const sign=current(),value=event.target.valueAsNumber;if(!Number.isFinite(value))return;
       const size=Math.max(25,Math.min(2000,value));
@@ -466,7 +523,7 @@
         if(token!==pasteRequest||sheet!==sheets.selected||!active()||(target&&current()?.id!==target))return;
         const custom={src:canvas.toDataURL('image/png'),width:canvas.width,height:canvas.height,name:pasted?'Pasted image':file.name};
         if(assembly){candidate={image:custom,values:{},scale:100};updatePanel();tell('Drag the uploaded sign into a cell, or click its preview to add below.');return;}
-        choicePanelScale=100;choiceImage=custom;
+        choiceText=null;choicePanelScale=100;choiceImage=custom;
         choice=null;choiceValues={};choicePanels=[];choiceRotation=0;selected=null;partIndex=0;placement={};
         updatePanel();refreshOverlay();tell((pasted?'Image pasted. ':'')+'Click the arrow tip location, then the sign face location.');
       }catch(error){tell(`Could not load that image: ${error.message}`);}finally{URL.revokeObjectURL(url);}
@@ -487,11 +544,12 @@
       const sheet=sheets.selected,point=sheets.toImage(event.clientX,event.clientY);
       if(point.x<0 || point.y<0 || point.x>sheet.width || point.y>sheet.height){tell('Place the sign on the sheet.');return;}
       if(!placement.post){placement.post=point;tell('Click where to show the sign face.');return;}
-      const sign={...structuredClone(draft()),id:crypto.randomUUID(),design:choice,x:point.x,y:point.y,postX:placement.post.x,postY:placement.post.y,width:80/sheet.view.scale,size:choiceSize,values:structuredClone(choiceValues)};
+      const sign={...structuredClone(draft()),id:crypto.randomUUID(),design:choice,x:point.x,y:point.y,postX:placement.post.x,postY:placement.post.y,width:(choiceText!=null?app.engineeringText.layout(choiceText).width/app.engineeringGlyphs.units*24:80)/sheet.view.scale,size:choiceSize,values:structuredClone(choiceValues)};
       (sheet.signs??=[]).push(sign);selected=sign.id;selectedSheet=sheet;placement=null;changed();tell('Drag the sign face or its arrow tip to adjust the callout.');
     },true);
     workspace.addEventListener('pointermove',event=>{
-      if(!placement?.post)return;placement.cursor=sheets.toImage(event.clientX,event.clientY);refreshOverlay();
+      if(!placement?.post)return;placement.cursor=sheets.toImage(event.clientX,event.clientY);
+      previewFrame ||= requestAnimationFrame(refreshOverlay);
     });
     workspace.addEventListener('dblclick',event=>{if(placement || event.target.closest('.signOverlay')){event.preventDefault();event.stopImmediatePropagation();}},true);
     overlay.addEventListener('pointerdown',event=>{
@@ -504,18 +562,19 @@
     overlay.addEventListener('pointermove',event=>{
       if(!dragging || event.pointerId!==dragging.pointer)return;
       const {before,part,start}=dragging,p=sheets.toImage(event.clientX,event.clientY),sign=current();if(!sign)return;
-      if(part==='post'){sign.postX=before.postX+p.x-start.x;sign.postY=before.postY+p.y-start.y;}
+      if(part==='arrowRotate'){sign.arrowRotation=(Math.atan2(p.y-sign.postY,p.x-sign.postX)*180/Math.PI+90+360)%360;}
+      else if(part==='post'){sign.postX=before.postX+p.x-start.x;sign.postY=before.postY+p.y-start.y;}
       else {sign.x=before.x+p.x-start.x;sign.y=before.y+p.y-start.y;}
-      app.roadEditor.render();
+      dragFrame ||= requestAnimationFrame(()=>{dragFrame=0;if(dragging)renderSigns();});
       // The hit target follows the drag without replacing the capture owner.
-      const at=sheets.toScreen(part==='post'?{x:sign.postX,y:sign.postY}:sign),size=dimensions(sign);
+      const at=sheets.toScreen(part==='arrowRotate'?{x:sign.postX+L.rotate(0,-32/sheets.selected.view.scale,sign.arrowRotation).x,y:sign.postY+L.rotate(0,-32/sheets.selected.view.scale,sign.arrowRotation).y}:part==='post'?{x:sign.postX,y:sign.postY}:sign),size=dimensions(sign);
       dragging.handle.style.left=`${at.x-(part==='face'?size.width*sheets.selected.view.scale/2:0)}px`;
       dragging.handle.style.top=`${at.y-(part==='face'?size.height*sheets.selected.view.scale/2:0)}px`;
     });
     function endDrag(event) {
       if(!dragging || event.pointerId!==dragging.pointer)return;
       const d=dragging;
-      if(event.type==='pointercancel' && current())Object.assign(current(),d.before);
+      if(event.type==='pointercancel' && current()){Object.assign(current(),d.before);if(d.before.arrowRotation==null)delete current().arrowRotation;}
       dragging=null;
       if(d.handle.hasPointerCapture(event.pointerId))d.handle.releasePointerCapture(event.pointerId);
       changed();focusHandle(d.id,d.part);
@@ -529,7 +588,7 @@
       if(event.key==='Enter' || event.key===' '){event.preventDefault();app.showEditor(assemblyPanel.hidden?'signsEditor':'signAssemblyEditor');updatePanel();refreshOverlay();focusHandle(selected,handle.dataset.part);return;}
       if(!arrows[event.key])return;event.preventDefault();event.stopPropagation();
       const sign=current(),step=(event.shiftKey?10:1)/sheets.selected.view.scale,[dx,dy]=arrows[event.key],part=handle.dataset.part;
-      if(part==='post'){sign.postX+=dx*step;sign.postY+=dy*step;}else{sign.x+=dx*step;sign.y+=dy*step;}
+      if(part==='arrowRotate'){sign.arrowRotation=((sign.arrowRotation??Math.atan2(sign.postY-sign.y,sign.postX-sign.x)*180/Math.PI)+(dx||-dy)*(event.shiftKey?15:1)+360)%360;}else if(part==='post'){sign.postX+=dx*step;sign.postY+=dy*step;}else{sign.x+=dx*step;sign.y+=dy*step;}
       changed();focusHandle(selected,part);
     });
     document.addEventListener('keydown',event=>{
@@ -541,19 +600,19 @@
     },true);
     new MutationObserver(()=>{if(!active())placement=null;updatePanel();refreshOverlay();}).observe(panel,{attributes:true,attributeFilter:['hidden']});
     document.addEventListener('sheetview',refreshOverlay);
-    async function loadParts(sign){await Promise.all(L.parts(sign).filter(p=>!p.image).map(p=>loadArt(p.design)));}
+    async function loadParts(sign){await Promise.all(L.parts(sign).filter(p=>!p.image&&typeof p.text!=='string').map(p=>loadArt(p.design)));}
     async function ready(sheet) {
       await loadCatalog();await Promise.all((sheet.signs??[]).map(loadParts));app.roadEditor.render();
     }
     for(const event of ['sheetchange','sheethistory'])document.addEventListener(event,()=>{
-      placement=null;dragging=null;partIndex=0;fieldsFor=null;invalidFields.clear();if(selectedSheet!==sheets.selected)selected=null;
+      cancelDragFrame();placement=null;dragging=null;partIndex=0;fieldsFor=null;invalidFields.clear();if(selectedSheet!==sheets.selected)selected=null;
       updatePanel();refreshOverlay();if(sheets.selected) { tell('Choose a sign, then click Add Sign.'); } if(sheets.selected)ready(sheets.selected).catch(error=>tell(error.message));
     });
     // For selection: a sign's face, centered on its x, y.
     const box = sign => { const { width, height } = dimensions(sign); return { x: sign.x, y: sign.y, width, height, rotation: app.traffic.angle(sign.rotation) }; };
     // Opens a sign in the Signs panel, selected (right-click Edit).
     const focus = id => { app.showEditor?.('signsEditor'); selected=id; selectedSheet=sheets.selected; partIndex=0; refreshOverlay(); updatePanel(); app.selection?.editorChanged(); };
-    app.signs={selectedItem:()=>active()&&current()?{kind:"signs",id:selected}:null,diagnostics:()=>structuredClone({selected,draft:draft(),partIndex,appendPanel}),draw,refreshOverlay,ready,box,focus};
+    app.signs={selectedItem:()=>active()&&current()?{kind:"signs",id:selected}:null,diagnostics:()=>structuredClone({selected,draft:draft(),partIndex,appendPanel}),draw,updateDrawing,refreshOverlay,ready,box,focus};
     loadCatalog().then(async()=>{await loadArt(choice);updatePanel();if(sheets.selected)return ready(sheets.selected);}).catch(error=>tell(error.message));
     updatePanel();
   });

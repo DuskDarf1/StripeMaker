@@ -1,8 +1,11 @@
 /* Portable editable projects. Original sheet files are embedded, never fetched.
    Uses the existing SignalMaker-derived buttons/fields (GPL-3.0). */
 (() => {
+  const Volumes=typeof module!=='undefined'?require('./simulator-volumes.js'):globalThis.StripeMaker.simulatorVolumes;
+  const Signals=typeof module!=='undefined'?require('./simulator-signals.js'):globalThis.StripeMaker.simulatorSignals;
+  const IntersectionGeometry=typeof module!=='undefined'?require('./intersection-geometry.js'):globalThis.StripeMaker.intersectionGeometry;
   const FORMAT='StripeMakerProject', VERSION=1;
-  const COLLECTIONS=['roads','joints','gores','medians','intersections','signs','markings','lines','bridges','surfaces','vehicleSpawns'];
+  const COLLECTIONS=['roads','joints','gores','medians','intersections','signs','markings','lines','bridges','surfaces','speedZones','vehicleSpawns','matchLines'];
   const DATA_KEYS=new Set(['name','inchesPerPixel','view','autoTapers','blank','width','height',...COLLECTIONS]);
   const RUNTIME_KEYS=new Set(['content','file','url','roadLayer','id','projectArchive']);
   const pick=(value,predicate)=>Object.fromEntries(Object.entries(value).filter(([key])=>predicate(key)));
@@ -40,13 +43,27 @@
       const laneIndex = value => Number.isInteger(value) && value >= 0 && value < 999;
       for(const spawn of d.vehicleSpawns??[]) {
         if(!object(spawn)||!id(spawn.road)||spawn.e!=null&&![0,1].includes(spawn.e))fail('Invalid vehicle spawn point.');
-        if(spawn.rate!=null&&(!Number.isInteger(spawn.rate)||spawn.rate<0||spawn.rate>600))fail('Invalid spawn output rate.');
+        if(spawn.rate!=null&&(!finite(spawn.rate)||spawn.rate<0||spawn.rate>600))fail('Invalid spawn output rate.');
+        if(spawn.rateUnit!=null&&!Object.hasOwn(Volumes.units,spawn.rateUnit))fail('Invalid spawn volume unit.');
+        if(spawn.routeVolumeMode!=null&&!['percent','total','weights'].includes(spawn.routeVolumeMode))fail('Invalid destination demand mode.');
         if(spawn.laneShares!=null&&(!object(spawn.laneShares)||Object.entries(spawn.laneShares).some(([lane,share])=>!/^\d+$/.test(lane)||!laneIndex(Number(lane))||!finite(share)||share<0||share>100)))fail('Invalid lane distribution.');
         if(spawn.outputs!=null&&(!object(spawn.outputs)||Object.entries(spawn.outputs).some(([lane,rate])=>!/^\d+$/.test(lane)||!laneIndex(Number(lane))||!Number.isInteger(rate)||rate<0||rate>600)))fail('Invalid spawn output rate.');
         if(spawn.excludedLanes!=null&&(!Array.isArray(spawn.excludedLanes)||spawn.excludedLanes.some(lane=>!laneIndex(lane))))fail('Invalid removed spawn lanes.');
         if(spawn.routes!=null&&(!Array.isArray(spawn.routes)||spawn.routes.some(route=>!object(route)||route.lane!=null&&!laneIndex(route.lane)||route.name!=null&&(typeof route.name!=='string'||route.name.length>80)||route.percent!=null&&(!finite(route.percent)||route.percent<0||route.percent>100)||!object(route.exit)||!id(route.exit.road)||route.exit.lane!=null&&!laneIndex(route.exit.lane)||route.exit.e!=null&&![0,1].includes(route.exit.e))))fail('Invalid vehicle exit route.');
+        if((spawn.routes??[]).some(route=>(route.volume!=null||Volumes.mode(spawn)!=='percent')&&!Volumes.valid(route.volume)))fail('Invalid destination volume.');
+        if(Volumes.mode(spawn)==='total'&&Volumes.rate(spawn)>600+1e-9)fail('Destination volumes exceed the entrance output limit.');
       }
-      for(const key of COLLECTIONS)if(!(key==='vehicleSpawns'&&d[key]==null)&&(!Array.isArray(d[key])||d[key].some(item=>!object(item))))fail('Invalid '+key+' collection.');
+      if(d.speedZones!=null&&(!Array.isArray(d.speedZones)||d.speedZones.some(z=>!object(z)||typeof z.id!=='string'||!id(z.road)||!finite(z.from)||!finite(z.to)||z.from<0||z.to>1||z.from>=z.to||!finite(z.mph)||z.mph<0||z.mph>999)))fail('Invalid speed zones.');
+      for(const key of COLLECTIONS)if(!(['vehicleSpawns','speedZones','matchLines'].includes(key)&&d[key]==null)&&(!Array.isArray(d[key])||d[key].some(item=>!object(item))))fail('Invalid '+key+' collection.');
+      const matchIds=new Set();
+      for(const line of d.matchLines??[]){
+        if(typeof line.id!=='string'||!line.id||matchIds.has(line.id)||typeof line.name!=='string'||!['x','y','angle','width'].every(k=>finite(line[k]))||line.width<=0||line.peerSheet!=null&&!id(line.peerSheet)||typeof line.peerId!=='string'||!Array.isArray(line.roads)||line.roads.some(r=>!object(r)||!id(r.road)||![0,1].includes(r.e)))fail('Invalid match line.');
+        matchIds.add(line.id);
+      }
+      for(const sign of d.signs){
+        if(sign.text!=null&&(typeof sign.text!=='string'||sign.text.length>2000))fail('Invalid text element.');
+        if(sign.arrowRotation!=null&&!finite(sign.arrowRotation))fail('Invalid arrowhead rotation.');
+      }
       for(const key of ['markings','lines','surfaces'])for(const item of d[key])if(item.placementTransform!=null) {
         const t=item.placementTransform;
         if(!object(t)||!['angle','x','y'].every(k=>finite(t[k])))fail('Invalid item placement transform.');
@@ -70,7 +87,10 @@
           if(!['L','R'].includes(lane)&&(!Number.isInteger(lane)||lane<0||lane>=road.lanes))fail('Lane link refers to a missing lane.');
         }
       }
-      for(const median of d.medians)if(!Array.isArray(median.points)||median.points.some(p=>!finite(p.x)||!finite(p.y)))fail('Invalid median points.');
+      for(const median of d.medians)if(!Array.isArray(median.points)||median.points.some(p=>!finite(p.x)||!finite(p.y)||
+        (p.curve!=null&&(!object(p.curve)||['in','out'].some(side=>!object(p.curve[side])||!finite(p.curve[side].x)||!finite(p.curve[side].y))))))fail('Invalid median points.');
+      for(const item of d.intersections)if(item.medians!=null&&(!Array.isArray(item.medians)||item.medians.some(m=>!IntersectionGeometry.validIsland(m))))fail('Invalid intersection medians.');
+      for(const item of d.intersections)if(item.trafficSignal!=null&&!Signals.validateSaved(item.trafficSignal))fail('Invalid traffic signal configuration.');
       for(const item of d.intersections)if(!Array.isArray(item.approaches)||item.approaches.length<2||item.approaches.some(a=>!object(a)||!finite(a.x)||!finite(a.y)||!finite(a.angle)))fail('Invalid intersection approaches.');
       for(const surface of d.surfaces) {
         const road=roads.get(surface.on?.road);
@@ -104,7 +124,7 @@
         viewport:{width:innerWidth,height:innerHeight,pixelRatio:devicePixelRatio},
         controls:[...document.querySelectorAll('input:not([type=file]):not([type=password]),select,textarea')].filter(el=>el.id).map(el=>({id:el.id,value:el.value,...(['checkbox','radio'].includes(el.type)?{checked:el.checked}:{}),disabled:el.disabled})),
         openPanels:[...document.querySelectorAll('.editor,[role=dialog],dialog')].filter(el=>el.getClientRects().length).map(el=>el.id),
-        editors:Object.fromEntries(['roadEditor','markings','intersections','signs','selection','longitudinal','levels'].map(key=>[key,attempt(()=>app[key]?.diagnostics?.())])),
+        editors:Object.fromEntries(['roadEditor','markings','intersections','signs','selection','longitudinal','levels','simulator'].map(key=>[key,attempt(()=>app[key]?.diagnostics?.())])),
         storage:attempt(()=>app.sheets.diagnostics()),
         errors:structuredClone(errors),history:app.history?.diagnostics?.(sheets.map(s=>s.id)),
         sheets:sheets.map(sheet=>({id:sheet.id,counts:Object.fromEntries(COLLECTIONS.map(key=>[key,sheet[key]?.length??0])),
@@ -148,9 +168,13 @@
       if(applySettings) {
         const s=project.settings??{};
         if(finite(s.drawingOpacity)&&s.drawingOpacity>=0&&s.drawingOpacity<=100)app.settings.set('drawingOpacity',s.drawingOpacity);
-        if(finite(s.signArrowWeight)&&s.signArrowWeight>=25&&s.signArrowWeight<=400)app.settings.set('signArrowWeight',s.signArrowWeight);
+        if(finite(s.signArrowWeight)&&s.signArrowWeight>=1&&s.signArrowWeight<=400)app.settings.set('signArrowWeight',s.signArrowWeight);
         if(Number.isInteger(s.hideLevelsAbove)&&s.hideLevelsAbove>=0&&s.hideLevelsAbove<=9)app.settings.set('hideLevelsAbove',s.hideLevelsAbove);
         if(typeof s.leftHandTraffic==='boolean')app.settings.set('leftHandTraffic',s.leftHandTraffic);
+        if(Number.isInteger(s.simulationTemperature)&&s.simulationTemperature>=0&&s.simulationTemperature<=100)app.settings.set('simulationTemperature',s.simulationTemperature);
+        if(Array.isArray(s.simulationOverlays)&&s.simulationOverlays.every(name=>['density','speed','stopped'].includes(name)))app.settings.set('simulationOverlays',s.simulationOverlays);
+        else if(['none','density','speed','stopped'].includes(s.simulationOverlay))app.settings.set('simulationOverlay',s.simulationOverlay);
+        if(finite(s.simulationPlaybackRate)&&s.simulationPlaybackRate>=1&&s.simulationPlaybackRate<=5)app.settings.set('simulationPlaybackRate',s.simulationPlaybackRate);
         if(typeof s.autoContrast==='boolean')app.settings.set('autoContrast',s.autoContrast);
         if(['all','undo-redo','none'].includes(s.keybindMode))app.settings.set('keybindMode',s.keybindMode);
         app.shortcuts.restore(project.shortcuts??{});

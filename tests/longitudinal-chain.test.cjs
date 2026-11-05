@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const source=fs.readFileSync('js/longitudinal.js','utf8');
+const context=vm.createContext({});
+for(const [start,end] of [['  function pointAt(', '  function slice('],['  function linkedStretches(', '  // Distance (pixels)']])vm.runInContext(source.slice(source.indexOf(start),source.indexOf(end)),context);
+const target=(key,x,y=0)=>({key,points:[{x,y},{x:x+100,y}],along:[0,100],length:100});
+const a=target('a',0),b=target('b',100),c=target('c',200),unjoined=target('d',300,20);
+const targets=new Map([a,b,c,unjoined].map(t=>[t.key,t]));
+const forward=context.linkedStretches(targets,a,25,c,60,1);
+assert.deepEqual(Array.from(forward,t=>[t.target.key,t.a,t.b]),[['a',25,100],['b',0,100],['c',0,60]]);
+const backward=context.linkedStretches(targets,c,60,a,25,1);
+assert.deepEqual(Array.from(backward,t=>[t.target.key,t.a,t.b]),[['c',0,60],['b',0,100],['a',25,100]]);
+assert.equal(context.linkedStretches(targets,a,25,unjoined,60,1),null);
+console.log('PASS: longitudinal drag spans connected segments in both directions and excludes disconnected lines.');

@@ -1,0 +1,54 @@
+const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs');
+const {pathToFileURL}=require('node:url'),P=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+(async()=>{const webkit=process.env.BROWSER==='webkit',browser=await P[webkit?'webkit':'chromium'].launch({headless:true,executablePath:webkit?process.env.WEBKIT_PATH:process.env.CHROME_PATH});try{
+ const page=await browser.newPage({viewport:{width:1600,height:1100}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(process.env.STRIPEMAKER_URL||pathToFileURL(path.resolve(__dirname,'../index.html')).href);await page.waitForFunction(()=>StripeMaker.sheets.ready);
+ await page.click('button[aria-controls="sheetsMenu"]');await page.click('#blankSheet');await page.waitForFunction(()=>StripeMaker.sheets.selected);
+ await page.evaluate(()=>{const A=StripeMaker,s=A.sheets.selected;s.inchesPerPixel=2;s.view={x:0,y:0,scale:1,fitted:false};s.medians=[{id:1,type:'painted',color:'yellow',lean:'right',spacing:20,points:[{x:500,y:500},{x:900,y:650},{x:1300,y:500},{x:1300,y:700},{x:900,y:850},{x:500,y:700}]}];A.sheets.zoomBy(1);A.roadEditor.focusMedian(1);A.history.rebase();});
+ const point=page.locator('.medianPoint').nth(1);await point.dblclick();
+ assert.equal(await page.locator('.medianCurveControl').count(),2);
+ assert(await page.evaluate(()=>!!StripeMaker.sheets.selected.medians[0].points[1].curve));
+ await page.click('#undoButton');assert.equal(await page.locator('.medianCurveControl').count(),0);
+ await page.click('#redoButton');assert.equal(await page.locator('.medianCurveControl').count(),2);
+ const before=await page.evaluate(()=>structuredClone(StripeMaker.sheets.selected.medians[0].points[1]));
+ const handle=page.locator('.medianCurveControl[data-side="out"]'),box=await handle.boundingBox();
+ await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+90,box.y-60,{steps:8});await page.mouse.up();
+ const edited=await page.evaluate(()=>structuredClone(StripeMaker.sheets.selected.medians[0].points[1]));assert.notDeepEqual(edited.curve,before.curve);
+ assert(Math.abs(edited.curve.in.x*edited.curve.out.y-edited.curve.in.y*edited.curve.out.x)<1e-6,'handles remain aligned');
+ await page.click('#undoButton');assert.deepEqual(await page.evaluate(()=>StripeMaker.sheets.selected.medians[0].points[1].curve),before.curve);await page.click('#redoButton');
+ await point.focus();await page.keyboard.press('ArrowRight');const moved=await page.evaluate(()=>StripeMaker.sheets.selected.medians[0].points[1]);assert(moved.x>edited.x);assert.deepEqual(moved.curve,edited.curve);
+ // Smooth both long sides; stripe angles should follow the curved band.
+ await page.locator('.medianPoint').nth(4).dblclick();
+ const geometry=await page.evaluate(()=>{const A=StripeMaker,s=A.sheets.selected,m=s.medians[0],outline=A.roadEditor.medianOutline(s,m),paths=[...s.roadLayer.querySelectorAll('.medianCurvedStripes path')];return {count:outline.length,angles:paths.map(p=>{const a=p.getPointAtLength(0),b=p.getPointAtLength(p.getTotalLength());return Math.atan2(b.y-a.y,b.x-a.x);}),clip:s.roadLayer.querySelector('.medianCurvedStripes')?.getAttribute('clip-path')};});
+ assert(geometry.count>30);assert(geometry.angles.length>=4);assert(Math.max(...geometry.angles)-Math.min(...geometry.angles)>.2);assert(geometry.clip);
+ await page.evaluate(()=>{const s=StripeMaker.sheets.selected,svg=s.roadLayer.cloneNode(true);svg.id='medianCurvePreview';svg.setAttribute('viewBox','450 430 900 520');svg.style.cssText='position:fixed;inset:0;width:1200px;height:700px;z-index:9999;background:#343434;transform:none';document.body.append(svg);});
+ await page.locator('#medianCurvePreview').screenshot({path:`/tmp/median-bezier-${webkit?'webkit':'chromium'}.png`});await page.locator('#medianCurvePreview').evaluate(e=>e.remove());
+ // Insert on a curved leg without changing its shape.
+ const insertion=await page.evaluate(()=>{const A=StripeMaker,s=A.sheets.selected,m=s.medians[0],outline=A.roadEditor.medianOutline(s,m),q=outline[12],p=A.sheets.toScreen(q),box=document.getElementById('previewStage').getBoundingClientRect();return {x:p.x+box.left,y:p.y+box.top,outline};});
+ await page.mouse.dblclick(insertion.x,insertion.y);
+ assert.equal(await page.evaluate(()=>StripeMaker.sheets.selected.medians[0].points.length),7);
+ const split=await page.evaluate(()=>{const A=StripeMaker,s=A.sheets.selected;return A.roadEditor.medianOutline(s,s.medians[0]);});
+ const distance=(p,a,b)=>{const x=b.x-a.x,y=b.y-a.y,t=Math.max(0,Math.min(1,((p.x-a.x)*x+(p.y-a.y)*y)/(x*x+y*y||1)));return Math.hypot(p.x-a.x-x*t,p.y-a.y-y*t);};
+ assert(Math.max(...insertion.outline.map(p=>Math.min(...split.map((a,i)=>distance(p,a,split[(i+1)%split.length])))))<1,'insertion preserves the sampled curve');
+ await page.click('#undoButton');
+ const original=await page.evaluate(()=>structuredClone(StripeMaker.sheets.selected.medians[0].points[1].curve));
+ await page.evaluate(()=>StripeMaker.selection.rotate(90));
+ const rotated=await page.evaluate(()=>StripeMaker.sheets.selected.medians[0].points[1].curve);
+ assert(Math.abs(rotated.out.x+original.out.y)<1e-6&&Math.abs(rotated.out.y-original.out.x)<1e-6);await page.click('#undoButton');
+ await page.evaluate(()=>{const A=StripeMaker,s=A.sheets.selected;s.medians[0].color='white';A.roadEditor.render();});
+ assert(await page.locator('.medianChevrons.medianCurvedStripes path').count()>3);
+ await page.evaluate(()=>{const A=StripeMaker,s=A.sheets.selected;s.medians[0].color='yellow';A.roadEditor.render();});
+ await page.getByRole('button',{name:'Download',exact:true}).click();await page.locator('[data-format="pdf"]').click();await page.fill('#downloadWidthValue','1000');await page.locator('#downloadWidthValue').blur();
+ const downloading=page.waitForEvent('download');await page.locator('#downloadSheet').click();const pdfPath=`/tmp/median-bezier-${webkit?'webkit':'chromium'}.pdf`;await (await downloading).saveAs(pdfPath);
+ const pdf=fs.readFileSync(pdfPath).toString('latin1'),contents=pdf.match(/\/Contents (\d+) 0 R/)[1],start=pdf.indexOf(`${contents} 0 obj\n`),stream=pdf.indexOf('stream\n',start)+7,length=Number(pdf.slice(start,stream).match(/\/Length (\d+)/)[1]);
+ const content=require('node:zlib').inflateSync(Buffer.from(pdf.slice(stream,stream+length),'latin1')).toString();assert.match(content,/W\*?\s+n/);assert((content.match(/\bl\n/g)||[]).length>100,'curved outlines and stripe clipping remain vector PDF');
+ await page.getByRole('button',{name:'Download',exact:true}).click();
+ const portable=await page.evaluate(()=>StripeMaker.projectJSON.snapshot()),expected=await page.evaluate(()=>structuredClone(StripeMaker.sheets.selected.medians[0]));
+ await page.evaluate(p=>StripeMaker.projectJSON.load(p,{applySettings:false}),portable);
+ assert.deepEqual(await page.evaluate(()=>StripeMaker.sheets.selected.medians[0]),expected);
+ await page.evaluate(()=>StripeMaker.roadEditor.focusMedian(1));await page.locator('.medianPoint').nth(1).dblclick();assert.equal(await page.locator('.medianCurveControl').count(),2,'second double-click straightens only that point');
+ // An actual anchored roadway point cannot be made into a manual curve.
+ await page.evaluate(()=>{const A=StripeMaker,s=A.sheets.selected;s.roads=[{id:1,lanes:1,laneWidth:12,ends:[{joint:1,sign:1},{joint:2,sign:1}]}];s.joints=[{id:1,x:500,y:250,root:1,links:[]},{id:2,x:1300,y:250,root:1,links:[]}];s.medians[0].points[0]={x:500,y:290,on:{road:1,side:'R',f:0}};A.roadEditor.render();});
+ await page.locator('.medianPoint').nth(0).dblclick();assert(await page.evaluate(()=>{const p=StripeMaker.sheets.selected.medians[0].points[0];return p.on&&!p.curve;}));
+ assert.deepEqual(errors,[]);console.log(`PASS ${webkit?'WebKit':'Chromium'} median Bézier handles, aligned dragging, keyboard, undo/redo, curved hatching, persistence and anchored points.`);
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

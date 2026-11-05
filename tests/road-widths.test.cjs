@@ -108,3 +108,19 @@ test('connected split medians add space without changing lane widths and preserv
  }
  assert.doesNotThrow(()=>W.endGaps(s,{lanes:2,laneWidth:12},0),'drawing previews have no road ends yet');
 });
+test('wide turn endpoint follows host while free cross-section retains its own width',()=>{
+ const host=road(1,10,2,3),wide=road(2,16,1,2);
+ const s={roads:[host,wide],joints:[{id:2,links:[{a:1,ai:0,b:2,bi:0,feed:true}]}]};
+ assert.equal(endWidth(s,wide,1),10);
+ wide.keepWidthAtJoins=true;
+ assert.equal(endWidth(s,wide,1),10);
+ s.inchesPerPixel=12;s.joints.push({id:1,x:0,y:0});s.joints[0].x=200;s.joints[0].y=0;
+ assert.equal(laneAt(s,wide,0,.75),16);
+ assert.equal(laneAt(s,wide,0,1),16);
+ assert.equal(endWidth(s,host,0),10);
+ host.laneWidth=20;
+ assert.equal(endWidth(s,wide,1),20);
+ wide.keepWidthAtJoins=false;
+ host.laneWidth=10;
+ assert.equal(endWidth(s,wide,1),10);
+});

@@ -218,8 +218,8 @@
     const record = sheet => ({
       name: sheet.name, inchesPerPixel: sheet.inchesPerPixel, view: sheet.view,
       roads: sheet.roads ?? [], joints: sheet.joints ?? [], gores: sheet.gores ?? [], medians: sheet.medians ?? [],
-      autoTapers: Boolean(sheet.autoTapers), intersections: sheet.intersections ?? [], signs: sheet.signs ?? [],
-      markings: sheet.markings ?? [], lines: sheet.lines ?? [], bridges: sheet.bridges ?? [], surfaces: sheet.surfaces ?? [], vehicleSpawns: sheet.vehicleSpawns ?? [], blank: Boolean(sheet.blank),
+      autoTapers: Boolean(sheet.autoTapers), intersections: sheet.intersections ?? [], signs: sheet.signs ?? [], matchLines: sheet.matchLines ?? [],
+      markings: sheet.markings ?? [], lines: sheet.lines ?? [], bridges: sheet.bridges ?? [], surfaces: sheet.surfaces ?? [], speedZones: sheet.speedZones ?? [], vehicleSpawns: sheet.vehicleSpawns ?? [], blank: Boolean(sheet.blank),
       ...(sheet.projectArchive ? { projectArchive: sheet.projectArchive } : {}),
       ...(sheet.blank ? { width: sheet.width, height: sheet.height } : {}),
     });
@@ -395,6 +395,8 @@
         const storedFiles = await Promise.all(prepared.map(sheet => fileRecord(sheet.file)));
         // Reserve IDs after decoding so concurrent image uploads cannot collide.
         for(const sheet of prepared)sheet.id=nextId++;
+        const sheetIds=new Map(entries.map((entry,index)=>[entry.id,prepared[index].id]));
+        for(const sheet of prepared)for(const line of sheet.matchLines??[])line.peerSheet=sheetIds.get(line.peerSheet)??null;
         // One IndexedDB transaction: a storage failure cannot leave half an import.
         await transact("readwrite",transaction=>{
           for(const [index,sheet] of prepared.entries()) {
@@ -772,6 +774,7 @@
         zoomAt(selected, factor, box.left + box.width / 2, box.top + box.height / 2);
       },
       get all() { return sheets; },
+      select,
       save: scheduleSave,
       snapshot: sheet => { const {projectArchive,...data}=record(sheet);return structuredClone(data); },
       importProject,
@@ -816,9 +819,14 @@
         report("Upload a sheet first.");
         return;
       }
-      if (!window.confirm(`Clear all roads, medians, gores, intersections, signs, and markings on “${selected.name}”? You can undo this.`)) return;
+      if (!window.confirm(`Clear all roads, medians, gores, intersections, signs, text, match lines, and markings on “${selected.name}”? You can undo this.`)) return;
       window.StripeMaker.showEditor?.(null);
-      Object.assign(selected, { roads: [], joints: [], gores: [], medians: [], intersections: [], signs: [], markings: [], lines: [], bridges: [], surfaces: [], vehicleSpawns: [] });
+      // A match line is one paired annotation, including when cleared from either sheet.
+      for(const line of selected.matchLines??[]){
+        const other=sheets.find(s=>s.id===line.peerSheet);
+        if(other){other.matchLines=(other.matchLines??[]).filter(l=>l.id!==line.peerId);scheduleSave(other);}
+      }
+      Object.assign(selected, { roads: [], joints: [], gores: [], medians: [], intersections: [], signs: [], matchLines: [], markings: [], lines: [], bridges: [], surfaces: [], speedZones: [], vehicleSpawns: [] });
       scheduleSave(selected);
       history.record();
       document.dispatchEvent(new CustomEvent("sheethistory"));

@@ -26,6 +26,7 @@
     const a = points[lo - 1], b = points[lo], f = Math.max(0, Math.min(1, (station - stations[lo - 1]) / (stations[lo] - stations[lo - 1] || 1)));
     const lerp = key => (a[key] ?? b[key] ?? 0) + ((b[key] ?? a[key] ?? 0) - (a[key] ?? b[key] ?? 0)) * f;
     return { x: lerp('x'), y: lerp('y'), laneWidth: lerp('laneWidth'), lateral: lerp('lateral'),
+      level: station < (stations[lo-1]+stations[lo])/2 ? (a.level??b.level??1) : (b.level??a.level??1),
       road: lane.road, lane: lane.lane, station, direction: 1 };
   }
   function slice(lane, start, end) {
@@ -34,6 +35,31 @@
     return [sample(lane, start), ...lane.points.filter((_, i) => stations[i] > start && stations[i] < end), sample(lane, end)];
   }
   const smooth = t => t * t * t * (10 + t * (-15 + 6 * t));
+  // Rolling replans use reachable travel during the personal maneuver time,
+  // not desired highway speed × time after a driver has already slowed.
+  // Constant personal acceleration to the contextual target is a numerical
+  // planning forecast; actual IDM acceleration and safe admission still apply.
+  // Keep enough steering room to accelerate from a queue once its gap opens.
+  // Constant-a travel is a numerical feasibility estimate using the existing
+  // driver sample, not a newly fitted minimum lane-change length.
+  function launchTravel(target,acceleration,time){
+    if(!(target>0&&acceleration>0))return 0;
+    const ramp=Math.min(time,target/acceleration);
+    return .5*acceleration*ramp*ramp+target*(time-ramp);
+  }
+  function rollingTransition(from,to,pair,{station,direction,speed,target,acceleration,duration,delay,pixelsPerFoot,reserveSpeed=0}) {
+    const total=stationsOf(from).at(-1),a=Math.max(0,acceleration),v=Math.max(0,speed),cap=Math.max(v,target);
+    const travel=t=>{const accelerating=a>0?Math.min(t,(cap-v)/a):0;return v*t+a*accelerating*(t-accelerating/2);};
+    const start=station+direction*travel(delay);
+    if(start<0||start>total)return null;
+    const separation=distance(sample(from,start),sample(to,start));
+    const time=duration*Math.max(1,separation/(12*pixelsPerFoot));
+    const end=station+direction*travel(delay+time);
+    if(Math.abs(end-start)+1e-6<launchTravel(reserveSpeed,a,time))return null;
+    if(end<0||end>total||Math.abs(end-start)<1e-6||sample(from,start).laneWidth<=pixelsPerFoot||sample(to,end).laneWidth<=pixelsPerFoot)return null;
+    const crossing=transition(from,to,start,end,pair,total);
+    return crossing?{points:[...slice(from,station,start),...crossing],station:end}:null;
+  }
   function transition(from, to, start, end, pair, total) {
     if ((pair.blocked ?? []).some(([a, b]) => a * total < Math.max(start, end) && b * total > Math.min(start, end))) return null;
     const points = [];
@@ -43,7 +69,7 @@
       points.push({ x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u,
         lateral: a.lateral + (b.lateral - a.lateral) * u,
         laneWidth: Math.min(sample(from, start).laneWidth, sample(to, end).laneWidth),
-        road: from.road, lane: t < 1 ? from.lane : to.lane, direction: Math.sign(end - start), station, maneuver: { road: from.road, from: from.lane, to: to.lane, progress: t, acrossBike: Boolean(pair.crossings?.length) },
+        level:a.level, road: from.road, lane: t < 1 ? from.lane : to.lane, direction: Math.sign(end - start), station, maneuver: { road: from.road, from: from.lane, to: to.lane, progress: t, acrossBike: Boolean(pair.crossings?.length), fromX:a.x, fromY:a.y, toX:b.x, toY:b.y, fromWidth:a.laneWidth, toWidth:b.laneWidth },
       });
     }
     // Bicycle facilities are crossings, never graph lanes. Test each actual
@@ -65,11 +91,17 @@
     }
     return points;
   }
-  function network(lanes, pairs, { speed, pixelsPerFoot }) {
+  function network(lanes, pairs, { speed, pixelsPerFoot, slowLaneChanges=false }) {
     if (!lanes.length || !pairs.length || !(speed > 0) || !(pixelsPerFoot > 0)) return null;
-    const total = stationsOf(lanes[0]).at(-1), minimum = speed * DURATION_SECONDS;
+    const total = stationsOf(lanes[0]).at(-1);
+    if(!(total>0))return null;
+    // A fallback route may slow down to prepare for a nearby turn. This fits
+    // distance, never maneuver time; playback keeps the driver's full duration.
+    const crossings=Math.max(1,lanes.length-1);
+    if(slowLaneChanges)speed=Math.min(speed,total/(DURATION_SECONDS*crossings));
+    const minimum = speed * DURATION_SECONDS;
     if (total < minimum) return null; // Never squeeze an empirical maneuver into a shorter road.
-    const steps = Math.min(MAX_STATIONS, Math.max(2, Math.floor(total / (minimum / 8))));
+    const steps = Math.min(MAX_STATIONS, Math.max(2, (slowLaneChanges?Math.round:Math.floor)(total / (minimum / 8))));
     const key = (lane, i) => `r:${lane.road}:${lane.lane}:${i === 0 ? '0' : i === steps ? '1' : `s${i}`}`;
     const nodes = [], edges = [], byLane = new Map(lanes.map(lane => [lane.lane, lane]));
     for (const lane of lanes) {
@@ -89,6 +121,9 @@
         const j = Math.ceil((start + required - 1e-8) / total * steps);
         if (j > steps || sample(from, start).laneWidth <= pixelsPerFoot || sample(to, total * j / steps).laneWidth <= pixelsPerFoot) continue;
         const end = total * j / steps, points = transition(from, to, start, end, pair, total);
+        // Retain a baseline speed target on the fallback geometry too, for
+        // the engine's existing fallback when no personal plan can be sampled.
+        if(points&&slowLaneChanges)for(const point of points)point.maneuverLimit=speed;
         if (points) edges.push({ from: key(from, i), to: key(to, j), points,
           laneChange: { road: from.road, from: a, to: b, acrossBike: Boolean(pair.crossings?.length), duration: length(points) / speed } });
       }
@@ -98,7 +133,7 @@
   // Personal paths are generated per driver, not drawn as route arrows.
   // Different feasible start positions are a decision-policy assumption, not
   // a measured start-position distribution. Duration comes from the driver.
-  function personalize(path, lanes, pairs, { speed, pixelsPerFoot, driver, random, assess = () => 0 }) {
+  function personalize(path, lanes, pairs, { speed, pixelsPerFoot, driver, random, assess = () => 0, reserveSpeed=0 }) {
     const changes = path.laneChanges ?? [];
     if (!changes.length) return path.points;
     const output = [], records = new Map(lanes.map(lane => [`${lane.road}:${lane.lane}`, lane]));
@@ -115,10 +150,22 @@
         const pair = pairs.find(pair => pair.road === road && [pair.from,pair.to].includes(change.from) && [pair.from,pair.to].includes(change.to));
         if (!from || !to || !pair) return null;
         const separation = Math.max(distance(sample(from,start),sample(to,start)),distance(sample(from,finish),sample(to,finish)));
-        return { change, from, to, pair, span: speed * driver.duration * Math.max(1,separation/(12*pixelsPerFoot)) };
+        const time=driver.duration*Math.max(1,separation/(12*pixelsPerFoot));
+        return { change, from, to, pair, time, span: Math.max(speed*time,launchTravel(reserveSpeed,(driver.acceleration??.73)*pixelsPerFoot/.3048,time)) };
       });
+      let maneuverLimit=null;
+      if(path.slowLaneChanges && plans.every(Boolean)) {
+        // Allocate room for every required adjacent crossing on this road,
+        // including the next turn. Safe gap admission still happens per lane.
+        const time=plans.reduce((sum,plan)=>sum+plan.time,0);
+        if(plans.reduce((sum,plan)=>sum+plan.span,0)>available) {
+          maneuverLimit=available/time;
+          for(const plan of plans)plan.span=maneuverLimit*plan.time;
+        }
+      }
       if (plans.some(plan => !plan) || plans.reduce((sum, plan) => sum + plan.span,0) > available + 1e-6) return null;
       let cursor = start, current = plans[0].from;
+      const outputStart=output.length;
       for (let i=0;i<plans.length;i++) {
         const plan=plans[i], reserve=plans.slice(i+1).reduce((sum,next)=>sum+next.span,0);
         const earliest=cursor, latest=finish-direction*(plan.span+reserve);
@@ -142,11 +189,13 @@
         output.push(...slice(current,cursor,choice.at),...choice.points);
         cursor=choice.end;current=plan.to;
       }
-      output.push(...slice(current,cursor,finish));first=last;
+      output.push(...slice(current,cursor,finish));
+      if(maneuverLimit!=null)for(let i=outputStart;i<output.length;i++)output[i]={...output[i],maneuverLimit};
+      first=last;
     }
     return output;
   }
-  const api = { DURATION_SECONDS, network, transition, sample, slice, stationsOf, length, personalize };
+  const api = { DURATION_SECONDS, network, transition, rollingTransition, sample, slice, stationsOf, length, personalize };
   (globalThis.StripeMaker ??= {}).simulatorLaneChanges = api;
   if (typeof module !== 'undefined') module.exports = api;
 })();

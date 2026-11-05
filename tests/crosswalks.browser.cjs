@@ -87,7 +87,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.mouse.click(c.x, c.y);
     await page.locator('#markingsLateralTab').focus(); await page.keyboard.press('Escape');
     assert.equal((await marks()).length, 1);
-    // Bike lanes, including their buffer, get one full 24-inch bar.
+    // Bike lanes get a full 24-inch bar on each boundary.
     for(const type of ['bike','bufferedBike']) for(const skew of [false,true]) {
     const bikeBars=await page.evaluate(({type,skew})=>{
       const s=StripeMaker.sheets.selected;
@@ -107,9 +107,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         return {width:Math.max(...y)-Math.min(...y),center:(Math.max(...y)+Math.min(...y))/2,length:Math.max(...x)-Math.min(...x)};
       }).filter(p=>p.length>20&&p.width<20);
     },{type,skew});
-    assert.equal(bikeBars.length,3,'one bar per lane, with no duplicate bike boundary bars');
+    assert.equal(bikeBars.length,4,'two vehicle center bars and two bike boundary bars');
     assert(bikeBars.every(b=>Math.abs(b.width-12)<.01),'all bars are 24 inches at 2 inches per pixel');
-    assert.equal(bikeBars.filter(b=>Math.abs(b.center-700)<.01).length,1,'one bar centered across the bike lane and buffer');
+    assert.equal(bikeBars.filter(b=>Math.abs(b.center-700)<.01).length,0,'no bar centered in the bike lane');
+    const half=(type==='bike'?5:7)*3;
+    for(const side of [-1,1])assert(bikeBars.some(b=>Math.abs(b.center-(700+side*half))<.01),'bar on each bike boundary');
     }
     await page.screenshot({path:'/tmp/stripemaker-bike-crosswalk.png'});
     const snapped=await page.evaluate(()=>{

@@ -1,0 +1,809 @@
+{
+  "settings": {
+    "drawingOpacity": 100,
+    "signArrowWeight": 25,
+    "hideLevelsAbove": 0,
+    "autoContrast": true,
+    "leftHandTraffic": false,
+    "simulationTemperature": 100,
+    "simulationPlaybackRate": 5,
+    "simulationOverlay": "none",
+    "simulationOverlays": [
+      "speed",
+      "density"
+    ],
+    "keybindMode": "undo-redo"
+  },
+  "data": {
+    "name": "Simulation Test--Highway merge",
+    "inchesPerPixel": 2,
+    "view": {
+      "scale": 0.15526416192293233,
+      "x": 318.8799623087011,
+      "y": -268.41181440098524,
+      "fitted": false
+    },
+    "roads": [
+      {
+        "id": 9,
+        "lanes": 4,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "ends": [
+          {
+            "joint": 12,
+            "sign": 1,
+            "length": null
+          },
+          {
+            "joint": 15,
+            "sign": 1,
+            "length": 2793.2914866568676
+          }
+        ],
+        "tapers": {},
+        "widthProfiles": [
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0,
+            "to": 0.17999471690238497
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0,
+            "to": 0.17999471690238497
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0,
+            "to": 0.17999471690238497
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0,
+            "to": 0.17999471690238497
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "lanes": 1,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "ends": [
+          {
+            "joint": 14,
+            "sign": 1,
+            "length": 3281.6248718812644
+          },
+          {
+            "joint": 15,
+            "sign": 1,
+            "length": 1862.2271021310096
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "lanes": 5,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "laneWidths": {},
+        "laneEndWidths": {},
+        "laneTypes": {},
+        "ends": [
+          {
+            "joint": 15,
+            "sign": 1,
+            "length": 1871.6903328689816
+          },
+          {
+            "joint": 16,
+            "sign": 1,
+            "length": 2348.968485606902
+          }
+        ],
+        "tapers": {
+          "1:4": {
+            "mode": "none",
+            "length": 300
+          }
+        },
+        "widthProfiles": [
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.17999471690238497,
+            "to": 0.4279969257496302
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.17999471690238497,
+            "to": 0.4279969257496302
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.17999471690238497,
+            "to": 0.4279969257496302
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.17999471690238497,
+            "to": 0.4279969257496302
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "lanes": 4,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "laneWidths": {},
+        "laneEndWidths": {},
+        "laneTypes": {},
+        "ends": [
+          {
+            "joint": 16,
+            "sign": 1,
+            "length": 7102.3383457800355
+          },
+          {
+            "joint": 13,
+            "sign": 1,
+            "length": null
+          }
+        ],
+        "tapers": {},
+        "widthProfiles": [
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.4279969257496302,
+            "to": 1
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.4279969257496302,
+            "to": 1
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.4279969257496302,
+            "to": 1
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.4279969257496302,
+            "to": 1
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "lanes": 4,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "ends": [
+          {
+            "joint": 17,
+            "sign": 1,
+            "length": null
+          },
+          {
+            "joint": 20,
+            "sign": 1,
+            "length": 2793.2914866568676
+          }
+        ],
+        "tapers": {},
+        "widthProfiles": [
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0,
+            "to": 0.17999471690238497
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0,
+            "to": 0.17999471690238497
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0,
+            "to": 0.17999471690238497
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0,
+            "to": 0.17999471690238497
+          }
+        ]
+      },
+      {
+        "id": 14,
+        "lanes": 1,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "ends": [
+          {
+            "joint": 19,
+            "sign": 1,
+            "length": 3281.6248718812644
+          },
+          {
+            "joint": 20,
+            "sign": 1,
+            "length": 1862.2271021310096
+          }
+        ]
+      },
+      {
+        "id": 15,
+        "lanes": 5,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "laneWidths": {},
+        "laneEndWidths": {},
+        "laneTypes": {},
+        "ends": [
+          {
+            "joint": 20,
+            "sign": 1,
+            "length": 1871.6903328689816
+          },
+          {
+            "joint": 21,
+            "sign": 1,
+            "length": 2348.968485606902
+          }
+        ],
+        "tapers": {
+          "1:4": {
+            "mode": "none",
+            "length": 300
+          }
+        },
+        "widthProfiles": [
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.17999471690238497,
+            "to": 0.4279969257496302
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.17999471690238497,
+            "to": 0.4279969257496302
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.17999471690238497,
+            "to": 0.4279969257496302
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.17999471690238497,
+            "to": 0.4279969257496302
+          }
+        ]
+      },
+      {
+        "id": 16,
+        "lanes": 4,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "laneWidths": {},
+        "laneEndWidths": {},
+        "laneTypes": {},
+        "ends": [
+          {
+            "joint": 21,
+            "sign": 1,
+            "length": 7102.3383457800355
+          },
+          {
+            "joint": 18,
+            "sign": 1,
+            "length": null
+          }
+        ],
+        "tapers": {},
+        "widthProfiles": [
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.4279969257496302,
+            "to": 1
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.4279969257496302,
+            "to": 1
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.4279969257496302,
+            "to": 1
+          },
+          {
+            "width": 12,
+            "start": 12,
+            "end": 12,
+            "from": 0.4279969257496302,
+            "to": 1
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "lanes": 1,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "ends": [
+          {
+            "joint": 16,
+            "sign": 1,
+            "length": null
+          },
+          {
+            "joint": 23,
+            "sign": 1,
+            "length": null
+          }
+        ]
+      },
+      {
+        "id": 18,
+        "lanes": 1,
+        "laneWidth": 12,
+        "perLaneWidths": false,
+        "ends": [
+          {
+            "joint": 21,
+            "sign": 1,
+            "length": null
+          },
+          {
+            "joint": 25,
+            "sign": 1,
+            "length": null
+          }
+        ]
+      }
+    ],
+    "joints": [
+      {
+        "id": 12,
+        "x": 1155.470056318078,
+        "y": 5059.374098939715,
+        "root": 9,
+        "links": []
+      },
+      {
+        "id": 13,
+        "x": 28335.225481581354,
+        "y": 5008.846628386748,
+        "dir": null,
+        "root": 12,
+        "links": []
+      },
+      {
+        "id": 14,
+        "x": 1247.6918675400334,
+        "y": 5968.952989164954,
+        "root": 10,
+        "links": [],
+        "dir": {
+          "x": 0.9871350949511878,
+          "y": -0.15988841207451346
+        }
+      },
+      {
+        "id": 15,
+        "x": 6886.848333938382,
+        "y": 5026.9850284616605,
+        "dir": {
+          "x": 0.9999996668056643,
+          "y": -0.000816326258616919
+        },
+        "root": 9,
+        "links": [
+          {
+            "a": 9,
+            "ai": 0,
+            "b": 11,
+            "bi": 0
+          },
+          {
+            "a": 11,
+            "ai": 4,
+            "b": 10,
+            "bi": 0,
+            "pair": false,
+            "feed": true
+          }
+        ]
+      },
+      {
+        "id": 16,
+        "x": 13373.713882108741,
+        "y": 5057.319167907846,
+        "dir": {
+          "x": 0.9999996668056642,
+          "y": -0.000816326258616933
+        },
+        "root": 11,
+        "links": [
+          {
+            "a": 11,
+            "ai": 0,
+            "b": 12,
+            "bi": 0
+          },
+          {
+            "a": 11,
+            "ai": 4,
+            "b": 17,
+            "bi": 0,
+            "pair": false,
+            "feed": true
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "x": 1047.6890076287275,
+        "y": 7677.23262328697,
+        "root": 13,
+        "links": []
+      },
+      {
+        "id": 18,
+        "x": 28227.444432892004,
+        "y": 7626.705152734004,
+        "dir": null,
+        "root": 16,
+        "links": []
+      },
+      {
+        "id": 19,
+        "x": 1139.910818850683,
+        "y": 8586.81151351221,
+        "root": 14,
+        "links": [],
+        "dir": {
+          "x": 0.9871350949511878,
+          "y": -0.15988841207451346
+        }
+      },
+      {
+        "id": 20,
+        "x": 6779.067285249032,
+        "y": 7644.843552808916,
+        "dir": {
+          "x": 0.9999996668056643,
+          "y": -0.000816326258616919
+        },
+        "root": 13,
+        "links": [
+          {
+            "a": 13,
+            "ai": 0,
+            "b": 15,
+            "bi": 0
+          },
+          {
+            "a": 15,
+            "ai": 4,
+            "b": 14,
+            "bi": 0,
+            "pair": false,
+            "feed": true
+          }
+        ]
+      },
+      {
+        "id": 21,
+        "x": 19565.38172862109,
+        "y": 7617.683131349539,
+        "dir": {
+          "x": 0.9999996668056642,
+          "y": -0.000816326258616933
+        },
+        "root": 15,
+        "links": [
+          {
+            "a": 15,
+            "ai": 0,
+            "b": 16,
+            "bi": 0
+          },
+          {
+            "a": 15,
+            "ai": 4,
+            "b": 18,
+            "bi": 0,
+            "pair": false,
+            "feed": true
+          }
+        ]
+      },
+      {
+        "id": 23,
+        "x": 17907.849635110793,
+        "y": 5845.307871316384,
+        "dir": null,
+        "root": 17,
+        "links": []
+      },
+      {
+        "id": 25,
+        "x": 23971.361166431467,
+        "y": 8215.672167932289,
+        "root": 18,
+        "links": []
+      }
+    ],
+    "gores": [
+      {
+        "key": "10:1|9:1",
+        "length": 282.8900266666199,
+        "spacing": 40
+      },
+      {
+        "key": "13:1|14:1",
+        "length": 282.8900266666199,
+        "spacing": 40
+      },
+      {
+        "key": "12:0|17:0",
+        "length": 235.6475482464439,
+        "spacing": 20
+      },
+      {
+        "key": "16:0|18:0",
+        "length": 247.7556938375421,
+        "spacing": 20
+      }
+    ],
+    "medians": [],
+    "autoTapers": false,
+    "intersections": [],
+    "signs": [],
+    "markings": [
+      {
+        "id": "11c40d91-2a50-4b12-9b27-48fe04680539",
+        "type": "mergeLeft",
+        "on": {
+          "road": 11,
+          "lane": 4
+        },
+        "back": 357.67593919347456,
+        "repeat": {
+          "length": 661.7029988708643,
+          "spacing": 250
+        }
+      },
+      {
+        "id": "5ebacaea-30bb-4ea6-b92c-dc132d9259cf",
+        "type": "word",
+        "on": {
+          "road": 11,
+          "lane": 4
+        },
+        "back": 380.97587937514345,
+        "text": "MERGE",
+        "gap": 32,
+        "repeat": {
+          "length": 636.4132210487062,
+          "spacing": 250
+        }
+      },
+      {
+        "id": "c97b7df8-3e58-4211-beee-c22f918d20fd",
+        "type": "mergeLeft",
+        "on": {
+          "road": 15,
+          "lane": 4
+        },
+        "back": 357.67593919347456,
+        "repeat": {
+          "length": 661.7029988708643,
+          "spacing": 250
+        }
+      },
+      {
+        "id": "fe272aec-7c4f-4d89-8180-11a5b9950fa9",
+        "type": "word",
+        "on": {
+          "road": 15,
+          "lane": 4
+        },
+        "back": 380.97587937514345,
+        "text": "MERGE",
+        "gap": 32,
+        "repeat": {
+          "length": 636.4132210487062,
+          "spacing": 250
+        }
+      }
+    ],
+    "lines": [
+      {
+        "id": "3c4c180b-a799-451c-a3d5-a5788b60ce0e",
+        "style": "dottedInterchange",
+        "color": "white",
+        "on": {
+          "road": 11,
+          "k": 4
+        },
+        "from": 0,
+        "to": 1
+      },
+      {
+        "id": "bc03005b-0e4d-4e19-a70e-0c9904713710",
+        "style": "dottedInterchange",
+        "color": "white",
+        "on": {
+          "road": 15,
+          "k": 4
+        },
+        "from": 0,
+        "to": 1
+      }
+    ],
+    "bridges": [],
+    "surfaces": [],
+    "speedZones": [
+      {
+        "id": "580c5413-7e33-4db0-9a4b-c5795abb4bc9",
+        "span": "65e9f02c-dc59-4dab-9b8a-4930e8b7a1d8",
+        "road": 12,
+        "from": 0,
+        "to": 1,
+        "mph": 70
+      },
+      {
+        "id": "f9e6921c-4f31-4624-9df0-cf6f27c3d3ac",
+        "span": "4abd33a5-5adb-432d-9df0-223f48d28d2a",
+        "road": 11,
+        "from": 0,
+        "to": 1,
+        "mph": 70
+      },
+      {
+        "id": "a5fa0010-6e24-41c0-bf40-937721bb81df",
+        "span": "3ae90373-60a3-41b8-82c4-28ef1786cb29",
+        "road": 9,
+        "from": 0,
+        "to": 1,
+        "mph": 70
+      },
+      {
+        "id": "34a458a9-5686-4f2c-852f-a9aaf6611cf9",
+        "span": "3a240068-2b41-40c6-96dc-e6e7e670d6f6",
+        "road": 10,
+        "from": 0,
+        "to": 1,
+        "mph": 70
+      },
+      {
+        "id": "8b73aa71-1439-43d2-8068-34119fb75730",
+        "span": "dd9b9f23-6809-4d9a-9ff9-04f9f38dea9a",
+        "road": 16,
+        "from": 0,
+        "to": 1,
+        "mph": 70
+      },
+      {
+        "id": "debff56b-7848-448b-8e74-cfabb80fccc1",
+        "span": "8507f379-9913-4004-b5d4-d46a54f6955d",
+        "road": 15,
+        "from": 0,
+        "to": 1,
+        "mph": 70
+      },
+      {
+        "id": "65e08b5c-3efd-4518-9281-3eca1329109c",
+        "span": "32b72bbe-8536-4cff-9dfb-8afc094295b2",
+        "road": 13,
+        "from": 0,
+        "to": 1,
+        "mph": 70
+      },
+      {
+        "id": "02b4452a-6f44-43a2-8107-7dcda976f0f4",
+        "span": "6ddb377a-e4c8-417d-a06f-f912c32597c2",
+        "road": 14,
+        "from": 0,
+        "to": 1,
+        "mph": 70
+      }
+    ],
+    "vehicleSpawns": [
+      {
+        "road": 9,
+        "routes": [
+          {
+            "exit": {
+              "road": 17,
+              "e": 1
+            },
+            "percent": 7.9
+          },
+          {
+            "exit": {
+              "road": 12,
+              "e": 1
+            },
+            "percent": 92.1
+          }
+        ],
+        "rate": 45,
+        "laneShares": {
+          "0": 0,
+          "1": 0,
+          "2": 0,
+          "3": 100
+        }
+      },
+      {
+        "road": 10,
+        "routes": [
+          {
+            "exit": {
+              "road": 12,
+              "e": 1
+            },
+            "percent": 100
+          }
+        ]
+      }
+    ],
+    "blank": true,
+    "width": 30000,
+    "height": 30000
+  }
+}

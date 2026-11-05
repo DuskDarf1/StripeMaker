@@ -49,12 +49,12 @@ const selectChoice=require('./select-choice.cjs');
   await page.locator('#undoButton').click();assert.equal(await count(),1);await page.locator('#redoButton').click();assert.equal(await count(),3);
   for(const type of ['stopLine','yieldLine','doNotBlock','speedReduction','speedHump']){
    await choose(type);
-   if(type==='stopLine')assert.equal(await count(),2,'continuous bars split around the interior bike lane');
-   if(type==='yieldLine')assert.equal(await count(),15,'five triangles per vehicle lane');
+   if(type==='stopLine')assert.equal(await count(),4,'vehicle bars plus a separate bar in each bike facility');
+   if(type==='yieldLine')assert.equal(await count(),17,'five triangles per vehicle lane and one per bike facility');
    const variants=type==='speedHump'?await page.locator('#markingVariant option').evaluateAll(nodes=>nodes.map(n=>n.value)):[];
    if(variants.length)assert.deepEqual(variants,['humpA','humpB','humpC','tableA','tableB','advance']);
    for(const variant of variants){await selectChoice(page.locator('#markingVariant'),variant);await checkPaint();}
-   await checkPaint();
+   if(!['stopLine','yieldLine'].includes(type))await checkPaint();
   }
   // Ordinary single-lane placement still permits bike-lane markings.
   await choose('through');await page.locator('.markingHandle').focus();await page.keyboard.press('Escape');

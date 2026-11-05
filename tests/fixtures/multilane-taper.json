@@ -1,0 +1,124 @@
+{
+  "inchesPerPixel": 33.48976067026938,
+  "roads": [
+    {
+      "id": 1,
+      "lanes": 2,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "ends": [
+        {
+          "joint": 1,
+          "sign": 1,
+          "length": null
+        },
+        {
+          "joint": 3,
+          "sign": 1,
+          "length": 32.20632972619036
+        }
+      ],
+      "tapers": {},
+      "widthProfiles": [
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0,
+          "to": 0.2207569145785403
+        },
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0,
+          "to": 0.2207569145785403
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "lanes": 4,
+      "laneWidth": 12,
+      "perLaneWidths": false,
+      "laneWidths": {},
+      "laneEndWidths": {},
+      "laneTypes": {},
+      "ends": [
+        {
+          "joint": 3,
+          "sign": 1,
+          "length": 73.92940941760786
+        },
+        {
+          "joint": 2,
+          "sign": 1,
+          "length": null
+        }
+      ],
+      "tapers": {
+        "0:0": {
+          "mode": "taper",
+          "length": 50
+        },
+        "0:1": {
+          "mode": "taper",
+          "length": 50
+        }
+      },
+      "widthProfiles": [
+        null,
+        null,
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.2207569145785403,
+          "to": 1
+        },
+        {
+          "width": 12,
+          "start": 12,
+          "end": 12,
+          "from": 0.2207569145785403,
+          "to": 1
+        }
+      ]
+    }
+  ],
+  "joints": [
+    {
+      "id": 1,
+      "x": 3383.4735699289695,
+      "y": 880.8907025868339,
+      "root": 1,
+      "links": []
+    },
+    {
+      "id": 2,
+      "x": 3634.528312279175,
+      "y": 875.7302278882839,
+      "root": 2,
+      "links": []
+    },
+    {
+      "id": 3,
+      "x": 3438.7578063443484,
+      "y": 880.6239414384577,
+      "dir": {
+        "x": 0.9999941242950187,
+        "y": -0.00342802792271267
+      },
+      "root": 1,
+      "links": [
+        {
+          "a": 1,
+          "ai": 0,
+          "b": 2,
+          "bi": 2
+        }
+      ]
+    }
+  ],
+  "autoTapers": false
+}

@@ -21,7 +21,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    const aligned=network.ports.find(p=>p.intersection===rb.id&&p.lane===a.inLanes[0]);
    const before=JSON.stringify(a.links);
    const speeds=[5,30,67.7].map(speed=>{
-    app.settings.set('simulationSpeed',speed);app.simulator.refreshOverlay();
+    Object.assign(app.sheets.selected,{speedZones:app.sheets.selected.roads.map(road=>({id:'test-speed-'+road.id,road:road.id,from:0,to:1,mph:speed}))});app.simulator.refreshOverlay();
     const g=app.simulator.network(s);
     const paths=Array.from({length:3},(_,lane)=>[...g.search({road:2,lane,e:0}).values()].map(p=>p.exit.road));
     const fromSouth=[...g.search({road:33,lane:0,e:0}).values()].map(p=>p.exit.road);
@@ -38,7 +38,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    s.joints.find(j=>j.id===4).links.push({a:29,ai:0,b:99,bi:0});
    const occupied=app.intersections.simulatorNetwork(s).ports.filter(p=>p.intersection===rb.id).flatMap(p=>p.ends);
    s.roads.pop();s.joints.pop();s.joints.find(j=>j.id===4).links.pop();
-   app.settings.set('simulationSpeed',30);
+   Object.assign(app.sheets.selected,{speedZones:app.sheets.selected.roads.map(road=>({id:'test-speed-'+road.id,road:road.id,from:0,to:1,mph:30}))});
    s.vehicleSpawns=[{road:2,rate:60,routes:[{exit:{road:34,e:1},percent:100}]}];
    s.view={scale:.05,x:0,y:-100};app.sheets.zoomBy(1);app.roadEditor.render();app.simulator.refreshOverlay();
    const g=app.simulator.network(s),p=[...g.search({road:2,lane:0,e:0}).values()].find(p=>p.exit.road===34);

@@ -27,27 +27,47 @@
     const status = document.getElementById("downloadStatus");
     const formatHint = document.getElementById("downloadFormatHint");
     const formatButtons = [...menu.querySelectorAll("[data-format]")];
+    const selectArea = document.getElementById("downloadSelectArea");
+    const wholeSheet = document.getElementById("downloadWholeSheet");
+    const areaStatus = document.getElementById("downloadAreaStatus");
+    const areas = new WeakMap();
+    const overlay = document.createElement("div");
+    overlay.className = "downloadAreaOverlay";
+    overlay.tabIndex = -1;
+    overlay.setAttribute("aria-label", "Export area. Drag a box, or use arrow keys and Enter to set two corners. Escape cancels.");
+    sheets.addOverlay(overlay);
+    let selection = null;
+    const areaHint = "Drag a box to export. Arrow keys and Enter also set corners. Escape cancels.";
     let format = "png";
     let width = DEFAULT_WIDTH;
     let busy = false;
 
     const headerHeight = w => Math.max(40, Math.round(w * HEADER_SHARE));
+    const imageHeightFor = (area,w) => Math.max(1,Math.round(area.height*w/area.width));
     // The widest output that fits the canvas limits, never larger than the sheet.
-    function maxWidth(sheet) {
-      const aspect = sheet.height / sheet.width;
+    const exportArea = sheet => areas.get(sheet) ?? { x:0, y:0, width:sheet.width, height:sheet.height };
+    function maxWidth(area) {
+      const aspect = area.height / area.width;
       const byArea = Math.floor(Math.sqrt(MAX_AREA / (aspect + HEADER_SHARE)));
-      return Math.max(MIN_WIDTH, Math.min(sheet.width, MAX_SIDE, Math.floor(MAX_SIDE / (aspect + HEADER_SHARE)), byArea));
+      let max = Math.max(1,Math.floor(Math.min(area.width, MAX_SIDE, MAX_SIDE / (aspect + HEADER_SHARE), byArea)));
+      while(max>1 && (Math.round(aspect*max)+headerHeight(max)>MAX_SIDE || max*(Math.round(aspect*max)+headerHeight(max))>MAX_AREA))max--;
+      return max;
     }
     function update() {
       const sheet = sheets.selected;
       button.disabled = !sheet || busy;
-      range.disabled = number.disabled = !sheet;
+      range.disabled = number.disabled = selectArea.disabled = !sheet || busy;
+      wholeSheet.disabled = !sheet || !areas.has(sheet) || busy;
+      formatButtons.forEach(choice=>{choice.disabled=busy;});
       if (!sheet) {
         name.textContent = "Upload a sheet first.";
         size.textContent = "";
+        areaStatus.textContent = "Whole sheet";
+        drawArea();
         return;
       }
-      const max = maxWidth(sheet);
+      const area = exportArea(sheet), cropped = areas.has(sheet);
+      const max = maxWidth(area);
       const min = Math.min(MIN_WIDTH, max);
       for (const input of [range, number]) {
         input.min = min;
@@ -56,12 +76,95 @@
       width = Math.min(Math.max(width, min), max);
       if (document.activeElement !== range) range.value = width;
       if (document.activeElement !== number) number.value = width;
-      const height = Math.round(sheet.height * width / sheet.width) + headerHeight(width);
+      const height = imageHeightFor(area,width) + headerHeight(width);
       name.textContent = sheet.name;
+      areaStatus.textContent = cropped ? `Selected area: ${area.width} × ${area.height} sheet px` : "Whole sheet";
+      button.textContent = cropped ? "Download Area" : "Download Sheet";
+      selectArea.textContent = cropped ? "Reselect Area" : "Select Area";
       size.textContent = format === "pdf"
         ? `${width} × ${height} px, ${(width / PDF_PIXELS_PER_INCH).toFixed(1)} × ${(height / PDF_PIXELS_PER_INCH).toFixed(1)} in page`
         : `${width} × ${height} px`;
+      drawArea();
     }
+    function box(a,b) {
+      const x=Math.floor(Math.min(a.x,b.x)),y=Math.floor(Math.min(a.y,b.y));
+      return {x,y,width:Math.ceil(Math.max(a.x,b.x))-x,height:Math.ceil(Math.max(a.y,b.y))-y};
+    }
+    function clamp(point) {
+      const sheet=sheets.selected;
+      return {x:Math.max(0,Math.min(sheet.width,point.x)),y:Math.max(0,Math.min(sheet.height,point.y))};
+    }
+    function drawArea() {
+      overlay.replaceChildren();
+      overlay.classList.toggle("drawing",Boolean(selection));
+      const sheet=sheets.selected,area=selection?.start?box(selection.start,selection.point):sheet&&areas.get(sheet);
+      overlay.hidden=!sheet || (!selection && (menu.hidden || !area));
+      if(overlay.hidden)return;
+      const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("aria-hidden","true");overlay.append(svg);
+      if(area){
+        const p=sheets.toScreen(area),rect=document.createElementNS(svg.namespaceURI,"rect");
+        for(const [key,value] of Object.entries({x:p.x,y:p.y,width:area.width*sheet.view.scale,height:area.height*sheet.view.scale,class:"selectionBox"}))rect.setAttribute(key,value);
+        svg.append(rect);
+      }
+      if(selection){
+        const p=sheets.toScreen(selection.point),cross=document.createElementNS(svg.namespaceURI,"path");
+        cross.setAttribute("d",`M ${p.x-7} ${p.y} L ${p.x+7} ${p.y} M ${p.x} ${p.y-7} L ${p.x} ${p.y+7}`);
+        cross.setAttribute("stroke","#ffdf00");svg.append(cross);
+      }
+    }
+    function endSelection(openMenu=true) {
+      if(selection?.pointer!=null && overlay.hasPointerCapture(selection.pointer))overlay.releasePointerCapture(selection.pointer);
+      selection=null;
+      const hint=document.getElementById("actionStatus");if(hint.textContent===areaHint)hint.textContent="";
+      if(openMenu){window.StripeMaker.showEditor("downloadMenu");button.focus({preventScroll:true});}
+      update();
+    }
+    function applySelection() {
+      const area=box(selection.start,selection.point);
+      if(area.width<1 || area.height<1)return false;
+      areas.set(sheets.selected,area);endSelection();return true;
+    }
+    selectArea.addEventListener("click",()=>{
+      if(!sheets.selected || busy)return;
+      window.StripeMaker.showEditor(null);
+      const stage=document.getElementById("previewStage").getBoundingClientRect();
+      selection={point:clamp(sheets.toImage(stage.left+stage.width/2,stage.top+stage.height/2)),start:null,pointer:null};
+      document.getElementById("actionStatus").textContent=areaHint;
+      drawArea();overlay.focus({preventScroll:true});
+    });
+    wholeSheet.addEventListener("click",()=>{if(sheets.selected)areas.delete(sheets.selected);update();});
+    overlay.addEventListener("pointerdown",event=>{
+      if(!selection || event.button!==0 || !event.isPrimary)return;
+      event.preventDefault();event.stopPropagation();
+      selection.start=selection.point=clamp(sheets.toImage(event.clientX,event.clientY));selection.pointer=event.pointerId;
+      overlay.setPointerCapture(event.pointerId);drawArea();
+    });
+    overlay.addEventListener("pointermove",event=>{
+      if(!selection || selection.pointer!==event.pointerId)return;
+      event.preventDefault();event.stopPropagation();selection.point=clamp(sheets.toImage(event.clientX,event.clientY));drawArea();
+    });
+    overlay.addEventListener("pointerup",event=>{
+      if(!selection || selection.pointer!==event.pointerId)return;
+      event.preventDefault();event.stopPropagation();selection.point=clamp(sheets.toImage(event.clientX,event.clientY));
+      if(!applySelection()){overlay.releasePointerCapture(event.pointerId);selection.pointer=null;selection.start=null;drawArea();}
+    });
+    overlay.addEventListener("pointercancel",event=>{if(selection){event.stopPropagation();endSelection();}});
+    overlay.addEventListener("click",event=>event.stopPropagation());
+    document.addEventListener("keydown",event=>{
+      if(!selection)return;
+      const moves={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+      if(event.key==="Escape"){event.preventDefault();event.stopImmediatePropagation();endSelection();}
+      else if(event.key==="Enter" || event.key===" "){
+        event.preventDefault();event.stopImmediatePropagation();
+        if(selection.start)applySelection();else {selection.start={...selection.point};drawArea();}
+      }else if(moves[event.key]){
+        event.preventDefault();event.stopImmediatePropagation();const [x,y]=moves[event.key],step=(event.shiftKey?10:1)/sheets.selected.view.scale;
+        selection.point=clamp({x:selection.point.x+x*step,y:selection.point.y+y*step});drawArea();
+      }
+    },true);
+    document.getElementById("configBar").addEventListener("click",()=>{if(selection)endSelection(false);});
+    document.addEventListener("sheetview",drawArea);
+    window.addEventListener("resize",drawArea);
     formatButtons.forEach(choice => choice.addEventListener("click", () => {
       format = choice.dataset.format;
       formatButtons.forEach(other => other.setAttribute("aria-pressed", String(other === choice)));
@@ -78,12 +181,14 @@
       input.addEventListener("change", update);
     }
 
-    function roadsImage(sheet) {
+    function roadsImage(sheet, area, outputWidth) {
       if (!sheet.roadLayer) return Promise.resolve(null);
       const svg = sheet.roadLayer.cloneNode(true);
       svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-      svg.setAttribute("width", sheet.width);
-      svg.setAttribute("height", sheet.height);
+      svg.setAttribute("viewBox",`${area.x} ${area.y} ${area.width} ${area.height}`);
+      svg.setAttribute("width", outputWidth);
+      svg.setAttribute("height", area.height*outputWidth/area.width);
+      svg.setAttribute("preserveAspectRatio","none");
       svg.querySelector(".roadSelection")?.remove();
       const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
       style.textContent = ROAD_STYLES;
@@ -95,32 +200,35 @@
     }
 
     // The sheet itself: GeoTIFF tiles or a single image.
-    function drawSheet(context, sheet, scale, top) {
+    function drawSheet(context, sheet, scale, top, area) {
       context.imageSmoothingQuality = "high";
+      context.save();context.beginPath();context.rect(0,top,area.width*scale,area.height*scale);context.clip();
       for (const part of sheet.content.querySelectorAll("canvas, img")) {
         const x = parseFloat(part.style.left) || 0;
         const y = parseFloat(part.style.top) || 0;
         const w = part.width || part.naturalWidth;
         const h = part.height || part.naturalHeight;
-        context.drawImage(part, x * scale, top + y * scale, w * scale, h * scale);
+        if(x+w<area.x || y+h<area.y || x>area.x+area.width || y>area.y+area.height)continue;
+        context.drawImage(part, (x-area.x) * scale, top + (y-area.y) * scale, w * scale, h * scale);
       }
+      context.restore();
     }
     const titleSize = header => Math.round(header * 0.5);
     const ruleSize = header => Math.max(1, Math.round(header / 30));
 
-    async function render(sheet) {
+    async function render(sheet, area, width) {
       await window.StripeMaker.signs?.ready(sheet);
-      const scale = width / sheet.width;
+      const scale = width / area.width;
       const header = headerHeight(width);
       const canvas = document.createElement("canvas");
       canvas.width = width;
-      canvas.height = Math.round(sheet.height * scale) + header;
+      canvas.height = imageHeightFor(area,width) + header;
       const context = canvas.getContext("2d");
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, canvas.width, canvas.height);
-      drawSheet(context, sheet, scale, header);
-      const roads = await roadsImage(sheet);
-      if (roads) context.drawImage(roads, 0, header, width, canvas.height - header);
+      drawSheet(context, sheet, scale, header, area);
+      const roads = await roadsImage(sheet, area, width);
+      if (roads) context.drawImage(roads, 0, header, width, area.height*scale);
       // Title header: osifont lettering, slanted like plan-sheet text, over a rule.
       await document.fonts.load(`italic ${header}px osifont`);
       context.fillStyle = "#000000";
@@ -216,10 +324,10 @@
     // A one-page PDF: the sheet image under vector roads and markings, with the
     // title in embedded osifont. The page prints the chosen width at 150 ppi
     // (smaller if that would pass the 200 in page limit).
-    async function pdfBlob(sheet) {
+    async function pdfBlob(sheet, area, width) {
       await window.StripeMaker.signs?.ready(sheet);
       const header = headerHeight(width);
-      const imageHeight = Math.round(sheet.height * width / sheet.width);
+      const imageHeight = imageHeightFor(area,width);
       const fit = Math.min(72 / PDF_PIXELS_PER_INCH, PDF_MAX_POINTS / width, PDF_MAX_POINTS / (imageHeight + header));
       const pageWidth = width * fit;
       const pageHeight = (imageHeight + header) * fit;
@@ -231,7 +339,7 @@
       const context = photo.getContext("2d");
       context.fillStyle = "#ffffff";
       context.fillRect(0, 0, width, imageHeight);
-      drawSheet(context, sheet, width / sheet.width, 0);
+      drawSheet(context, sheet, width / area.width, 0, area);
       const jpeg = new Uint8Array(await (await toBlob(photo, "image/jpeg", PDF_JPEG_QUALITY)).arrayBuffer());
       // Title widths come from the loaded font, in thousandths of an em.
       await document.fonts.load("italic 100px osifont");
@@ -249,7 +357,7 @@
       const squeeze = textWidth > room ? (room / textWidth) * 100 : 100;
       const literal = `(${title.map(code => (code === 40 || code === 41 || code === 92 ? `\\${String.fromCharCode(code)}`
         : code < 127 ? String.fromCharCode(code) : `\\${code.toString(8).padStart(3, "0")}`)).join("")})`;
-      const k = pageWidth / sheet.width;
+      const k = pageWidth / area.width;
       const signImages=new Map(),imageObjects=[];
       for(const node of sheet.roadLayer?.querySelectorAll('image')??[]){
         const src=node.getAttribute('href');if(signImages.has(src))continue;
@@ -267,10 +375,11 @@
       }
       const content = [
         "1 1 1 rg", `0 0 ${n(pageWidth)} ${n(pageHeight)} re f`,
-        // Sheet pixels, y down, below the header; everything clipped to the sheet.
-        "q", `${n(k)} 0 0 ${n(-k)} 0 ${n(pageHeight - headerPoints)} cm`,
-        `0 0 ${sheet.width} ${sheet.height} re W n`,
-        "q", `${sheet.width} 0 0 ${-sheet.height} 0 ${sheet.height} cm`, "/Im0 Do", "Q",
+        // Preserve sheet coordinates for all vector paths, and clip/translate
+        // the selected area into the page below its unchanged title header.
+        "q", `${+k.toFixed(8)} 0 0 ${+(-k).toFixed(8)} ${n(-area.x*k)} ${n(pageHeight - headerPoints + area.y*k)} cm`,
+        `${area.x} ${area.y} ${area.width} ${area.height} re W n`,
+        "q", `${area.width} 0 0 ${-area.height} ${area.x} ${area.y+area.height} cm`, "/Im0 Do", "Q",
         sheet.roadLayer ? roadOps(sheet.roadLayer, signImages) : "",
         "Q",
         // Header rule and slanted title.
@@ -326,6 +435,7 @@
     button.addEventListener("click", async () => {
       const sheet = sheets.selected;
       if (!sheet || busy) return;
+      const area={...exportArea(sheet)},outputWidth=width,outputFormat=format;
       busy = true;
       status.textContent = "Preparing download…";
       update();
@@ -334,10 +444,10 @@
       window.StripeMaker.roadEditor?.flush();
       const allLevels = window.StripeMaker.levels?.showingAll ?? (run => run());
       try {
-        const blob = await allLevels(async () => format === "pdf" ? await pdfBlob(sheet) : await toBlob(await render(sheet), "image/png"));
+        const blob = await allLevels(async () => outputFormat === "pdf" ? await pdfBlob(sheet,area,outputWidth) : await toBlob(await render(sheet,area,outputWidth), "image/png"));
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = `${sheet.name}.${format}`;
+        link.download = `${sheet.name}.${outputFormat}`;
         link.click();
         setTimeout(() => URL.revokeObjectURL(link.href), 1000);
         status.textContent = "";
@@ -350,7 +460,7 @@
     });
 
     new MutationObserver(update).observe(menu, { attributes: true, attributeFilter: ["hidden"] });
-    document.addEventListener("sheetchange", update);
+    document.addEventListener("sheetchange", ()=>{if(selection)endSelection(false);else update();});
     update();
   });
 })();

@@ -1,0 +1,16 @@
+const assert=require('node:assert/strict');
+const {laneAt,endWidth}=require('../js/road-widths.js');
+const {trim}=require('../js/marking-trim.js');
+const host={id:1,lanes:2,laneWidth:12,ends:[{joint:1},{joint:2}]};
+const driveway={id:2,lanes:1,laneWidth:20,keepWidthAtJoins:true,ends:[{joint:1},{joint:3}]};
+const sheet={roads:[host,driveway],joints:[{id:1,links:[{a:1,ai:1,b:2,bi:0,feed:true}]}]};
+assert.equal(endWidth(sheet,driveway,0,0),12,'node alignment follows the mainline lane');
+for(let i=0;i<=100;i++)assert.equal(laneAt(sheet,driveway,0,i/100),20,'driveway curve never narrows');
+assert.equal(endWidth(sheet,host,0,1),12,'mainline remains 12 ft');
+const mainline=[{x:0,y:-100},{x:24,y:-100},{x:24,y:100},{x:0,y:100}];
+const line=[{x:-20,y:-10},{x:-5,y:-5},{x:5,y:0}];
+const clipped=trim(line,[mainline]);
+assert.equal(clipped.length,1);
+assert.deepEqual(clipped[0].points.at(-1),{x:0,y:-2.5});
+assert.deepEqual(clipped[0].points[1],line[1],'outside corner stays exactly where drawn');
+console.log('PASS: full 20 ft turn, 12 ft mainline alignment, and clipping only at mainline boundary.');

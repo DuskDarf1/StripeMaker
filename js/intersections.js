@@ -121,6 +121,7 @@
     function change(action, rebuild = true) {
       const item = current();
       if (!item) return;
+      for(const m of item.medians??[])for(const p of m.points)Object.assign(p,G.islandPoint(item,p));
       const before = structuredClone(item);
       action(item);
       normalize(item);
@@ -144,12 +145,14 @@
     }
     function chooseApproach(id) {
       chosen = id;
+      selectedIsland = null;
       inputLane = null;
       chosenMovement = null;
       renderFields();
       refreshOverlay();
     }
     function chooseInput(a, id) {
+      selectedIsland=null;
       chosen = a.id;
       inputLane = id;
       chosenMovement = null;
@@ -273,6 +276,7 @@
       }
       title.lastChild.textContent = round(item) ? " Roundabout " : " Intersection ";
       if (round(item)) return renderRoundabout(item);
+      renderIslands(item);
       field("Approach", chosen, chooseApproach, {
         key: "approach",
         choices: item.approaches.map((a, i) => [a.id, `Approach ${i + 1}`]),
@@ -443,7 +447,8 @@
         ? "Edit lane destinations to change the automatic circulating lanes."
         : "Choose Automatic to size circulating lanes from lane destinations.");
       field(sh.kind === "peanut" ? "Lobe diameter (ft)" : "Inscribed diameter (ft)", RB.diameter(item), (v) => changeRound(() => (s.icd = v)), { key: "rb-icd", min: RB.MINI_DIAMETER[0], max: 1200, step: 1 });
-      hint("Drag the circle's square handle to resize it.");
+      hint(sh.kind === "circle" ? "Drag the circle's square handle to resize it."
+        : "Drag either long-axis square to stretch the shape. The diameter square resizes the whole roundabout.");
       if (s.icd != null) button("Use Automatic Diameter", () => changeRound(() => (s.icd = null)), fields);
       if (item.approaches.some(a => a.inLanes.slice(1).some((_, j) => RB.entryGoreWidth(a, j + 1) > 0)))
         hint("Automatic diameter includes extra room for the entry gores.");
@@ -462,7 +467,7 @@
         });
         hint("Edit lane destinations to change the automatic spiral and its markings.");
       }
-      field("Rotate roundabout (°)", +G.degrees(item.rotation).toFixed(1), (v) => changeRound(() => { const by = v - item.rotation; rotate(item, by); s.turn = G.degrees(s.turn + by); }), { key: "rb-rotate", max: 359, step: 0.5 });
+      field("Rotate roundabout (°)", +G.degrees(item.rotation).toFixed(1), (v) => change(() => rotate(item, v - item.rotation)), { key: "rb-rotate", max: 359, step: 0.5 });
 
       field("Approach", chosen, chooseApproach, { key: "approach", choices: item.approaches.map((a, i) => [a.id, `Approach ${i + 1}`]) });
       const a = item.approaches.find((x) => x.id === chosen), bound = Boolean(a.binding);
@@ -767,8 +772,13 @@
             });
         }
       }
-      // The circle's size handle sits on its edge in the widest gap between legs.
-      const angles = Lt.flow.map((a) => Lt.legs.get(a.id).phi).sort((x, y) => x - y);
+      // Keep the diameter handle in a gap between legs and shape handles,
+      // so a long axis aligned with that gap cannot cover the size control.
+      const sh = RB.shape(item);
+      const angles = Lt.flow.map((a) => Lt.legs.get(a.id).phi);
+      if (sh.kind !== "circle") for (const t of [sh.t, sh.t + Math.PI])
+        angles.push(Math.atan2(Math.sin(t), Math.cos(t)));
+      angles.sort((x, y) => x - y);
       let best = 0, at = 0;
       angles.forEach((t, i) => {
         const next = i === angles.length - 1 ? angles[0] + 2 * Math.PI : angles[i + 1];
@@ -776,7 +786,16 @@
       });
       const p = Lt.outer.at(at);
       const handle = control(convert(p), "Roundabout diameter", `diameter-${item.id}`, () => showPanel(), { type: "diameter", origin: p }, "rect");
-      svg("title", {}, handle).textContent = "Drag to resize the circle.";
+      svg("title", {}, handle).textContent = "Drag to resize the whole roundabout.";
+      if (sh.kind !== "circle") for (const side of [-1, 1]) {
+        const origin = Lt.outer.at(sh.t + (side < 0 ? Math.PI : 0));
+        const handle = control(convert(origin), `Roundabout length ${side < 0 ? "start" : "end"}`,
+          `shape-length-${side}-${item.id}`, () => showPanel(),
+          { type: "shapeLength", side }, "rect");
+        const tip = "Drag along the long axis to stretch the shape. Arrow keys adjust it; Escape cancels.";
+        handle.setAttribute("aria-description", tip);
+        svg("title", {}, handle).textContent = tip;
+      }
     }
     function paintedMedianFields(model, key, defaultColor, parent = fields) {
       const chevrons=(model.color??defaultColor)==='white';
@@ -813,6 +832,190 @@
         input.onchange = input.oninput;
       }
     }
+    let islandDraft = null, selectedIsland = null, islandTap = null;
+    const islandInstructions = "Click median corners inside the intersection. Points snap to approach lane lines, mouths, medians and corners. Click the first point, double-click, or press Enter/Escape to finish; fewer than three points cancel.";
+    function renderIslands(item) {
+      heading("Intersection medians");
+      button(islandDraft ? "Finish Intersection Median" : "Add Intersection Median", () => {
+        if (islandDraft) finishIsland();
+        else {
+          selectedIsland = null;
+          islandDraft = { item: item.id, points: [], cursor: null };
+          tell(islandInstructions);
+          renderFields(); refreshOverlay();
+        }
+      }, fields);
+      if (islandDraft) { hint(islandInstructions); return; }
+      if (!item.medians?.length) return;
+      hint("Medians guide movement paths. A movement blocked completely by a median is unavailable to simulated traffic.");
+      field("Intersection median", selectedIsland ?? "", value => {
+        selectedIsland = value || null; renderFields(); refreshOverlay();
+      }, {key:"island", choices:[["", "None"], ...item.medians.map((m,i)=>[m.id,`Median ${i+1}`])]});
+      const median = item.medians.find(m=>m.id===selectedIsland);
+      if (!median) return;
+      field("Surface", median.type, value=>change(()=>median.type=value), {
+        key:"island-surface", choices:[["grass","Grass"],["concrete","Concrete"],["painted","Painted"]]
+      });
+      if (median.type === "painted") paintedMedianFields(median,"island","yellow");
+      hint("Drag square points to shape the median. Arrow keys nudge; Delete removes a point. Double-click a point, or press Enter on it, to curve it. Snapped points follow their approach; nudging detaches them.");
+      button("Delete Intersection Median",()=>change(()=>{
+        item.medians=item.medians.filter(m=>m!==median); selectedIsland=null;
+      }),fields);
+    }
+    function finishIsland(cancelInvalid = false) {
+      const draft=islandDraft, item=current();
+      if (draft && item?.id===draft.item && draft.points.length>=3) {
+        const median={id:G.id(),type:"grass",color:"yellow",lean:"right",spacing:20,points:draft.points};
+        if(!G.islandWithin(item,median)){
+          if(cancelInvalid){islandDraft=null;tell("Median drawing canceled.");renderFields();refreshOverlay();}
+          else tell("Keep the entire median inside the intersection pavement. Press Backspace to remove the last point, or Escape to cancel.");
+          return;
+        }
+        islandDraft=null;selectedIsland=median.id;
+        change(()=> (item.medians??=[]).push(median));
+      } else {islandDraft=null;tell("");renderFields();refreshOverlay();}
+    }
+    function snapIsland(item, point, exclude = null) {
+      const radius=15/(sheets.selected.view.scale*scale(sheets.selected));
+      const corners=[], edges=[];
+      const addEdge=(points,on)=>{
+        if(!points?.length)return;
+        edges.push({points,on});
+        corners.push({...points[0],...(on?{on:{...on,f:0}}:{})}, {...points.at(-1),...(on?{on:{...on,f:1}}:{})});
+      };
+      for(const a of item.approaches) {
+        for(const side of ["mouth","corner",...G.medians(a).map(m=>m.key)]) {
+          const on={approach:a.id,side}; addEdge(G.medianEdge(item,on),on);
+        }
+      }
+      for(const {points,on} of G.islandLaneEdges(item))addEdge(points,on);
+      for(const median of item.medians??[]) {
+        const points=median.points.map(p=>G.islandPoint(item,p));
+        points.forEach((p,i)=>{if(median.id!==exclude?.median||i!==exclude.index)corners.push(p);});
+        if(median.id!==exclude?.median) {const outline=G.islandOutline(item,median);addEdge([...outline,outline[0]]);}
+      }
+      if(islandDraft)corners.push(...islandDraft.points);
+      const close=corners.map(p=>({p,d:G.length(G.sub(p,point))})).filter(c=>c.d<=radius).sort((a,b)=>a.d-b.d)[0];
+      if(close)return {x:close.p.x,y:close.p.y,...(close.p.on?{on:{...close.p.on}}:{})};
+      let best=null;
+      for(const {points,on} of edges) {
+        const lengths=points.slice(1).map((p,i)=>G.length(G.sub(p,points[i]))),total=lengths.reduce((a,b)=>a+b,0);let walked=0;
+        for(let i=0;i<lengths.length;i++) {
+          const a=points[i],d=G.sub(points[i+1],a),f=G.clamp(G.dot(G.sub(point,a),d)/(G.dot(d,d)||1),0,1),p=G.add(a,G.mul(d,f)),distance=G.length(G.sub(p,point));
+          if(distance<=radius&&(!best||distance<best.distance))best={...p,distance,...(on?{on:{...on,f:(walked+lengths[i]*f)/(total||1)}}:{})};
+          walked+=lengths[i];
+        }
+      }
+      if(!best)return null;
+      delete best.distance;return best;
+    }
+    function islandEventPoint(event) {
+      const item=current(),p=local(sheets.selected,item,sheets.toImage(event.clientX,event.clientY));
+      // Permit snapping onto the boundary; the accepted point must be inside.
+      const at=snapIsland(item,p)??p;
+      return G.islandPathInside(item,[at])?at:null;
+    }
+    const stage=get("previewStage");
+    stage.addEventListener("pointerdown",e=>{
+      if(!islandDraft||!active()||e.button!==0)return;
+      e.preventDefault();e.stopImmediatePropagation();
+      const p=islandEventPoint(e),points=islandDraft.points;
+      if(!p){tell("Place median points inside the intersection pavement.");return;}
+      // The closing leg is checked when finishing, so drawing can go around a corner.
+      const lastLeg=G.islandOutline(current(),{points:points.length?[points.at(-1),p]:[p]});
+      if(!G.islandPathInside(current(),lastLeg,false)){tell("Keep median edges inside the intersection pavement.");return;}
+      if(points.length>=3&&G.length(G.sub(p,points[0]))<1e-5){finishIsland();return;}
+      if(!points.length||G.length(G.sub(p,points.at(-1)))>1e-5)points.push(p);
+      islandDraft.cursor=p;tell(islandInstructions);refreshOverlay();
+    },true);
+    stage.addEventListener("pointermove",e=>{
+      if(!islandDraft||!active())return;
+      islandDraft.cursor=islandEventPoint(e);refreshOverlay();
+    },true);
+    stage.addEventListener("dblclick",e=>{
+      if(!islandDraft)return;e.preventDefault();e.stopImmediatePropagation();finishIsland();
+    },true);
+    function toggleIslandCurve(item,median,index) {
+      const point=median.points[index];
+      change(()=>{
+        if(point.curve){delete point.curve;return;}
+        const p=G.islandPoint(item,point),prev=G.islandPoint(item,median.points[(index+median.points.length-1)%median.points.length]),next=G.islandPoint(item,median.points[(index+1)%median.points.length]);
+        Object.assign(point,{x:p.x,y:p.y});delete point.on;
+        const tangent=G.mul(G.unit(G.sub(next,prev)),Math.min(G.length(G.sub(p,prev)),G.length(G.sub(p,next)))/3);
+        point.curve={in:G.mul(tangent,-1),out:tangent};
+      });
+    }
+    function drawIslandControls(item,convert) {
+      for(const [n,median] of (item.medians??[]).entries()) {
+        const points=G.islandOutline(item,median);
+        const hit=svg("path",{d:path(points.map(convert)),class:"intersectionHit",tabindex:0,role:"button","aria-label":`Intersection median ${n+1}`},guides);
+        const pick=()=>{selectedIsland=median.id;chosenMovement=null;renderFields();refreshOverlay();};
+        hit.onpointerdown=e=>{e.preventDefault();e.stopPropagation();};
+        hit.onclick=e=>{e.stopPropagation();pick();};
+        hit.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}};
+        if(selectedIsland!==median.id)continue;
+        svg("path",{d:path(points.map(convert)),class:"intersectionOutline"},guides);
+        median.points.forEach((stored,index)=>{
+          const p=G.islandPoint(item,stored),info={type:"islandPoint",median:median.id,index,
+            remove:()=>{if(median.points.length>3)change(()=>median.points.splice(index,1));}};
+          const handle=control(convert(p),`Median point ${index+1}`,`island-${median.id}-${index}`,()=>toggleIslandCurve(item,median,index),info,"rect");
+          handle.onclick=e=>e.stopPropagation();
+
+          if(!stored.curve) return;
+          for(const side of ["in","out"]) {
+            const q=G.add(p,stored.curve[side]);
+            svg("path",{d:line([convert(p),convert(q)]),class:"intersectionControlLine"},guides);
+            control(convert(q),`Median point ${index+1} ${side} curve handle`,`island-${median.id}-${index}-${side}`,null,{type:"islandCurve",median:median.id,index,side});
+          }
+        });
+      }
+      if(islandDraft?.item===item.id) {
+        const points=[...islandDraft.points,...(islandDraft.cursor?[islandDraft.cursor]:[])];
+        if(points.length)svg("path",{d:path(points.map(convert)),class:"intersectionOutline"},guides);
+        for(const p of islandDraft.points){const q=convert(p);svg("rect",{x:q.x-4,y:q.y-4,width:8,height:8,class:"intersectionHandle"},guides);}
+        if(islandDraft.cursor){const p=convert(islandDraft.cursor);svg("circle",{cx:p.x,cy:p.y,r:14,class:"roadSnap"},guides);}
+      }
+    }
+    function islandLine(sheet, item, median) {
+      let points = G.islandOutline(item, median).map(p => world(sheet, item, p));
+      const painted = median.type === 'painted', white = median.color === 'white';
+      const base = painted ? white ? { style: 'channelizing', color: 'white', width: 8 }
+        : { style: 'doubleSolid', color: 'yellow' } : { style: 'solid', color: 'yellow' };
+      // Use the existing painted-median dimensions: center the white outline
+      // half its width inside, or the yellow pair midway between its stripes.
+      if (painted) points = roads.insetPolygon(points, (white ? roads.paintedMedianStyle.whiteLineFeet / 2
+        : roads.markingStyle.lineFeet / 2 + roads.paintedMedianStyle.doubleOffsetFeet / 2) * 12 / sheet.inchesPerPixel);
+      const on = { intersection: item.id, median: median.id };
+      return { key: app.longitudinal.keyOf(on), points: points.length ? [...points, points[0]] : [], on, edge: true, base };
+    }
+    function drawIslands(sheet,item,parent,convert) {
+      for(const median of item.medians??[]) {
+        const points=G.islandOutline(item,median).map(convert),pixelsPerFoot=G.length(G.sub(convert({x:1,y:0}),convert({x:0,y:0})));
+        // Match approach medians: keep the edge-line center on the outline and
+        // leave the existing 8-inch pavement margin before the grass or curb.
+        const surface = islandSurface(median,points,pixelsPerFoot);
+        const group=svg("g",{"data-intersection-median":median.id},parent);
+        svg("path",{d:path(surface),...(median.type==='painted'?{class:"roadBand"}:{fill:roads.medianStyle[median.type]??roads.medianStyle.grass})},group);
+        if(median.type!=='grass') {
+          const id=`intersection-island-${item.id}-${median.id}`,clip=svg("clipPath",{id},group);
+          svg("path",{d:path(surface)},clip);
+          const clipped=svg("g",{"clip-path":`url(#${id})`},group);
+          if(median.type==='concrete')svg("path",{d:path(surface),fill:"none",stroke:roads.medianStyle.curb,"stroke-width":roads.medianStyle.curbFeet*pixelsPerFoot*2,"stroke-linejoin":"miter"},clipped);
+          else {
+            const white=median.color==='white',style=roads.paintedMedianStyle;
+            const width=(white?style.whiteLineFeet:roads.markingStyle.lineFeet)*pixelsPerFoot;
+            const outer=roads.insetPolygon(points,width/2),inner=white?outer:roads.insetPolygon(outer,style.doubleOffsetFeet*pixelsPerFoot);
+            roads.drawMedianHatching(points,median.points.map(p=>convert(G.islandPoint(item,p))),inner,median,clipped,pixelsPerFoot,`${id}-stripes`);
+          }
+        }
+        const line=islandLine(sheet,item,median),edge=svg("g",{"data-median-edge":median.id},group);
+        app.longitudinal.drawTarget(sheet,line.key,line.points,line.base,edge,[],{edge:true,closed:true});
+      }
+    }
+    function islandSurface(median,points,pixelsPerFoot) {
+      return median.type==='painted'?points:roads.insetPolygon(points,margin*pixelsPerFoot);
+    }
+
     function renderMedians(a, bound) {
       heading("Medians");
       hint(
@@ -935,6 +1138,7 @@
         "Edit curve",
         chosenMovement ?? "",
         (v) => {
+          selectedIsland=null;
           chosenMovement = v || null;
           renderFields();
           refreshOverlay();
@@ -1115,6 +1319,8 @@
       }
     }
 
+    const pavementDrawingCache = new WeakMap();
+    const lineTargetCache = new WeakMap();
     const routeCache = new WeakMap();
     function movementRoutes(item) {
       const key = JSON.stringify([item.approaches, item.movements]);
@@ -1221,6 +1427,7 @@
           if (selected !== item.id) select(item.id);
           chosen = app.traffic.reversed?m.to:m.from;
           inputLane = app.traffic.reversed?m.output:m.input;
+          selectedIsland=null;
           chosenMovement = m.id;
           showPanel();
           refresh();
@@ -1616,7 +1823,17 @@
           if(a.approachCurve.end){const p=a.approachCurve.end;a.approachCurve.end={x:p.x*c-p.y*s,y:p.x*s+p.y*c};}
         }
       }
+      for(const median of item.medians??[])for(const p of median.points){
+        const x=p.x,y=p.y;p.x=x*c-y*s;p.y=x*s+y*c;
+        for(const v of Object.values(p.curve??{})){const x=v.x,y=v.y;v.x=x*c-y*s;v.y=x*s+y*c;}
+      }
       item.rotation = G.degrees(item.rotation + degrees);
+      // Every rotation entry point (including selection transforms) rotates
+      // the actual ring, not only its approaches. Keep its relative axis.
+      if (round(item)) {
+        const settings = RB.settings(item);
+        settings.turn = G.degrees(settings.turn + degrees);
+      }
     }
     // A road's cross section has no lane-splitting medians, so adopting one
     // drops them.
@@ -1643,6 +1860,46 @@
       for(const [ids,details] of [[a.inLanes,end.inDetails],[a.outLanes,end.outDetails]])
         ids.forEach((id,i)=>{if(details?.[i])a.laneDetails[id]={...details[i]};});
     }
+    // Alignment depends on the attached road components, not unrelated roads
+    // elsewhere on a sheet. Build membership once per pass; serialize current
+    // values when queried because earlier alignments may move a shared joint.
+    const alignmentCache = new WeakMap();
+    const approachAlignmentCache = new WeakMap();
+    function alignmentDependencies(sheet) {
+      const byJoint=new Map(),byRoad=new Map(sheet.roads.map(r=>[r.id,r])),components=new Map();
+      for(const road of sheet.roads)for(const end of road.ends){
+        if(!byJoint.has(end.joint))byJoint.set(end.joint,[]);
+        byJoint.get(end.joint).push(road);
+      }
+      const joints=new Map(sheet.joints.map(j=>[j.id,j]));
+      for(const road of sheet.roads){
+        if(components.has(road.id))continue;
+        const component={roads:[],joints:[],mouths:[]},seen=new Set(),pending=[road];
+        while(pending.length){
+          const r=pending.pop();if(components.has(r.id))continue;
+          components.set(r.id,component);component.roads.push(r);
+          for(const end of r.ends)if(!seen.has(end.joint)){
+            seen.add(end.joint);component.joints.push(joints.get(end.joint));
+            pending.push(...byJoint.get(end.joint)??[]);
+          }
+        }
+      }
+      for(const item of sheet.intersections??[])for(const approach of item.approaches){
+        const linked=new Set([approach.binding,...approach.links??[]].filter(Boolean).map(ref=>components.get(ref.road)).filter(Boolean));
+        for(const component of linked)component.mouths.push({item,approach});
+      }
+      return (item,approach)=>{
+        const refs=(approach?[approach]:item.approaches).flatMap(a=>[a.binding,...a.links??[]]).filter(Boolean);
+        const linked=[...new Set(refs.map(ref=>components.get(ref.road)))];
+        const owned=(sheet.medians??[]).filter(m=>m.intersectionMedian?.intersection===item.id);
+        // Lane-group splitting and independent roundabout mouths can rewrite
+        // attachments outside this component. Keep their full dependency set.
+        const structural=round(item)||item.approaches.some(a=>a.splits?.length);
+        return JSON.stringify([sheet.inchesPerPixel,sheet.autoTapers,approach?[item.x,item.y,item.rotation,approach]:item,
+          structural?[sheet.roads,sheet.joints,sheet.intersections]:linked,owned,
+          owned.flatMap(m=>m.points.map(p=>p.on?.road==null?null:byRoad.has(p.on.road)))]);
+      };
+    }
     function reconcile(sheet, item, solved) {
       normalize(item);
       if (dragging?.item === item) return;
@@ -1655,20 +1912,38 @@
         const end = roads.intersectionEnd(sheet, a.binding, solved);
         if (!end?.terminal) {
           delete a.binding;
+          app.roadWidths.invalidateSnapshot?.(sheet);
           continue;
         }
         adopt(sheet, item, a, end,true);
       }
       for (const a of item.approaches) {
         if (!a.links) continue;
+        // Each link inspects the whole road end. Reuse that answer within this
+        // approach until filtering links or normalizing lane details changes
+        // its inputs. Binding/adoption above retains its original solve order.
+        let currentSolved = solved;
+        const ends = new Map();
+        const resetEnds = () => { currentSolved = solved; ends.clear(); };
+        const endFor = link => {
+          const key = `${link.road}:${link.e}`;
+          if (!ends.has(key)) ends.set(key, roads.intersectionEnd(sheet, link, currentSolved));
+          return ends.get(key);
+        };
+        const count = a.links.length;
         a.links = a.links.filter((link) => {
-          const end = roads.intersectionEnd(sheet, link, solved);
+          const end = endFor(link);
           return end?.freeLanes[link.lane] && !a.binding && laneOf(a, link) >= 0 && link.lane < roadLanes(sheet, link);
         });
+        if (a.links.length !== count) {app.roadWidths.invalidateSnapshot?.(sheet);resetEnds();}
         if (!a.links.length) delete a.links;
         for(const link of a.links??[]) {
-          const end=roads.intersectionEnd(sheet,link,solved),detail=(link.e?end?.inDetails:end?.outDetails)?.[link.lane];
-          if(detail)(a.laneDetails??={})[link.to]={...detail};
+          const end=endFor(link),detail=(link.e?end?.inDetails:end?.outDetails)?.[link.lane];
+          if(detail) {
+            const changed=JSON.stringify(a.laneDetails?.[link.to])!==JSON.stringify(detail);
+            (a.laneDetails??={})[link.to]={...detail};
+            if(changed)resetEnds();
+          }
         }
       }
     }
@@ -1682,12 +1957,13 @@
     const sameEnd = (link, end) => end && link.road === end.road && link.e === end.e;
     // `self` is a road end being moved, whose own lane link doesn't count.
     function occupied(sheet, joint, own, self = null) {
+      const jointFor=ref=>(ref.e===0||ref.e===1)?sheet.roads.find(r=>r.id===ref.road)?.ends[ref.e]?.joint:undefined;
       return (sheet.intersections ?? []).some((item) =>
         item.approaches.some(
           (a) =>
-            (a !== own && a.binding && roads.intersectionEnd(sheet, a.binding)?.joint === joint) ||
+            (a !== own && a.binding && jointFor(a.binding) === joint) ||
             a.links?.some(
-              (link) => !sameEnd(link, self) && roads.intersectionEnd(sheet, link)?.joint === joint,
+              (link) => !sameEnd(link, self) && jointFor(link) === joint,
             ),
         ),
       );
@@ -1773,6 +2049,7 @@
     }
     function moveBindings(sheet, item) {
       prepareIndependentMouths(sheet, item);
+      app.roadWidths.withSnapshot(sheet,()=>{
       const seen = new Set();
       for (const a of item.approaches) {
         syncBoundMedian(sheet,a);
@@ -1796,6 +2073,7 @@
             );
           }
         }
+      });
     }
     function snapshot(sheet) {
       return structuredClone({
@@ -1805,6 +2083,7 @@
       });
     }
     function startDrag(event, info) {
+      if(!["islandPoint","islandCurve"].includes(info.type))selectedIsland=null;
       const item = current();
       if (!item) return;
       const sheet = sheets.selected;
@@ -1867,7 +2146,25 @@
         old = before.approaches.find((a) => a.id === d.approach);
       const validBefore = structuredClone(item);
       snap = null;
-      if (d.type === "body") {
+      if (d.type === "islandPoint" || d.type === "islandCurve") {
+        const median=item.medians.find(m=>m.id===d.median),point=median.points[d.index];
+        const prior=before.medians.find(m=>m.id===d.median).points[d.index],origin=G.islandPoint(before,prior);
+        if(d.type==='islandCurve') {
+          const v=G.add(prior.curve[d.side],delta);point.curve[d.side]=v;
+          if(!d.alt)point.curve[d.side==='in'?'out':'in']=G.mul(G.unit(v),-G.length(prior.curve[d.side==='in'?'out':'in']));
+        } else {
+          const target=G.add(origin,delta),at=d.keyboard?null:snapIsland(item,target,{median:d.median,index:d.index});
+          if(!G.islandPathInside(item,[at??target])){tell("Keep median points inside the intersection pavement.");return;}
+          // As with sheet medians, coincident vertices move together.
+          for(const oldMedian of before.medians??[])for(let index=0;index<oldMedian.points.length;index++) {
+            if(G.length(G.sub(G.islandPoint(before,oldMedian.points[index]),origin))>1e-3)continue;
+            const shared=item.medians.find(m=>m.id===oldMedian.id)?.points[index];
+            if(!shared)continue;
+            delete shared.on;Object.assign(shared,at??target);
+            if(at?.on)delete shared.curve;
+          }
+        }
+      } else if (d.type === "body") {
         item.x = before.x + delta.x * scale(d.sheet);
         item.y = before.y + delta.y * scale(d.sheet);
       } else if (d.type === "diameter") {
@@ -1880,6 +2177,11 @@
         // stretching the approaches (and their connected roads) indefinitely.
         item.approaches = structuredClone(before.approaches);
         item.roundabout.icd = Math.round(G.clamp((old * G.dot(G.add(o, delta), G.unit(o))) / (G.length(o) || 1), RB.MINI_DIAMETER[0], 1200) * 2) / 2;
+        keepReach(before, item);
+      } else if (d.type === "shapeLength") {
+        const sh = RB.shape(before), axis = { x: sh.c * d.side, y: sh.s * d.side };
+        item.approaches = structuredClone(before.approaches);
+        item.roundabout.ratio = G.clamp(sh.ratio + 2 * G.dot(delta, axis) / RB.diameter(before), ...RB.RATIO_RANGE[sh.kind]);
         keepReach(before, item);
       } else if (d.type === "approachBend") {
         const { u, n } = RB.approachAxes(old), along = G.dot(delta, u);
@@ -1928,9 +2230,17 @@
           }
         }
       } else if (d.type === "median") {
+        a.x=old.x;a.y=old.y;
         const oldEdge = G.local(old, ((d.incoming ? -1 : 1) * old.median) / 2),
           wanted = G.add(oldEdge, delta);
-        setMedianWidth(a,G.clamp(2 * Math.abs(G.dot(G.sub(wanted, a), G.axes(a).n)), 0, 200));
+        if(d.slide) {
+          const side=d.incoming?-1:1,n=G.axes(old).n;
+          const width=G.clamp(old.median+side*G.dot(delta,n),0,200);
+          // Move the center by half the width change so the opposite median
+          // edge (and its carriageway) stays at its original position.
+          Object.assign(a,G.add(old,G.mul(n,side*(width-old.median)/2)));
+          setMedianWidth(a,width);
+        } else setMedianWidth(a,G.clamp(2 * Math.abs(G.dot(G.sub(wanted, a), G.axes(a).n)), 0, 200));
       } else if (d.type === "nose")
         a.nose = G.clamp(old.nose - G.dot(delta, G.axes(a).u), 1, Math.max(1, G.length(a) - 5));
       else if (d.type === "split" || d.type === "splitNose") {
@@ -2006,6 +2316,9 @@
       // Pointer capture and rebuilding the SVG on release suppress native
       // click/dblclick events on these handles. Recognize a double tap here;
       // an actual drag never opens or closes the curve controls.
+      const pointTap=!cancel&&!d.changed&&d.type==='islandPoint';
+      const togglePoint=pointTap&&islandTap?.median===d.median&&islandTap?.index===d.index&&performance.now()-islandTap.at<500;
+      islandTap=pointTap&&!togglePoint?{median:d.median,index:d.index,at:performance.now()}:null;
       const tap = !cancel && !d.changed && d.type === "approachBend";
       const showBezier = tap && bendTap?.id === d.approach && performance.now() - bendTap.at < 500;
       bendTap = tap && !showBezier ? { id: d.approach, at: performance.now() } : null;
@@ -2055,12 +2368,14 @@
         if(round(d.item))changeRound(()=>RB.straightenApproach(a));
         else change(()=>G.straightenApproach(a));
       }
+      if(togglePoint)toggleIslandCurve(d.item,d.item.medians.find(m=>m.id===d.median),d.index);
       if (showBezier) toggleBezier(d.item, d.item.approaches.find(a => a.id === d.approach));
       restoreFocus(d.focusKey);
     }
     guides.addEventListener("click", (event) => event.stopPropagation());
     guides.addEventListener("pointermove", (e) => {
       if (!dragging || !guides.hasPointerCapture(e.pointerId)) return;
+      if(dragging.type==="median")dragging.slide=e.shiftKey;
       dragPoint = local(dragging.sheet, dragging.before, sheets.toImage(e.clientX, e.clientY));
       if (dragFrame == null) dragFrame = requestAnimationFrame(() => flushDrag());
     });
@@ -2079,6 +2394,7 @@
         ...info,
         item,
         start: { x: 0, y: 0 },
+        keyboard: true,
         before: round(item) ? RB.snapshot(item) : structuredClone(item),
         saved: snapshot(sheet),
         sheet,
@@ -2091,7 +2407,7 @@
     // The list keeps the popover open; picking an intersection on the sheet opens
     // its editor panel, which stays open while panning and editing.
     function select(id, approach = null) {
-      if (selected !== id) chosen = null;
+      if (selected !== id) {chosen = null;selectedIsland=null;islandDraft=null;}
       selected = id;
       chosenMovement = null;
       selectedSheet = sheets.selected;
@@ -2137,6 +2453,7 @@
           e.stopPropagation();
           if (selected !== item.id) select(item.id);
           else chosenMovement = null;
+          selectedIsland=null;
           showPanel();
           startDrag(e, { type: "body" });
           refresh();
@@ -2193,6 +2510,7 @@
           }
         }
       }
+      if(current() && active()) drawIslandControls(current(),p=>screen(sheet,current(),p));
       if (snap) {
         const p = sheets.toScreen(snap);
         svg("circle", { cx: p.x, cy: p.y, r: 14, class: "roadSnap" }, guides);
@@ -2222,7 +2540,7 @@
         tell(
           current()
             ? round(current())
-              ? "Select an approach to drag its median corners and entry/exit Bézier handles. The circle's square resizes it. Drag an entry arrow to an exit to change destinations. Click a + near YIELD to add a gore."
+              ? `Select an approach to drag its median corners and entry/exit Bézier handles. ${RB.shape(current()).kind === "circle" ? "The circle's square resizes it." : "The long-axis squares stretch the shape; the diameter square resizes it."} Drag an entry arrow to an exit to change destinations. Click a + near YIELD to add a gore.`
               : chosenMovement
               ? "Connection selected. Drag it or its two square handles to adjust the curve. Delete removes this movement."
               : "Drag outer-edge handles to road ends, or drag a road’s lane node onto an approach. Drag from an incoming lane arrow to an outgoing lane to add a movement. Click a + to add a median. Option/Alt-drag detaches."
@@ -2234,7 +2552,8 @@
         selected = null;
         selectedSheet = sheets.selected;
       }
-      if (!current()) selected = null;
+      if (!current()) {selected = null;selectedIsland=null;}
+      if(islandDraft?.item!==current()?.id)islandDraft=null;
       if (!current()?.movements.some((m) => m.id === chosenMovement)) chosenMovement = null;
       refreshList();
       refreshOverlay();
@@ -2323,7 +2642,7 @@
         map.set(old, a.id);
         delete a.binding;
         delete a.links;
-        for (const s of a.splits ?? []) s.id = G.id();
+        for (const s of a.splits ?? []) {const old=s.id;s.id=G.id();map.set(`split-${old}`,`split-${s.id}`);}
         for (const key of ["inLanes", "outLanes"])
           a[key] = a[key].map((id) => {
             const next = G.id();
@@ -2349,6 +2668,14 @@
         m.input = map.get(m.input);
         m.output = map.get(m.output);
       }
+      for(const median of copy.medians??[]) {const old=median.id;median.id=G.id();map.set(old,median.id);for(const p of median.points)if(p.on){p.on.approach=map.get(p.on.approach)??p.on.approach;p.on.side=map.get(p.on.side)??p.on.side;const lane=/^lane:(in|out):(.+):(L|R)$/.exec(p.on.side);if(lane)p.on.side=`lane:${lane[1]}:${map.get(lane[2])??lane[2]}:${lane[3]}`;}}
+      const edgeLines=(sheets.selected.lines??[]).filter(line=>line.on?.intersection===item.id&&map.has(line.on.median)).map(line=>{
+        const next=structuredClone(line);next.id=G.id();next.on={...next.on,intersection:copy.id,median:map.get(line.on.median)};
+        app.itemTransform.translate(next,copy.x-item.x,copy.y-item.y,true);return next;
+      });
+      (sheets.selected.lines??=[]).push(...edgeLines);
+      app.simulatorSignals?.remap(copy.trafficSignal,map);
+      if(copy.trafficSignal?.peds)copy.trafficSignal.peds=[];
       sheets.selected.intersections.push(copy);
       selected = copy.id;
       commit();
@@ -2356,6 +2683,12 @@
     window.addEventListener(
       "keydown",
       (e) => {
+        if(islandDraft && e.key==='Backspace' && !e.target.closest?.('input,textarea,select')) {
+          e.preventDefault();e.stopImmediatePropagation();islandDraft.points.pop();islandDraft.cursor=null;refreshOverlay();return;
+        }
+        if(islandDraft && (e.key==='Escape'||e.key==='Enter') && !e.target.closest?.('input,textarea,select')) {
+          e.preventDefault();e.stopImmediatePropagation();finishIsland(e.key==='Escape');return;
+        }
         if (e.key === "Escape" && dragging) {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -2363,19 +2696,22 @@
           return;
         }
         if (!active() || e.target.closest?.("input,textarea,select") || e.target.dataset?.removable) return;
-        // Escape steps out one level at a time: the movement, then the approach,
-        // and only then the intersection (the panel closes as usual).
-        if (e.key === "Escape" && current() && (chosenMovement || chosen)) {
+        // Match the toolbar menus: Escape dismisses the editor from any selection.
+        if (e.key === "Escape") {
           e.preventDefault();
           e.stopImmediatePropagation();
-          if (chosenMovement) chosenMovement = null;
-          else chosen = null;
+          chosenMovement = null;
+          chosen = null;
+          selected = null;
+          app.showEditor(null);
           refresh();
+          document.querySelector('[data-editor="intersectionsEditor"]')?.focus();
           return;
         }
         if ((e.key === "Delete" || e.key === "Backspace") && current()) {
           e.preventDefault();
-          if (chosenMovement) {
+          if(selectedIsland){change(item=>{item.medians=item.medians.filter(m=>m.id!==selectedIsland);selectedIsland=null;});}
+          else if (chosenMovement) {
             current().movements = current().movements.filter((m) => m.id !== chosenMovement);
             chosenMovement = null;
             commit();
@@ -2385,12 +2721,14 @@
       true,
     );
     const visibility = new MutationObserver(() => {
+      if(!active()){islandDraft=null;selectedIsland=null;}
       if (!active() && dragging) finishDrag(true);
       refresh();
     });
     for (const e of [menu, panel]) visibility.observe(e, { attributes: true, attributeFilter: ["hidden"] });
     for (const event of ["sheetchange", "sheethistory"])
       document.addEventListener(event, () => {
+        islandDraft=null;
         if (dragging) {
           if (event === "sheethistory") {
             dragging = null;
@@ -2517,6 +2855,16 @@
         for (const item of sheet.intersections ?? []) {
           reconcile(sheet, item, solved);
           paved.push(outline(item, margin).map((p) => world(sheet, item, p)));
+          for (const median of item.medians ?? []) {
+            const points=islandSurface(median,G.islandOutline(item,median).map(p=>world(sheet,item,p)),12/sheet.inchesPerPixel);
+            if(points.length<3)continue;
+            holes.push(points);
+            const edge=[...points,points[0]];
+            edge.on={intersection:item.id,median:median.id,side:'island'};
+            edges.push(edge);
+            let walked=0;const length=points.reduce((sum,p,i)=>sum+G.length(G.sub(points[(i+1)%points.length],p)),0);
+            points.forEach((p,i)=>{corners.push({...p,on:{...edge.on,f:walked/(length||1)}});walked+=G.length(G.sub(points[(i+1)%points.length],p));});
+          }
           if (round(item)) {
             // Curbs round each corner, the openings, and the islands' edges.
             const add = (points, approach, side) => {
@@ -2578,10 +2926,22 @@
         for (const item of sheet.intersections ?? []) {
           if (!only(item)) continue;
           reconcile(sheet, item, solved);
+          const gores=(sheet.gores??[]).filter(g=>g.intersection===item.id);
+          const key=JSON.stringify([sheet.id,sheet.inchesPerPixel,app.traffic.reversed,item,sheet.lines,cuts,gores,
+            gores.length?[sheet.roads,sheet.joints]:null]);
+          const cached=pavementDrawingCache.get(item);
+          if(cached?.key===key && cached.sheet===sheet){
+            for(const name of ['pavement','markings','selection'])layers[name].append(...cached.nodes[name]);
+            continue;
+          }
+          const counts=Object.fromEntries(['pavement','markings','selection'].map(name=>[name,layers[name].childNodes.length]));
           const convert = (p) => world(sheet, item, p);
           drawPavement(item, layers.pavement, convert);
           drawMarkings(item, layers.markings, convert, cuts);
           roads.drawIntersectionGores(sheet,item,layers,solved,cuts);
+          drawIslands(sheet,item,layers.markings,convert);
+          const nodes=Object.fromEntries(['pavement','markings','selection'].map(name=>[name,[...layers[name].childNodes].slice(counts[name])]));
+          pavementDrawingCache.set(item,{sheet,key,nodes});
         }
       },
       drawElevated(sheet, slot, solved) {
@@ -2594,13 +2954,17 @@
           drawPavement(item, parent, convert, roads.medianStyle.concrete);
           drawMarkings(item, parent, convert, cuts);
           roads.drawIntersectionGores(sheet,item,{pavement:parent,markings:parent,selection:parent},solved,cuts);
+          drawIslands(sheet,item,parent,convert);
         }
       },
       refreshOverlay,
+      hitAt(point) {
+        const sheet = sheets.selected;
+        return [...(sheet?.intersections ?? [])].reverse().find((item) => G.contains(local(sheet, item, point), outline(item))) ?? null;
+      },
       // Double-clicking an intersection's pavement opens it in the panel.
       focusAt(point) {
-        const sheet = sheets.selected;
-        const item = [...(sheet?.intersections ?? [])].reverse().find((x) => G.contains(local(sheet, x, point), outline(x)));
+        const item = app.intersections.hitAt(point);
         if (!item) return false;
         edit(item);
         return true;
@@ -2663,7 +3027,28 @@
               const ringWidth = round(item) ? Math.min(start, end, ...RB.layout(item).widths) : null;
               const lengths = [0];
               for (let i = 1; i < points.length; i++) lengths.push(lengths.at(-1) + G.length(G.sub(points[i], points[i - 1])));
-              movements.push({ intersection: item.id, input, output, points: points.map((p, i) => ({ ...world(sheet, item, p),
+              const circle=round(item)?RB.layout(item):null;
+              const gate=(approach,reverse=false)=>{
+                const leg=circle.legs.get(approach.id);
+                let p=approach;
+                if(!reverse&&approach.incoming)p=leg.entryFrame(0,leg.entryCrossings(0)[0]).p;
+                if(reverse&&approach.outgoing){const center=s=>(leg.exitOff(0,s)+leg.exitOff(1,s))/2,sp=leg.meet(center);p=leg.P(center(sp),sp);}
+                return {id:approach.id,angle:Math.atan2(p.y,p.x)};
+              };
+              const roundabout=circle?{x:item.x,y:item.y,direction:-1,entry:a.id,exit:b.id,
+                gates:item.approaches.map(a=>gate(a)),reverseGates:item.approaches.map(a=>gate(a,true))}:null;
+              const inside=points.map(p=>circle&&G.length(p)<=circle.outer.radius(Math.atan2(p.y,p.x)));
+              const markedEntry=points.findIndex(p=>p.entryMarker),firstInside=markedEntry>=0?markedEntry:inside.indexOf(true),lastInside=Math.max(firstInside,points.findIndex(p=>p.exitMarker)>=0?points.findIndex(p=>p.exitMarker):inside.lastIndexOf(true));
+              movements.push({ intersection: item.id, input, output, points: points.map((p, i) => ({ ...world(sheet, item, p), intersection: item.id, level: item.level??1,
+                junction: {entry:a.id,exit:b.id,input,output,angle:a.angle,exitAngle:b.angle,
+                  approaches:item.approaches.filter(a=>a.incoming>0).map(a=>a.id),
+                  approachLanes:item.approaches.map(a=>({id:a.id,incoming:a.inLanes.filter(id=>!['bike','bufferedBike','twoWayBike'].includes(a.laneDetails?.[id]?.type)),outgoing:a.outLanes.filter(id=>!['bike','bufferedBike','twoWayBike'].includes(a.laneDetails?.[id]?.type))}))},
+                circulating: Boolean(circle&&i>=firstInside&&i<=lastInside),
+                ...(circle?{...(i===0||i===points.length-1?{roundabout}:{}),roundaboutPhase:i<firstInside?'entry':i>lastInside?'exit':'circulating',
+                  // FDOT driver guidance: approach at 10–15 mph; use the upper
+                  // end as an explicit model default, capped by the user speed.
+                  // https://www.fdot.gov/agencyresources/roundabouts/faq.shtm
+                  speedLimit:15*5280/3600*scale(sheet)}:{}),
                 laneWidth: (ringWidth ?? start + (end - start) * lengths[i] / (lengths.at(-1) || 1)) * scale(sheet),
               })) });
             }
@@ -2674,14 +3059,34 @@
               for (const destination of RB.destinations(item, a, a.inLanes[j])) {
                 const b = item.approaches.find(b => b.id === destination);
                 if (!b?.outgoing) continue;
-                const points = RB.path(item, a, j, b);
+                const points = [...RB.path(item, a, j, b)];
+                // Use the actual lane-specific yield line, including spiral
+                // flares and user setback, rather than an ideal circle radius.
+                const leg=RB.layout(item).legs.get(a.id),yieldPoint=leg.entryFrame(j,leg.entryCrossings(j)[0]).p;
+                let marker=null;
+                for(let n=1;n<points.length;n++){
+                  const p=points[n-1],q=points[n],dx=q.x-p.x,dy=q.y-p.y;
+                  const f=Math.max(0,Math.min(1,((yieldPoint.x-p.x)*dx+(yieldPoint.y-p.y)*dy)/(dx*dx+dy*dy||1)));
+                  const at={x:p.x+dx*f,y:p.y+dy*f},distance=Math.hypot(at.x-yieldPoint.x,at.y-yieldPoint.y);
+                  if(!marker||distance<marker.distance)marker={at,n,distance};
+                }
+                if(marker)points.splice(marker.n,0,{...marker.at,entryMarker:true});
                 const last = points.at(-1);
                 let index = -1, distance = 0.01;
                 for (let k = 0; k < b.outgoing; k++) {
                   const p = RB.approachLane(item, b, false, k).p, d = Math.hypot(p.x - last.x, p.y - last.y);
                   if (d < distance) { distance = d; index = k; }
                 }
-                if (index >= 0) add(a.inLanes[j], b.outLanes[index], points);
+                if (index >= 0) {
+                  const leg=RB.layout(item).legs.get(b.id),center=s=>(leg.exitOff(index,s)+leg.exitOff(index+1,s))/2;
+                  const sp=leg.meet(center),point=leg.P(center(sp),sp);let marker=null;
+                  for(let n=1;n<points.length;n++){
+                    const p=points[n-1],q=points[n],dx=q.x-p.x,dy=q.y-p.y,f=Math.max(0,Math.min(1,((point.x-p.x)*dx+(point.y-p.y)*dy)/(dx*dx+dy*dy||1)));
+                    const at={x:p.x+dx*f,y:p.y+dy*f},distance=Math.hypot(at.x-point.x,at.y-point.y);if(!marker||distance<marker.distance)marker={at,n,distance};
+                  }
+                  if(marker)points.splice(marker.n,0,{...marker.at,exitMarker:true});
+                  add(a.inLanes[j], b.outLanes[index], points);
+                }
               }
             }
           } else {
@@ -2698,6 +3103,10 @@
         const targets = [];
         for (const item of sheet.intersections ?? []) {
           reconcile(sheet, item, solved);
+          const key=JSON.stringify([sheet.inchesPerPixel,app.traffic.reversed,item]),cached=lineTargetCache.get(item);
+          if(cached?.key===key){targets.push(...cached.targets);continue;}
+          const start=targets.length;
+          for (const median of item.medians ?? []) targets.push(islandLine(sheet,item,median));
           if (round(item)) {
             for (const track of RB.tracks(item)) {
               for (let k = 0; k <= track.ids.length; k++) {
@@ -2713,6 +3122,7 @@
                 targets.push({ key: app.longitudinal.keyOf(on), points, on });
               }
             }
+            lineTargetCache.set(item,{key,targets:targets.slice(start)});
             continue;
           }
           const paths = movementRoutes(item);
@@ -2739,6 +3149,7 @@
               targets.push({ key: `m:${item.id}:${m.id}:${side}`, points, on: { intersection: item.id, movement: m.id, side } });
             }
           }
+          lineTargetCache.set(item,{key,targets:targets.slice(start)});
         }
         return targets;
       },
@@ -2794,19 +3205,43 @@
         return tracks;
       },
       alignLinks(sheet) {
+        let dependencies=alignmentDependencies(sheet);
+        const aligned=[],alignedApproaches=[];let structural=false;
+        // An ordinary mouth can skip alignment when its own road component
+        // stayed fixed, even if another mouth of this intersection changed.
+        // Structural editors can split roads and rewrite other attachments.
+        const reuseApproaches=!(sheet.intersections??[]).some(item=>round(item)||item.approaches.some(a=>a.splits?.length));
         for (const item of sheet.intersections ?? []) {
           if (dragging?.item === item) continue;
+          const key=dependencies(item),previous=alignmentCache.get(item);
+          if(previous?.sheet===sheet && previous.key===key)continue;
+          const roadCount=sheet.roads.length,jointCount=sheet.joints.length;
+          structural ||= round(item)||item.approaches.some(a=>a.splits?.length);
           prepareIndependentMouths(sheet, item);
+          app.roadWidths.withSnapshot(sheet,()=>{
           reconcile(sheet, item);
-          for (const a of item.approaches) for (const link of a.links ?? []) {
+          for (const a of item.approaches) {
+            const previousApproach=approachAlignmentCache.get(a);
+            if(reuseApproaches&&previousApproach?.sheet===sheet&&previousApproach.key===dependencies(item,a))continue;
+            for (const link of a.links ?? []) {
             const j = laneOf(a, link);
             if (j >= 0) {
               const pose = mouthPose(item, a, link.e === 1, j);
               roads.alignLaneEnd(sheet, link, link.lane, world(sheet, item, pose.p), pose.angle);
             }
+            }
+            if(reuseApproaches)alignedApproaches.push([item,a]);
           }
+          });
           separateMedianRoads(sheet,item);
+          if(roadCount!==sheet.roads.length||jointCount!==sheet.joints.length){structural=true;dependencies=alignmentDependencies(sheet);}
+          alignmentCache.set(item,{sheet,key:dependencies(item)});
+          aligned.push(item);
         }
+        // Later mouths can update another end of the same component. Remember
+        // the completed pass, so an unchanged next frame does not repeat it.
+        if(!structural)for(const item of aligned)alignmentCache.set(item,{sheet,key:dependencies(item)});
+        if(!structural)for(const [item,a] of alignedApproaches)approachAlignmentCache.set(a,{sheet,key:dependencies(item,a)});
       },
       releaseRoad(sheet, road, e) {
         for (const item of sheet.intersections ?? [])

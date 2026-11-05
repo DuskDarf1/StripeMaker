@@ -266,6 +266,52 @@ test('emphasis bar is 24 inches, with 4-inch contrast on each side',()=>{
  near(span(black)*12,32,1e-9,'white plus black surround');
 });
 
+test('forced crosswalk bars remain visible without usable lane directions',()=>{
+ const a={x:0,y:0},b={x:24,y:18},m={type:'crosswalk',enhanced:true,width:10};
+ const unusable=[{x:12,y:9,t:{x:.8,y:.6}}];
+ assert.equal(C.crosswalk(m,a,b).parts.length,2);
+ assert.equal(C.crosswalk(m,a,b,unusable).parts.length,2,'parallel traffic cannot supply automatic bars');
+ const forced={...m,barDirection:'perpendicular',contrast:true},g=C.crosswalk(forced,a,b,unusable);
+ assert.deepEqual(g,C.crosswalk(forced,a,b),'override ignores unavailable or unsuitable tracks');
+ const bars=g.parts.filter(p=>p.fill==='#ffffff').slice(2);
+ assert.ok(bars.length>=5);
+ for(const part of bars) {
+  const [p,q]=part.rings[0],d=[q[0]-p[0],q[1]-p[1]];
+  near(d[0]*.8+d[1]*.6,0,1e-9,'bars all perpendicular to the crossing');
+ }
+ const middle=bars[Math.floor(bars.length/2)],stations=middle.rings[0].map(([x,y])=>x*.8+y*.6);
+ near(Math.max(...stations)-Math.min(...stations),2,1e-9,'full bar width');
+ assert.deepEqual(C.crosswalk({...m,barDirection:'perpendicular',enhanced:false},a,b),C.crosswalk({...m,enhanced:false},a,b),'standard crossings remain two lines');
+ assert.deepEqual(C.crosswalk({...m,barDirection:'perpendicular',forceBars:false},a,b),C.crosswalk(m,a,b),'turning force off restores automatic bars');
+});
+
+test('forced bars rotate through every angle, remain visible, and retain their true width',()=>{
+ const a={x:0,y:0},b={x:24,y:0},m={type:'crosswalk',enhanced:true,width:10};
+ for(const angle of [-90,-89,-45,0,30,89,90]) {
+  const rad=angle*Math.PI/180,t={x:-Math.sin(rad),y:Math.cos(rad)},p={x:-t.y,y:t.x};
+  const bars=C.crosswalk({...m,forceBars:true,barAngle:angle},a,b).parts.slice(2);
+  assert(bars.length>0,`visible at ${angle} degrees`);
+  assert(bars.every(part=>area(part.rings[0])>0));
+  assert(bars.every(part=>part.rings[0].every(([x,y])=>Number.isFinite(x)&&Number.isFinite(y)&&x>=-1e-9&&x<=24+1e-9&&Math.abs(y)<=5+1e-9)));
+  assert(bars.some(part=>part.rings[0].some((a,i,ring)=>{const b=ring[(i+1)%ring.length],dx=b[0]-a[0],dy=b[1]-a[1];return Math.hypot(dx,dy)>1&&Math.abs(dx*t.y-dy*t.x)<1e-9;})),`bar edges follow ${angle} degrees`);
+  const widths=bars.map(part=>{const n=part.rings[0].map(([x,y])=>x*p.x+y*p.y);return Math.max(...n)-Math.min(...n);});
+  near(Math.max(...widths),2,1e-9,'24-inch width measured across the rotated bar');
+ }
+ const traffic=[{x:12,y:0,t:{x:.6,y:.8}}];
+ assert.deepEqual(C.crosswalk({...m,forceBars:false,barAngle:40},a,b,traffic),C.crosswalk(m,a,b,traffic),'unchecked stays lane-following');
+});
+
+test('forced crosswalk bars and contrast stay inside skewed curb ends',()=>{
+ const a={x:0,y:0,t:{x:1,y:1}},b={x:24,y:0,t:{x:1,y:1}};
+ for(const barAngle of [-90,-45,0,30,90]) {
+ const parts=C.crosswalk({type:'crosswalkSpecial',forceBars:true,barAngle,width:10,contrast:true},a,b).parts;
+ for(const color of ['#ffffff','#000000'])for(const part of parts.filter(p=>p.fill===color).slice(2))for(const [x,y]of part.rings[0]) {
+  assert.ok(x>=y-1e-9&&x<=24+y+1e-9,'bars stop at both skewed curbs');
+  assert.ok(Math.abs(y)<=5+1e-9,'bars meet transverse lines');
+ }
+ }
+});
+
 test('all traffic-calming and area variants produce finite vector paint', () => {
   for (const [type, variants] of Object.entries(C.VARIANTS)) for (const [variant] of variants) {
     const g = C.build({type, variant});

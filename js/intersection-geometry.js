@@ -417,6 +417,90 @@
           });
     return list;
   }
+  // Independent intersection medians use feet relative to the intersection.
+  // Anchors use the same approach edges as the sheet median snapping tools.
+  // Same 8-inch pavement margin as elements.js (FDOT 711-001 dimensions).
+  function medianEdge(item, on, margin = 2 / 3) {
+    const a = item.approaches.find(a => a.id === on?.approach);
+    if (!a) return null;
+    if (on.side === "mouth") return [edge(a, true, margin), edge(a, false, margin)];
+    if (on.side === "corner") {
+      const list = ordered(item);
+      return corner(a, list[(list.indexOf(a) + 1) % list.length], margin).points;
+    }
+    const lane = /^lane:(in|out):(.+):(L|R)$/.exec(on.side);
+    if (lane) {
+      const incoming=lane[1]==='in',ids=incoming?a.inLanes:a.outLanes,index=ids.indexOf(lane[2]);
+      if(index<0)return null;
+      // Use the same lane boundaries and mouth-to-throat span as laneTracks.
+      const offset=boundary(a,incoming,index)+(lane[3]==='R'?(incoming?-1:1)*width(a,incoming,index):0);
+      const reach=Math.max(1,dot(a,axes({angle:a.approachCurve?.axis??a.angle}).u)-throat(item,a));
+      return approachLine(a,offset,0,-reach);
+    }
+    const m = medians(a).find(m => m.key === on.side);
+    return m ? medianSurface(a, m, margin) : null;
+  }
+  function islandLaneEdges(item) {
+    return item.approaches.flatMap(a=>[true,false].flatMap(incoming=>(incoming?a.inLanes:a.outLanes).flatMap(id=>['L','R'].map(side=>{
+      const on={approach:a.id,side:`lane:${incoming?'in':'out'}:${id}:${side}`};
+      return {on,points:medianEdge(item,on)};
+    }))));
+  }
+  // Check whole segments, not just vertices: a chord between two approaches
+  // can cross the empty space outside a concave intersection corner.
+  function islandPathInside(item, points, closed = true) {
+    if(!points.length)return true;
+    const polygon=outline(item,2/3),query=polygonQuery(polygon);
+    const inside=p=>{const q=query(p);return q.inside||q.boundary;};
+    if(!points.every(inside))return false;
+    const count=closed?points.length:points.length-1;
+    for(let i=0;i<count;i++) {
+      const a=points[i],b=points[(i+1)%points.length],u=sub(b,a),cuts=[0,1];
+      for(let j=0;j<polygon.length;j++) {
+        const c=polygon[j],v=sub(polygon[(j+1)%polygon.length],c),den=cross(u,v);
+        if(Math.abs(den)<1e-10)continue;
+        const delta=sub(c,a),t=cross(delta,v)/den,s=cross(delta,u)/den;
+        if(t>0&&t<1&&s>=0&&s<=1)cuts.push(t);
+      }
+      cuts.sort((a,b)=>a-b);
+      for(let j=1;j<cuts.length;j++)if(!inside(add(a,mul(u,(cuts[j-1]+cuts[j])/2))))return false;
+    }
+    return true;
+  }
+  const islandWithin = (item, median) => islandPathInside(item,islandOutline(item,median));
+  function atFraction(points, f) {
+    const lengths = points.slice(1).map((p, i) => length(sub(p, points[i])));
+    let distance = clamp(f, 0, 1) * lengths.reduce((a,b) => a+b, 0);
+    for (let i = 0; i < lengths.length; i++) {
+      if (distance <= lengths[i]) return add(points[i], mul(sub(points[i+1], points[i]), distance / (lengths[i] || 1)));
+      distance -= lengths[i];
+    }
+    return {...points.at(-1)};
+  }
+  function islandPoint(item, p) {
+    const points = p.on && medianEdge(item, p.on);
+    return points?.length ? {...p, ...atFraction(points, p.on.f)} : p;
+  }
+  function islandOutline(item, median) {
+    const points = median.points.map(p => islandPoint(item, p)), result = [];
+    for (let i = 0; i < points.length; i++) {
+      const p = points[i], q = points[(i+1)%points.length];
+      result.push({x:p.x,y:p.y});
+      if (p.on && q.on && p.on.approach === q.on.approach && p.on.side === q.on.side) {
+        const edge = medianEdge(item, p.on);
+        if (edge?.length) {
+          const lengths=[0];for(let j=1;j<edge.length;j++)lengths.push(lengths.at(-1)+length(sub(edge[j],edge[j-1])));
+          const total=lengths.at(-1)||1,lo=Math.min(p.on.f,q.on.f),hi=Math.max(p.on.f,q.on.f);
+          const between=edge.filter((_,j)=>lengths[j]/total>lo&&lengths[j]/total<hi);
+          result.push(...(q.on.f<p.on.f?between.reverse():between));
+        }
+      } else if (p.curve || q.curve) {
+        const controls=[p,add(p,p.curve?.out??{x:0,y:0}),add(q,q.curve?.in??{x:0,y:0}),q];
+        for(let j=1;j<32;j++)result.push(sample(controls,j/32));
+      }
+    }
+    return result;
+  }
   // Match a road median anchored to pavement edges: its surface stops at
   // the pavement margin inside the edge-line center. Keep the nose's arc
   // center and the open mouth fixed so the attached median meets it flush.
@@ -521,6 +605,7 @@
     };
   }
   function routing(item, margin = 0) {
+    // Custom medians are visual geometry; users shape their movements explicitly.
     const key=JSON.stringify([item.approaches,margin]),hit=routingCache.get(item);
     if(hit?.key===key)return hit.value;
     const polygon=outline(item,margin),holes=item.approaches.flatMap(a=>medians(a).map(m=>m.points));
@@ -580,9 +665,9 @@
     const inside = region.inside ?? ((point) =>
       (contains(point, region.polygon) || nearBoundary(point, region.polygon)) &&
       !region.holes.some((h) => contains(point, h) && !nearBoundary(point, h)));
-    const curved = curvedMovement(item,m,a,b,inside);
-    if(curved)return curved;
     const safe = (points) => points.every(inside);
+    const curved = curvedMovement(item,m,a,b,inside);
+    if(curved && safe(curved))return curved;
     const sampleLine = (p, q) => {
       const count = Math.max(2, Math.ceil(length(sub(q, p)) / 2));
       return Array.from({ length: count + 1 }, (_, i) => add(p, mul(sub(q, p), i / count)));
@@ -843,7 +928,18 @@
     return result;
   }
 
+  function validIsland(m) {
+    return m && typeof m.id === 'string' && ['grass','concrete','painted'].includes(m.type) &&
+      (m.color == null || ['yellow','white'].includes(m.color)) &&
+      (m.lean == null || ['left','right'].includes(m.lean)) &&
+      (m.spacing == null || Number.isFinite(m.spacing) && m.spacing >= 10 && m.spacing <= 40) &&
+      Array.isArray(m.points) && m.points.length >= 3 && m.points.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y) &&
+        (!p.on || typeof p.on.approach === 'string' && typeof p.on.side === 'string' && Number.isFinite(p.on.f) && p.on.f >= 0 && p.on.f <= 1) &&
+        (!p.curve || ['in','out'].every(side => p.curve[side] && Number.isFinite(p.curve[side].x) && Number.isFinite(p.curve[side].y))));
+  }
   function validate(item) {
+    if(item.medians != null && (!Array.isArray(item.medians) || item.medians.some(m=>!validIsland(m))))return "Enter valid intersection median points and surface settings.";
+    if((item.medians??[]).some(m=>!islandWithin(item,m)))return "Keep intersection medians inside the intersection pavement.";
     if (item.approaches.length < 2) return "Keep at least two approaches.";
     for (const a of item.approaches) {
       if (
@@ -933,6 +1029,7 @@
     median,
     medians,
     medianSurface,
+    medianEdge, islandPoint, islandOutline, atFraction, validIsland, islandLaneEdges, islandPathInside, islandWithin,
     pulls,
     curve,
     sample,

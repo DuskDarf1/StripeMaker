@@ -12,6 +12,7 @@
   // StripeMaker offers standalone assembly components. Large guide-board and
   // overhead layouts belong in SignMaker (FHWA MUTCD Chapters 2D/2E/2G).
   const standalone = e => {
+    if(e.code==='R3-48'||e.code==='R3-48a')return false;
     if(/overhead/i.test(e.name+' '+e.variant))return false;
     if(/^E\d/.test(e.code))return /^E5-|^E8-(?:1a?|2a|4)$/.test(e.code);
     if(/^D\d/.test(e.code)){

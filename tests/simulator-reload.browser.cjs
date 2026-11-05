@@ -15,7 +15,7 @@ const playwright=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const fixture=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/simulator-linked-roundabouts.json')));
   await page.evaluate(data=>{
    const A=StripeMaker,s=A.sheets.selected;Object.assign(s,data);s.name='Reload recovery';
-   A.settings.set('simulationSpeed',30);A.roadEditor.render();A.sheets.save(s);
+   Object.assign(A.sheets.selected,{speedZones:A.sheets.selected.roads.map(road=>({id:'test-speed-'+road.id,road:road.id,from:0,to:1,mph:30}))});A.roadEditor.render();A.sheets.save(s);
   },fixture);
   await page.waitForTimeout(650);
   const durable=await page.evaluate(async()=>{

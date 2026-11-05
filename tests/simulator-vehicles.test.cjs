@@ -64,3 +64,35 @@ test('paused speed replanning may preserve current car paths without preserving 
  assert.equal(e.cars[0].route,old);assert.equal(e.cars[0].distance,2);
  e.configure([source(1,[route('north')])],{preservePaths:true});assert.equal(e.cars.length,0);
 });
+test('coincident connector and road samples keep exit-lane metadata from its mouth onward',()=>{
+ const {preparePath,position}=require('../js/simulator-vehicles.js');
+ const path=preparePath([{x:-100,y:0},{x:0,y:0},{x:0,y:0,road:2,lane:1,station:0,direction:1,laneWidth:12},
+  {x:300,y:0,road:2,lane:1,station:300,direction:1,laneWidth:12}]);
+ const car=position(path,101);
+ assert.equal(car.road,2);assert.equal(car.lane,1);assert.equal(car.station,1);
+});
+test('30-second watchdog removes a blocking cycle participant, preserving its queue',()=>{
+ const e=new Engine({speed:10,pixelsPerFoot:1});
+ const actor=(id,phase,leader,collision=null)=>({id,distance:0,speed:0,desiredSpeed:10,intersection:'r',roundaboutPhase:phase,situation:{leader,collision}});
+ const circulating=actor(1,'circulating',2,2),blocker=actor(2,'entry',1,1),queue=actor(3,'entry',2);
+ e.cars=[circulating,blocker,queue];e.recoverStuck(0);e.recoverStuck(29.99);assert.equal(e.cars.length,3);
+ e.recoverStuck(30);assert.deepEqual(e.cars.map(c=>c.id),[1,3]);assert.equal(e.watchdogRemovals,1);
+ assert.equal(e.watchdogEvents[0].id,2);e.recoverStuck(30.05);assert.equal(e.cars.length,2,'no cascading queue deletion');
+});
+test('watchdog keeps ordinary yield queues, moving traffic, and intentional zero speed',()=>{
+ const e=new Engine({speed:10});e.cars=[{id:1,distance:0,speed:2,situation:{}},{id:2,distance:0,speed:0,intersection:'r',roundaboutPhase:'entry',situation:{leader:1}}];
+ e.recoverStuck(0);e.recoverStuck(60);assert.equal(e.cars.length,2);
+ e.speed=0;e.cars[0].speed=0;e.cars[0].situation={collision:2};e.cars[1].situation={collision:1};e.recoverStuck(120);assert.equal(e.cars.length,2);
+});
+
+test('an in-progress road-join admission cannot be erased by a lane replan',()=>{
+ const e=new Engine({speed:10,pixelsPerFoot:1}),path=require('../js/simulator-vehicles.js').preparePath([
+  {x:0,y:0,road:1,lane:0,laneWidth:12},
+  {x:100,y:0,road:1,lane:0,laneWidth:12,intersection:'road-merge:2',junction:{roadMerge:true}},
+  {x:200,y:0,road:2,lane:0,laneWidth:12,intersection:'road-merge:2',junction:{roadMerge:true}},
+  {x:300,y:0,road:2,lane:0,laneWidth:12}]);
+ const c={path,pathDistance:150,reservation:true,committed:new Set()};
+ assert.equal(e.replacePath(c,[{x:150,y:0,road:1,lane:0},{x:300,y:0,road:2,lane:0}]),false);
+ assert.equal(c.path,path);assert.equal(c.pathDistance,150);assert.equal(c.reservation,true);
+ c.pathDistance=250;assert(e.replacePath(c,[{x:250,y:0,road:2,lane:0},{x:400,y:0,road:2,lane:0}]));
+});

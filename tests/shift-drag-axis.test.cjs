@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
+const src=fs.readFileSync('js/elements.js','utf8'),ctx=vm.createContext({});
+vm.runInContext(src.slice(src.indexOf('    function alongDragAxis('),src.indexOf('    function bindNode(')),ctx);
+const project=(...args)=>JSON.parse(JSON.stringify(ctx.alongDragAxis(...args)));
+assert.deepEqual(project({x:90,y:80},{x:10,y:20},{x:1,y:0}),{x:90,y:20});
+assert.deepEqual(project({x:90,y:80},{x:10,y:20},{x:0,y:1}),{x:10,y:80});
+const axis={x:.6,y:.8},origin={x:12,y:34};
+const p=project({x:120,y:-48},origin,axis);
+assert(Math.abs((p.x-origin.x)*axis.y-(p.y-origin.y)*axis.x)<1e-10,'diagonal constraint stays on original line');
+assert.deepEqual(project({x:-50,y:80},{x:10,y:20},{x:1,y:0},1),{x:11,y:20},'handle cannot flip joint direction by crossing origin');
+assert.deepEqual(project({x:-50,y:80},{x:10,y:20},{x:1,y:0}),{x:-50,y:20},'node can move either way on its line');
+console.log('PASS: Shift projections preserve horizontal, vertical and diagonal axes; handles cannot flip direction.');
