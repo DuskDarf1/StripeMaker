@@ -961,13 +961,16 @@
       type: item.id, text: item.kind === 'word' ? 'ONLY' : undefined, gap: C.LINE_GAP.min, route: item.kind === 'shield' ? '95' : undefined,
     });
     // The picker lists lateral markings, or on the Longitudinal tab its lines.
+    const markingFavorites=app.pickerFavorites('markings'),lineFavorites=app.pickerFavorites('lines');
     function populate() {
       const query = get('markingSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
       const group = get('markingCategory').value, grid = get('markingGrid');
       const lines = tab === 'longitudinal' ? app.longitudinal.source : null;
       const matches = (lines ? lines.items() : C.catalog).filter(item => (!group || item.group === group)
         && query.every(word => `${item.name} ${item.group} ${item.note ?? ''}`.toLowerCase().includes(word)));
-      grid.replaceChildren(...matches.map(item => {
+      const favorites=lines?lineFavorites:markingFavorites,ordered=favorites.order(matches,item=>item.id),hasFavorites=ordered.some(item=>favorites.has(item.id));
+      grid.replaceChildren();
+      for(const item of ordered){
         const button = document.createElement('button');
         button.type = 'button'; button.className = 'iconGridItem'; button.dataset.type = item.id;
         button.setAttribute('aria-label', `${item.name} — ${item.group}`); button.title = item.name;
@@ -979,8 +982,8 @@
           if (!lines) { choose(item); return; }
           lines.choose(item); picker.close();
         });
-        return button;
-      }));
+        favorites.append(grid,button,item.id,item.name,populate,{headings:hasFavorites,otherLabel:'Other markings'});
+      }
       get('markingSearchStatus').textContent = matches.length ? `${matches.length} markings` : 'No matching markings.';
     }
     function choose(item) {

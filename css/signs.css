@@ -100,9 +100,7 @@
 #assemblyGrid img { display:block; pointer-events:none; }
 #assemblyGrid .assemblyEmpty { background:rgb(var(--inputColor)); }
 #assemblyGrid .dragOver, #assemblyRemoveDrop.dragOver { outline:2px solid var(--textColor); outline-offset:-2px; background:var(--selectedColor); }
-#assemblyGrid .dragging, #assemblyCandidate.dragging { opacity:.4; }
-#assemblyCandidate { touch-action:none; cursor:grab; }
-#assemblyCandidate img { width:3rem; height:3rem; object-fit:contain; pointer-events:none; }
+#assemblyGrid .dragging { opacity:.4; }
 @media (max-width:768px) { #signAssemblyEditor { width:100%; } }
 .signArrowRotate { position: absolute; transform: translate(-50%,-50%); pointer-events: auto; cursor: grab; }
 #signText { min-width: 0; flex: 1; resize: vertical; font: inherit; }

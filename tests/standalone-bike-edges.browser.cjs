@@ -16,7 +16,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     s.joints=[{id:1,x:500,y:100,links:[],dir:curved?{x:.3,y:Math.sqrt(.91)}:{x:0,y:1}},
       {id:2,x:500,y:500,links:[],dir:curved?{x:-.3,y:Math.sqrt(.91)}:{x:0,y:1}},
       {id:3,x:400,y:300,links:[],dir:{x:1,y:0}},{id:4,x:600,y:300,links:[],dir:{x:1,y:0}}];
-    s.surfaces=[{id:'green',on:{road:1,lane:0},color:'green',pattern:'solid',from:0,to:1}];
+    s.surfaces=[{id:'green',on:{road:1,lane:0},color:'green',pattern:'conflict',from:0,to:1}];
     s.view={scale:8,x:900-500*8,y:500-300*8};A.sheets.zoomBy(1);
     const draw=A.longitudinal.drawTarget,groups=new Map();
     A.longitudinal.drawTarget=function(sheet,key,points,base,parent,...rest){if(key?.startsWith('r:1:'))groups.set(key,parent);return draw.call(this,sheet,key,points,base,parent,...rest);};
@@ -28,8 +28,13 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
     const distance=(p,edge)=>Math.min(...edge.slice(1).map((b,i)=>{const a=edge[i],dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);}));
     const sides=edges.map(edge=>strokes.filter(points=>points.every(p=>distance(p,edge)<.02)));
     const targets=edges.map(edge=>A.longitudinal.targetAt(edge[Math.floor(edge.length/4)])?.on);
-    return {strokes,sides,edges,targets,placement:track.placementBounds};
+    s.medians=[{id:99,type:'painted',color:'none',hideEdgeLines:true,points:[{x:450,y:270},{x:550,y:270},{x:550,y:330},{x:450,y:330}]}];
+    const intersection=A.intersectionGeometry.create();Object.assign(intersection,{x:500,y:300});intersection.medians=[{id:'bike-gap',type:'painted',color:'none',points:[{x:-10,y:-30},{x:10,y:-30},{x:10,y:30},{x:-10,y:30}]}];s.intersections=[intersection];
+    A.longitudinal.drawTarget=function(sheet,key,points,base,parent,...rest){if(key?.startsWith('r:1:'))groups.set(key,parent);return draw.call(this,sheet,key,points,base,parent,...rest);};
+    try{A.roadEditor.render();}finally{A.longitudinal.drawTarget=draw;}
+    return {strokes,sides,edges,targets,placement:track.placementBounds,conflictsPreserved:groups.get('r:1:0').querySelectorAll('.roadMarking').length>0&&s.roadLayer.querySelector('.bikeMedianConflicts .laneSurface')!=null&&Boolean(s.roadLayer.querySelector('[data-intersection-median="bike-gap"]').compareDocumentPosition(s.roadLayer.querySelector('.bikeMedianConflicts'))&Node.DOCUMENT_POSITION_FOLLOWING)};
    },curved);
+   assert(result.conflictsPreserved,'standalone dotted edges and green conflict paint continue over an asphalt median');
    assert(result.strokes.length>2,'actual crossing keeps dotted edges');
    assert.equal(result.sides.flat().length,result.strokes.length,'every solid and dotted stroke follows the same editable edge path');
    for(const side of result.sides) {

@@ -8,6 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50' y='86' font-size='86' text-anchor='middle'%3E%F0%9F%9B%A3%EF%B8%8F%3C/text%3E%3C/svg%3E" />
   <script src="js/vendor/geotiff.js"></script>
   <script src="js/select-picker.js"></script>
+  <script src="js/picker-favorites.js"></script>
   <script src="js/history.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/shortcuts.js"></script>
@@ -41,18 +42,18 @@
   <script src="js/intersection-geometry.js"></script>
   <script src="js/roundabout-geometry.js"></script>
   <script src="js/intersections.js"></script>
-  <script src="js/sign-designs.js"></script>
-  <script src="js/sign-layout.js"></script>
+  <script src="js/sign-designs.js?v=state-guide-2"></script>
+  <script src="js/sign-layout.js?v=assembly-cells-1"></script>
   <script src="fonts/osifont-outlines.js"></script>
   <script src="js/engineering-text.js"></script>
-  <script src="js/signs.js"></script>
+  <script src="js/signs.js?v=picker-favorites-1"></script>
   <script src="js/match-lines.js"></script>
   <script src="assets/markings/symbols.js"></script>
   <script src="assets/markings/font.js"></script>
   <script src="assets/markings/cfx.js"></script>
   <script src="assets/markings/bike.js"></script>
   <script src="js/marking-catalog.js"></script>
-  <script src="js/markings.js"></script>
+  <script src="js/markings.js?v=picker-favorites-1"></script>
   <script src="js/surfaces.js"></script>
   <script src="js/download.js"></script>
   <script src="js/project-json.js"></script>
@@ -66,6 +67,7 @@
   <link href="css/signals.css" rel="stylesheet" />
   <link href="css/markings.css" rel="stylesheet" />
   <link href="css/select-picker.css" rel="stylesheet" />
+  <link href="css/picker-favorites.css" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
 </head>
 <body>
@@ -126,7 +128,7 @@
         </div>
         <div class="fieldRow">
           <label for="roadLaneWidth">Lane width (ft)</label>
-          <input id="roadLaneWidth" type="number" min="8" max="20" step="0.5" value="12" />
+          <input id="roadLaneWidth" type="number" min="8" max="50" step="0.5" value="12" />
         </div>
         <div class="fieldRow">
           <label for="autoTapers">Auto tapers</label>
@@ -176,9 +178,9 @@
 
 
           <div id="laneWidthFields" hidden>
-          <div class="fieldRow"><label for="selectedLaneWidth">Lane width (ft)</label><input id="selectedLaneWidth" type="number" min="8" max="20" step="0.5" value="12" /></div>
-          <div class="fieldRow"><label for="laneStartWidth">Start width (ft)</label><input id="laneStartWidth" type="number" min="8" max="20" step="0.5" value="12" /></div>
-          <div class="fieldRow"><label for="laneEndWidth">End width (ft)</label><input id="laneEndWidth" type="number" min="8" max="20" step="0.5" value="12" /></div>
+          <div class="fieldRow"><label for="selectedLaneWidth">Lane width (ft)</label><input id="selectedLaneWidth" type="number" min="8" max="50" step="0.5" value="12" /></div>
+          <div class="fieldRow"><label for="laneStartWidth">Start width (ft)</label><input id="laneStartWidth" type="number" min="8" max="50" step="0.5" value="12" /></div>
+          <div class="fieldRow"><label for="laneEndWidth">End width (ft)</label><input id="laneEndWidth" type="number" min="8" max="50" step="0.5" value="12" /></div>
           <p class="fieldHint">Select a lane node to edit its lane. Start and end widths affect only this road.</p>
           </div>
           <div class="fieldRow">
@@ -231,6 +233,7 @@
               <select id="medianColor">
                 <option value="yellow">Yellow (opposing traffic)</option>
                 <option value="white">White (same direction)</option>
+                <option value="none">No paint (asphalt)</option>
               </select>
             </div>
             <div class="fieldRow">
@@ -240,6 +243,7 @@
                 <option value="left">╲ Lean left</option>
               </select>
             </div>
+            <div id="medianHideEdgesRow" class="fieldRow" hidden><label for="medianHideEdges">Hide adjacent edge lines</label><input id="medianHideEdges" type="checkbox" /></div>
             <div class="fieldRow">
               <label for="medianSpacing">Stripe spacing (ft)</label>
               <div class="dimensionInputs">
@@ -400,11 +404,12 @@
       <div class="editorBar"><h2 id="signAssemblyTitle" class="editorTitle" tabindex="-1">Assembly Editor</h2></div>
       <div class="editorContent">
         <button type="button" id="closeAssemblyEditor">Back to Signs</button>
-        <p class="signInstructions">Drag a sign into a row or column. Drop on another sign to swap positions, or on Remove to remove it. The + cells extend the assembly. Rows and columns touch without gaps.</p>
+        <p class="signInstructions">Click + to choose a sign for that cell. Drag signs to move them, swap positions, or drop on Remove. Use Alignment to position a sign within its cell.</p>
         <div id="assemblyGrid" aria-label="Sign assembly"></div>
-        <div class="headActions"><button type="button" id="assemblyCandidate" aria-label="Drag sign to add, or press Enter to add below"></button><button type="button" id="assemblyRemoveDrop">Remove</button></div>
+        <div class="headActions"><button type="button" id="duplicateAssemblySign">Duplicate</button><button type="button" id="assemblyRemoveDrop">Remove</button></div>
         <div class="fieldRow"><label for="assemblyPart">Assembly sign</label><select id="assemblyPart"></select></div>
         <div class="headActions"><button type="button" id="addAssemblySign">Choose Sign to Add</button><button type="button" id="uploadAssemblySign">Upload Sign</button><button type="button" id="removeAssemblySign">Remove Assembly Sign</button></div>
+        <div class="fieldRow"><label for="assemblyAlignment">Alignment</label><select id="assemblyAlignment"><option value="center">Center</option><option value="top-left">Top left</option><option value="top">Top</option><option value="top-right">Top right</option><option value="right">Right</option><option value="bottom-right">Bottom right</option><option value="bottom">Bottom</option><option value="bottom-left">Bottom left</option><option value="left">Left</option></select></div>
         <div id="assemblyPosition" hidden>
           <div class="fieldRow"><label for="assemblyRow">Row</label><input id="assemblyRow" type="number" min="1" max="20" step="1" value="1" /></div>
           <div class="fieldRow"><label for="assemblyColumn">Column</label><input id="assemblyColumn" type="number" min="1" max="20" step="1" value="1" /></div>

@@ -92,3 +92,7 @@ for code,color,name in [('CFX-TM',colors['orange'],'CFX Toll Route Shield'),('CF
 (dest/'florida.js').write_text('window.StripeMaker ??= {}; window.StripeMaker.floridaSigns = '+json.dumps(entries,separators=(',',':'))+';\n')
 for code,data in packs.items():(dest/'data'/f'{code}.js').write_text('window.StripeMaker ??= {}; window.StripeMaker.signArtwork ??= {}; Object.assign(window.StripeMaker.signArtwork,'+json.dumps(data,separators=(',',':'))+');\n')
 print('Imported',len(entries),'layouts in',len(packs),'Florida shield families. Run thumbnail composition to add default route legends.')
+
+# Replace non-tolled state shields with the requested SignMaker v2.2 artwork.
+import subprocess
+subprocess.run([sys.executable, str(ROOT/'scripts/import-state-route-signs.py')], check=True)

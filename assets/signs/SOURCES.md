@@ -52,3 +52,11 @@ Rebuild with `scripts/import-florida-signs.py <FDOT-PDF> <CFX-PDF> <LATEST-FDOT-
 M/L/Z vector paths; editable legends use the bundled FHWA alphabets. No network
 request is made when opening the picker, including from `file://`. These sources
 are agency standards; this app is not endorsed by FDOT, FTE, or CFX.
+
+### SignMaker v2.2 non-tolled state markers
+
+FTP-612-25 now ports SignMaker v2.2's `public/img/shields/United States/Florida/FDOT/Florida-Guide-42x36-1to2.svg` and `Florida-Guide-48x36-3plus.svg`, with its `public/js/Shield.js` numeral placement. These assets identify FDOT FY 2026–27 Index 700-102 sheet 16 as their source. The hollow Florida ribbon and panel borders replace the former solid silhouette. The automatic default layouts are 42 × 36 and 48–58 × 36, using SignMaker's Roadgeek 2014 Series D numeral contours and advance widths, at 15-inch cap height and 14.75 inches from the top. Their right ink edge sits 11 inches from the right edge. The TrueType contours are flattened with StripeMaker's existing parser; other sign families keep their existing alphabets. Three-digit panels grow from 48 to at most 58 inches to accommodate the ink; the complete ribbon translates with the right edge. StripeMaker retains its four-digit saved IDs and input support, using the same wide panel and existing optical fitting when necessary. Toll and Turnpike artwork is unchanged.
+
+Rebuild these markers independently with `python3 scripts/import-state-route-signs.py "../SignMaker v2.2"`, then `node scripts/compose-florida-thumbnails.cjs`. The full Florida importer also runs this replacement step. The port retains the repository's GPL-3.0 attribution; all exported outlines remain M/L/Z vectors.
+
+Roadgeek 2014 Series D numeral outlines are derived from the font bundled by SignMaker v2.2. Embedded font attribution: Copyright © SammDOT. 2014. All Rights Reserved.

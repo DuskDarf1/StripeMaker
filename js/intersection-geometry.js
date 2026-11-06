@@ -930,7 +930,7 @@
 
   function validIsland(m) {
     return m && typeof m.id === 'string' && ['grass','concrete','painted'].includes(m.type) &&
-      (m.color == null || ['yellow','white'].includes(m.color)) &&
+      (m.color == null || ['yellow','white','none'].includes(m.color)) &&
       (m.lean == null || ['left','right'].includes(m.lean)) &&
       (m.spacing == null || Number.isFinite(m.spacing) && m.spacing >= 10 && m.spacing <= 40) &&
       Array.isArray(m.points) && m.points.length >= 3 && m.points.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y) &&

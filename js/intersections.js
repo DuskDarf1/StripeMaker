@@ -341,9 +341,9 @@
             a.width = v;
             for(const id of a.inLanes)if(a.laneDetails?.[id])a.laneDetails[id].width=v;
           }),
-        { min: 8, max: 20, step: 0.5, disabled: bound },
+        { min: 8, max: 50, step: 0.5, disabled: bound },
       );
-      field(app.traffic.reversed?"Incoming width (ft)":"Outgoing width (ft)", a.outWidth, v => change(() => { a.outWidth = v; for(const id of a.outLanes)if(a.laneDetails?.[id])a.laneDetails[id].width=v; }), { min: 8, max: 20, step: 0.5, disabled: bound });
+      field(app.traffic.reversed?"Incoming width (ft)":"Outgoing width (ft)", a.outWidth, v => change(() => { a.outWidth = v; for(const id of a.outLanes)if(a.laneDetails?.[id])a.laneDetails[id].width=v; }), { min: 8, max: 50, step: 0.5, disabled: bound });
       hint('Drag the square Bézier handle to curve this whole approach. Double-click it to straighten.');
       if(a.approachCurve)button('Straighten Whole Approach',()=>change(()=>G.straightenApproach(a)),fields);
       field("Corner radius (ft)", a.radius, (v) => change(() => (a.radius = v)), { max: 200, step: 0.5 });
@@ -485,8 +485,8 @@
       field("Distance from center (ft)", +G.length(a).toFixed(1), (v) => change(() => Object.assign(a, G.mul(G.unit(a), v))), { min: 20, max: 3000, step: 0.5 });
       for (const [key, label] of [["incoming", app.traffic.reversed?"Exit lanes":"Entry lanes"], ["outgoing", app.traffic.reversed?"Entry lanes":"Exit lanes"]])
         field(label, a[key], (v) => changeRound(() => { a[key] = v; }), { max: s.mini ? 1 : 999, disabled: bound });
-      field(app.traffic.reversed?"Exit lane width (ft)":"Entry lane width (ft)", a.width, (v) => changeRound(() => { a.width = v; for (const id of a.inLanes) if (a.laneDetails?.[id]) a.laneDetails[id].width = v; }), { min: 8, max: 20, step: 0.5, disabled: bound });
-      field(app.traffic.reversed?"Entry lane width (ft)":"Exit lane width (ft)", a.outWidth, (v) => changeRound(() => { a.outWidth = v; for (const id of a.outLanes) if (a.laneDetails?.[id]) a.laneDetails[id].width = v; }), { min: 8, max: 20, step: 0.5, disabled: bound });
+      field(app.traffic.reversed?"Exit lane width (ft)":"Entry lane width (ft)", a.width, (v) => changeRound(() => { a.width = v; for (const id of a.inLanes) if (a.laneDetails?.[id]) a.laneDetails[id].width = v; }), { min: 8, max: 50, step: 0.5, disabled: bound });
+      field(app.traffic.reversed?"Entry lane width (ft)":"Exit lane width (ft)", a.outWidth, (v) => changeRound(() => { a.outWidth = v; for (const id of a.outLanes) if (a.laneDetails?.[id]) a.laneDetails[id].width = v; }), { min: 8, max: 50, step: 0.5, disabled: bound });
       if (a.incoming) {
         field("Yield line setback (ft)", a.yieldSetback, v => change(() => { a.yieldSetback = v; }), { key: "rb-yield", min: 0, max: 3000, step: 0.5 });
         hint("Drag the square on the yield line toward the road to move it outside the circle. Set setback to 0 to return it to the circle.");
@@ -801,19 +801,22 @@
       const chevrons=(model.color??defaultColor)==='white';
       const choices = [
         field("Color", model.color ?? defaultColor, (v) => change(() => (model.color = v)), {
-          key: `${key}-color`, choices: [["yellow", "Yellow (opposing traffic)"], ["white", "White (same direction)"]],
+          key: `${key}-color`, choices: [["yellow", "Yellow (opposing traffic)"], ["white", "White (same direction)"], ["none", "No paint (asphalt)"]],
         }),
         field(chevrons?'Chevron direction':"Stripe direction", model.lean ?? "right", (v) => change(() => (model.lean = v)), {
           key: `${key}-lean`, choices: chevrons?[["right","Point right"],["left","Point left"]]:[["right", "╱ Lean right"], ["left", "╲ Lean left"]],
         }),
       ];
       for (const input of choices) parent.append(input.parentElement);
+      choices[1].parentElement.hidden=model.color==='none';
+      if(model.color==='none')checkbox('Hide adjacent edge lines',Boolean(model.hideEdgeLines),v=>change(()=>model.hideEdgeLines=v),parent);
       // SignalMaker's dimensionInputs slider/number pair, also used by
       // Elements' painted medians. History coalesces continuous input events.
       const number = field("Stripe spacing (ft)", model.spacing ?? 20, () => {}, {
         key: `${key}-spacing`, min: 10, max: 40, step: 5,
       });
       const row = number.parentElement, inputs = document.createElement("div"), slider = document.createElement("input");
+      row.hidden=model.color==='none';
       inputs.className = "dimensionInputs";
       slider.type = "range";
       slider.id = `${number.id}-range`;
@@ -979,7 +982,7 @@
     function islandLine(sheet, item, median) {
       let points = G.islandOutline(item, median).map(p => world(sheet, item, p));
       const painted = median.type === 'painted', white = median.color === 'white';
-      const base = painted ? white ? { style: 'channelizing', color: 'white', width: 8 }
+      const base = painted && median.color==='none' ? null : painted ? white ? { style: 'channelizing', color: 'white', width: 8 }
         : { style: 'doubleSolid', color: 'yellow' } : { style: 'solid', color: 'yellow' };
       // Use the existing painted-median dimensions: center the white outline
       // half its width inside, or the yellow pair midway between its stripes.
@@ -996,7 +999,7 @@
         const surface = islandSurface(median,points,pixelsPerFoot);
         const group=svg("g",{"data-intersection-median":median.id},parent);
         svg("path",{d:path(surface),...(median.type==='painted'?{class:"roadBand"}:{fill:roads.medianStyle[median.type]??roads.medianStyle.grass})},group);
-        if(median.type!=='grass') {
+        if(median.type!=='grass' && !(median.type==='painted'&&median.color==='none')) {
           const id=`intersection-island-${item.id}-${median.id}`,clip=svg("clipPath",{id},group);
           svg("path",{d:path(surface)},clip);
           const clipped=svg("g",{"clip-path":`url(#${id})`},group);
@@ -1220,15 +1223,16 @@
     // opposite-direction side: the double yellow up to where the curbs start
     // curving, or both sides of a center median out to its nose. Lines are open
     // M/L stroked paths, so they export to PDF as vectors.
-    function drawMarkings(item, parent, convert, cuts = []) {
+    function drawMarkings(item, parent, convert, cuts = [], edgeCuts = []) {
       if (round(item)) return drawRoundaboutMarkings(item, parent, convert, cuts);
       const style = roads.markingStyle;
       const width = G.length(G.sub(convert({ x: style.lineFeet, y: 0 }), convert({ x: 0, y: 0 })));
-      const stroke = (points, color, lineWidth = width) =>
-        svg(
+      const stroke = (points, color, lineWidth = width) => {
+        const world=points.map(convert),parts=edgeCuts.length?app.markingTrim.trim(world,edgeCuts):[{points:world}];
+        for(const part of parts)svg(
           "path",
           {
-            d: line(points.map(convert)),
+            d: line(part.points),
             class: "roadMarking",
             fill: "none",
             stroke: color,
@@ -1236,6 +1240,7 @@
           },
           parent,
         );
+      };
       // Each corner joins one approach's outgoing-side edge to the next one's
       // incoming-side edge. An edge with lanes beside it is white (right of
       // traffic); a one-way approach's other edge is its traffic's left edge,
@@ -1280,6 +1285,7 @@
         return points;
       };
       const painted = (a, model, center, half, nose, ring, mouthRing, key, defaultColor) => {
+        if(model.color==='none')return;
         const paint = { ...model, color: model.color ?? defaultColor };
         const color = paint.color === "white" ? style.white : style.yellow;
         const ppf = width / style.lineFeet, paintStyle = roads.paintedMedianStyle;
@@ -1998,7 +2004,7 @@
         const split=item.approaches.find(a=>a.id===owner.approach)?.splits?.find(s=>s.id===owner.split);
         if(!split||m.points.some(p=>p.on?.road&&!sheet.roads.some(r=>r.id===p.on.road)))return false;
         m.type=split.surface??'concrete';
-        if(m.type==='painted')Object.assign(m,{color:split.color??'white',lean:split.lean??'right',spacing:split.spacing??20});
+        if(m.type==='painted')Object.assign(m,{color:split.color??'white',lean:split.lean??'right',spacing:split.spacing??20,hideEdgeLines:Boolean(split.hideEdgeLines)});
         return true;
       });
       for(const a of item.approaches){
@@ -2922,12 +2928,13 @@
       // Ground-level intersections; `slot(level)` gives the group for an elevated
       // one (null when its level is hidden), drawn later over lower levels.
       draw(sheet, layers, solved, only = (item) => (item.level ?? 1) === 1) {
+        const edgeCuts=roads.medianEdgeCuts(sheet,solved??roads.solve(sheet));
         const cuts = solved?.crosswalkCuts ?? app.markings?.crosswalkCuts(sheet, solved) ?? [];
         for (const item of sheet.intersections ?? []) {
           if (!only(item)) continue;
           reconcile(sheet, item, solved);
           const gores=(sheet.gores??[]).filter(g=>g.intersection===item.id);
-          const key=JSON.stringify([sheet.id,sheet.inchesPerPixel,app.traffic.reversed,item,sheet.lines,cuts,gores,
+          const key=JSON.stringify([sheet.id,sheet.inchesPerPixel,app.traffic.reversed,item,sheet.lines,cuts,edgeCuts,gores,
             gores.length?[sheet.roads,sheet.joints]:null]);
           const cached=pavementDrawingCache.get(item);
           if(cached?.key===key && cached.sheet===sheet){
@@ -2937,7 +2944,7 @@
           const counts=Object.fromEntries(['pavement','markings','selection'].map(name=>[name,layers[name].childNodes.length]));
           const convert = (p) => world(sheet, item, p);
           drawPavement(item, layers.pavement, convert);
-          drawMarkings(item, layers.markings, convert, cuts);
+          drawMarkings(item, layers.markings, convert, cuts,edgeCuts);
           roads.drawIntersectionGores(sheet,item,layers,solved,cuts);
           drawIslands(sheet,item,layers.markings,convert);
           const nodes=Object.fromEntries(['pavement','markings','selection'].map(name=>[name,[...layers[name].childNodes].slice(counts[name])]));

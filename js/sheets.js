@@ -706,13 +706,23 @@
 
     // Trackpad pinches arrive as ctrl+wheel (Chrome, Firefox) or gesture events (Safari)
     // and zoom smoothly; two-finger scrolls pan; mouse wheels zoom in steps.
+    let trackpadScrollUntil=0;
     workspace.addEventListener("wheel", event => {
       if (!selected) return;
       event.preventDefault();
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? stage.clientHeight : 1;
       const dx = event.deltaX * unit;
       const dy = event.deltaY * unit;
-      const trackpad = event.wheelDeltaY ? event.wheelDeltaY === -3 * event.deltaY : event.deltaMode === 0;
+      const legacy=event.wheelDeltaY;
+      // Legacy wheel deltas are rounded independently of pixel deltas. Exact
+      // equality can therefore turn individual trackpad/momentum events into
+      // mouse-wheel zooms. Prefer panning for pixel scrolls, recognize discrete
+      // wheel notches, and keep a trackpad burst in pan mode between events.
+      const pixel=event.deltaMode===0,now=performance.now();
+      const pixelRatio=legacy&&Math.abs(legacy+3*event.deltaY)<=Math.max(1,Math.abs(legacy)*.01);
+      const notch=legacy&&Math.abs(legacy)>=120&&Math.abs(legacy)%120===0&&Number.isInteger(event.deltaY);
+      const trackpad=pixel&&(now<trackpadScrollUntil||dx!==0||!notch||pixelRatio);
+      if(trackpad&&!event.ctrlKey)trackpadScrollUntil=now+300;
       if (event.ctrlKey) zoomAt(selected, Math.exp(-dy * 0.01), event.clientX, event.clientY);
       else if (trackpad) panBy(selected, -dx, -dy);
       else zoomAt(selected, Math.exp(-dy * 0.002), event.clientX, event.clientY);

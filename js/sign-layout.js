@@ -1,6 +1,10 @@
 /* Schematic sign assemblies, in sheet pixels. Artwork remains vector paths. */
 (() => {
   const parts = sign => [sign, ...(sign.panels ?? [])];
+  const alignment = value => ({
+    'top-left':[-1,-1],top:[0,-1],'top-right':[1,-1],right:[1,0],
+    'bottom-right':[1,1],bottom:[0,1],'bottom-left':[-1,1],left:[-1,0]
+  }[value] ?? [0,0]);
   function layout(sign, measure) {
     const items=parts(sign).map((part,i)=>({part,row:part.row??i,column:part.column??0,...measure(part,sign)}));
     const columns=[...new Set(items.map(p=>p.column))].sort((a,b)=>a-b);
@@ -12,7 +16,9 @@
     for(const item of items){
       const c=columns.indexOf(item.column),r=rows.indexOf(item.row);
       item.x=-width/2+widths.slice(0,c).reduce((a,b)=>a+b,0)+gap*c+widths[c]/2;
-      item.y=-height/2+heights.slice(0,r).reduce((a,b)=>a+b,0)+gap*r+heights[r]/2;
+      const [horizontal,vertical]=alignment(item.part.alignment);
+      item.x+=horizontal*(widths[c]-item.width)/2;
+      item.y=-height/2+heights.slice(0,r).reduce((a,b)=>a+b,0)+gap*r+heights[r]/2+vertical*(heights[r]-item.height)/2;
     }
     return {width,height,items};
   }
@@ -22,6 +28,6 @@
       const p=rotate(+a*scale+x,+b*scale+y,angle);return `${(p.x+cx).toFixed(4)} ${(p.y+cy).toFixed(4)}`;
     });
   }
-  const api={parts,layout,rotate,path};
+  const api={parts,alignment,layout,rotate,path};
   if(typeof module!=='undefined')module.exports=api;else(window.StripeMaker??={}).signLayout=api;
 })();

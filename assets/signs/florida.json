@@ -7,16 +7,16 @@
       "category": "Florida route signs",
       "variant": "Florida Route Marker",
       "size": [
-        24,
-        24
+        42,
+        36
       ],
       "box": [
-        100.0,
-        100.0
+        100,
+        85.71428571428571
       ],
       "src": "assets/signs/FTP-612-25--2.svg",
       "aliases": "Florida state road SR shield FTP-17-06",
-      "source": "FDOT 700-102 / CFX 2026",
+      "source": "SignMaker v2.2 Florida-Guide-42x36-1to2.svg; FDOT 700-102 FY 2026\u201327 sheet 16",
       "routeFamily": true,
       "digits": 2,
       "routeMax": 9999
@@ -28,16 +28,16 @@
       "category": "Florida route signs",
       "variant": "Florida Route Marker",
       "size": [
-        30,
-        24
+        48,
+        36
       ],
       "box": [
-        100.0,
-        80.0
+        100,
+        75.0
       ],
       "src": "assets/signs/FTP-612-25--3.svg",
       "aliases": "Florida state road SR shield FTP-17-06",
-      "source": "FDOT 700-102 / CFX 2026",
+      "source": "SignMaker v2.2 Florida-Guide-48x36-3plus.svg; FDOT 700-102 FY 2026\u201327 sheet 16",
       "routeFamily": true,
       "digits": 3,
       "routeMax": 9999
@@ -49,16 +49,16 @@
       "category": "Florida route signs",
       "variant": "Florida Route Marker",
       "size": [
-        30,
-        24
+        48,
+        36
       ],
       "box": [
-        100.0,
-        80.0
+        100,
+        75.0
       ],
       "src": "assets/signs/FTP-612-25--4.svg",
       "aliases": "Florida state road SR shield FTP-17-06",
-      "source": "FDOT 700-102 / CFX 2026",
+      "source": "SignMaker v2.2 Florida-Guide-48x36-3plus.svg; FDOT 700-102 FY 2026\u201327 sheet 16",
       "routeFamily": true,
       "digits": 4,
       "routeMax": 9999

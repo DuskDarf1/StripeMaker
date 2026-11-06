@@ -40,7 +40,8 @@
   // Keyholes: the turn-side line is dotted where turning traffic crosses the bike
   // lane (Standard Plans 711-001 sheets 5-6, 2'-4' dotted; FDM 223.5.2, 150 ft).
   const KEYHOLE_DOTTED_FEET = 150;
-  const MAX_LANE_WIDTH = 20;
+  // Editable geometry limit, independent of standard lane-width defaults.
+  const MAX_LANE_WIDTH = 50;
   const MAX_MEDIAN_FEET = 200;
   const CURVE_SEGMENTS = 96;
   const SNAP_PIXELS = 14;
@@ -812,7 +813,7 @@
       if(center)phases.push(app.longitudinal.phase(center.key));
       const cuts=solved.crosswalkCuts??=app.markings?.crosswalkCuts(sheet,solved)??[];
       const key=JSON.stringify([sheet.id,sheet.inchesPerPixel,app.traffic.reversed,road.lanes,road.medianEdges,
-        shape.line,sectionKey(shape.bounds),sectionKey(shape.laneBounds),shape.pavementEdges,shape.gapEnds,joinedPolygons(sheet,road,solved),cuts,phases,sheet.lines,className]);
+        shape.line,sectionKey(shape.bounds),sectionKey(shape.laneBounds),shape.pavementEdges,shape.gapEnds,joinedPolygons(sheet,road,solved),cuts,medianEdgeCuts(sheet,solved),phases,sheet.lines,className]);
       const cached=roadDrawingCache.get(road);
       if(cached?.sheet===sheet&&cached.key===key){
         const {band,group,ring}=cached.nodes;layers.pavement.append(band);layers.markings.append(group);if(ring)layers.selection.append(ring);
@@ -931,7 +932,7 @@
           (t.from===road&&(k===t.fromLane||k===t.fromLane+1)) ||
           (t.to===road&&(k===t.toLane||k===t.toLane+1)));
         const roadClips=solved?joinedPolygons(sheet,road,solved,k):polygons;
-        const clips=[...(connectedBike?[]:[...roadClips,...bikePolygons]),...crosswalkCuts];
+        const clips=[...(connectedBike?[]:[...roadClips,...bikePolygons]),...crosswalkCuts,...(solved&&options?.edge&&!bike(k)&&!bike(k-1)?medianEdgeCuts(sheet,solved):[])];
         const ranges = dotted.get(k);
         if (!ranges?.length) return lines.drawTarget(sheet, key, points, base, group, clips, options);
         const total = polylineLength(shape.line);
@@ -1235,6 +1236,22 @@
               }
             }
           }
+        }
+      }
+      // A standalone crossing can pass through two carriageways with an
+      // asphalt median between them. Carry an existing conflict treatment
+      // through that unpainted gap, without creating conflicts on quiet paths.
+      if(independentBikeRoad(road)&&[...out.values()].some(r=>r.length)) {
+        const areas=medianEdgeCuts(sheet,solved,false);
+        if(areas.length)for(let lane=0;lane<road.lanes;lane++) {
+          const left=boundary(shape,lane),right=boundary(shape,lane+1);
+          const middle=left.map((p,i)=>({x:(p.x+right[i].x)/2,y:(p.y+right[i].y)/2})),length=polylineLength(middle);
+          let at=0;
+          for(const part of window.StripeMaker.markingTrim.trim(middle,areas)) {
+            if(part.distance>at){add(lane,at/length,part.distance/length);add(lane+1,at/length,part.distance/length);}
+            at=part.distance+polylineLength(part.points);
+          }
+          if(at<length){add(lane,at/length,1);add(lane+1,at/length,1);}
         }
       }
       // Overlapping stretches on a line are merged, and a weaving gap wins over
@@ -2102,7 +2119,7 @@
         ring.setAttribute("d", outline);
         layers.selection.append(ring);
       }
-      if (median.type === "grass") return;
+      if (median.type === "grass" || median.type === "painted" && median.color === "none") return;
       const clipTo = (shape, id) => {
         const clip = document.createElementNS(SVG, "clipPath");
         clip.id = `median-${sheet.id}-${median.id}-${id}`;
@@ -2139,6 +2156,22 @@
     function medianAt(sheet, point) {
       const solved = solve(sheet);
       return [...sheet.medians].reverse().find(median => median.points.length > 2 && insidePolygon(point, medianOutline(sheet, solved, median.points)))?.id ?? null;
+    }
+    function medianEdgeCuts(sheet,solved,hideOnly=true) {
+      const cache=hideOnly?'medianEdgeCuts':'unpaintedMedianAreas';
+      if(solved[cache])return solved[cache];
+      const polygons=[],G=window.StripeMaker.intersectionGeometry,k=12/sheet.inchesPerPixel;
+      const hidden=m=>(m.type??m.surface)==='painted'&&m.color==='none'&&(!hideOnly||m.hideEdgeLines);
+      // Median points follow pavement edges; reach the marking centerlines
+      // just inside the road's existing 8-inch pavement apron (711-001).
+      const add=points=>{if(points.length>2)polygons.push(hideOnly?insetPolygon(points,-inchesToPixels(sheet,PAVEMENT_MARGIN_INCHES+LINE_INCHES/2+0.01)):points);};
+      for(const m of sheet.medians??[])if(hidden(m))add(medianOutline(sheet,solved,m.points));
+      for(const item of sheet.intersections??[]){
+        const world=p=>({x:item.x+p.x*k,y:item.y+p.y*k});
+        for(const m of item.medians??[])if(hidden(m))add(G.islandOutline(item,m).map(world));
+        for(const a of item.approaches)for(const m of G.medians(a))if(hidden(m.split??a))add(m.points.map(world));
+      }
+      return solved[cache]=polygons;
     }
 
     // Trim against traveled-way boundaries, not inset raster masks. Shared
@@ -2333,7 +2366,7 @@
     const medianSolve = sheet => lastSolved?.sheet === sheet && lastSolved.medianKey === medianGeometryKey(sheet)
       ? lastSolved.solved : solve(sheet);
     const roadDrawingKey = (sheet, geometryKey) => JSON.stringify([geometryKey, sheet.width, sheet.height,
-      sheet.markings, sheet.lines, sheet.surfaces, selectedRoad?.id, selectedGore]);
+      sheet.markings, sheet.lines, sheet.surfaces, sheet.medians?.filter(m=>m.type==='painted'&&m.color==='none'), selectedRoad?.id, selectedGore]);
     // What the last render drew: each layer's group, the nodes in it before the
     // roads (medians) and after them (gores, intersections, markings), each
     // road's nodes, and each road's line targets, so a partial render can
@@ -2419,6 +2452,16 @@
           }
         }
         if (sheet.inchesPerPixel) window.StripeMaker.intersections?.draw(sheet, after, solved);  // ground level
+        if(sheet.inchesPerPixel){
+          const areas=medianEdgeCuts(sheet,solved,false);
+          if(areas.length){
+            const id=`bike-asphalt-medians-${sheet.id}`,clip=document.createElementNS(SVG,'clipPath');clip.id=id;
+            for(const area of areas){const p=document.createElementNS(SVG,'path');p.setAttribute('d',`${pathData(area)}Z`);clip.append(p);}
+            const over=document.createElementNS(SVG,'g');over.setAttribute('clip-path',`url(#${id})`);over.classList.add('bikeMedianConflicts');
+            for(const road of sheet.roads)if(independentBikeRoad(road)&&(road.level??1)===1){const group=nodes.get(road.id)?.group;if(group)over.append(group.cloneNode(true));}
+            after.markings.append(clip,over);
+          }
+        }
         if (sheet.inchesPerPixel) window.StripeMaker.longitudinal.drawMovementLines(sheet, after.markings);
         // A same-direction gore's 8-inch white boundary replaces the edge color
         // underneath it, including the yellow half of an intersection corner.
@@ -3234,7 +3277,7 @@
       if (!sheet || points.length < 3) return render();
       const median = {
         id: nextId(sheet.medians), type: defaults.medianType, spacing: defaults.medianSpacing,
-        color: defaults.medianColor, lean: defaults.medianLean, points,
+        color: defaults.medianColor, lean: defaults.medianLean, hideEdgeLines:Boolean(defaults.medianHideEdgeLines), points,
       };
       sheet.medians.push(median);
       selectMedian(median.id);
@@ -3386,6 +3429,10 @@
         if (document.activeElement !== medianType) medianType.value = values.type;
         paintedFields.hidden = values.type !== "painted";
         if (document.activeElement !== medianColor) medianColor.value = values.color ?? "yellow";
+        medianLean.closest('.fieldRow').hidden=values.color==='none';
+        medianSpacing.closest('.fieldRow').hidden=values.color==='none';
+        document.getElementById('medianHideEdgesRow').hidden=values.color!=='none';
+        document.getElementById('medianHideEdges').checked=Boolean(median?median.hideEdgeLines:defaults.medianHideEdgeLines);
         const chevrons=values.color==='white';
         document.querySelector('label[for="medianLean"]').textContent=chevrons?'Chevron direction':'Stripe direction';
         for(const option of medianLean.options) {
@@ -3906,6 +3953,12 @@
         changed();
       });
     }
+    document.getElementById('medianHideEdges').addEventListener('change',event=>{
+      defaults.medianHideEdgeLines=event.target.checked;
+      const median=medianOf(sheets.selected,selectedMedian);
+      if(!median)return render();
+      median.hideEdgeLines=event.target.checked;changed();
+    });
     medianType.addEventListener("change", () => {
       const median = medianOf(sheets.selected, selectedMedian);
       defaults.medianType = medianType.value;
@@ -5434,6 +5487,7 @@
       insetPolygon,
       // FDOT 711-001 sheet 8: 8" white outline; double 6" yellow,
       // 4" clear gap (10" between marking centerlines).
+      medianEdgeCuts,
       paintedMedianStyle: { whiteLineFeet: GORE_LINE_INCHES / 12, doubleOffsetFeet: (DOUBLE_GAP_INCHES + LINE_INCHES) / 12 },
       medianStyle: { grass: GRASS, concrete: CONCRETE, curb: CURB, curbFeet: CURB_INCHES / 12 } };
     render();

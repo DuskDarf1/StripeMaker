@@ -49,7 +49,7 @@
     return glyphInk.get(glyph);
   }
   function legend(value, field, alphabets) {
-    const chars = [...String(value)], alphabet = alphabets[field.series];
+    const chars = [...String(value)], alphabet = field.alphabet ?? alphabets[field.series];
     let cursor=0; const letters=[];
     for (const char of chars) {
       if (char===' ') { cursor += 50; continue; }
@@ -63,7 +63,7 @@
     // FHWA M1-1/M1-4 drawings call for numerals optically spaced about the
     // vertical centerline. Tighten spacing, never the numeral outlines/height,
     // when a three-digit legend exceeds the generic alphabet side bearings.
-    if(field.key==='route'&&!field.fitWidth&&letters.length>1&&width>field.maxWidth){
+    if(field.key==='route'&&!field.fitWidth&&!field.flexWidth&&letters.length>1&&width>field.maxWidth){
       const ink=letters.reduce((sum,item)=>sum+item.glyph.width,0),gap=(field.maxWidth/k-ink)/(letters.length-1);
       if(gap>0){let x=0;for(const item of letters){item.x=x;x+=item.glyph.width+gap;}width=field.maxWidth;}
     }
@@ -89,12 +89,12 @@
       horizontal=Math.min(1,field.maxWidth/((inkRight-inkLeft)*k));
       width=(inkRight-inkLeft)*k;
     }
-    const origin=field.cx-(inkLeft+inkRight)*k*horizontal/2;
+    const origin=Number.isFinite(field.right) ? field.right-inkRight*k*horizontal : field.cx-(inkLeft+inkRight)*k*horizontal/2;
     return {paths:letters.map(({glyph,x})=>{
       let coordinate=0;
       const d=glyph.d.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi,v=>(coordinate++%2?+v*k+field.top:(+v+x)*k*horizontal+origin).toFixed(4));
       return {d,fill:field.fill};
-    }),width:width*horizontal};
+    }),width:field.guidePanel?(inkRight-inkLeft)*k:width*horizontal};
   }
   function validate(value, field, alphabets) {
     const text=String(value).trim();
@@ -109,8 +109,9 @@
     return legend(text,field,alphabets).error ?? '';
   }
   function expansion(fields, values, alphabets) {
-    return Math.max(0,...(fields??[]).filter(f=>f.flexWidth).map(f=>{
+    return Math.max(0,...(fields??[]).filter(f=>f.flexWidth||f.guidePanel).map(f=>{
       const value=values?.[f.key]??f.default;
+      if(f.guidePanel)return Math.min(f.guidePanel.maxExpansion,Math.max(0,(legend(value,{...f,fitWidth:false,flexWidth:true},alphabets).width??0)-f.maxWidth));
       if(String(value)===String(f.original??f.default))return 0;
       return Math.max(0,(legend(value,f,alphabets).width??0)-f.maxWidth);
     }));
@@ -120,6 +121,7 @@
     const legendPaths=new Set((fields??[]).flatMap(f=>f.paths));
     const background=paths.map((path,i)=>{
       if(!widen)return path;
+      if((fields??[]).some(f=>f.guidePanel?.outlinePath===i))return {...path,d:transformPath(path.d,widen,0,1)};
       if(legendPaths.has(i))return {...path,d:transformPath(path.d,widen/2,0,1)};
       let coordinate=0;
       return {...path,d:path.d.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi,v=>{
@@ -130,7 +132,7 @@
       const value=values?.[field.key] ?? field.default;
       if (field.key!=='route' && String(value)===String(field.original ?? field.default)) continue;
       if (validate(value,field,alphabets)) continue;
-      field.paths.forEach(i=>removed.add(i));extra.push(...legend(value,{...field,cx:field.cx+widen/2,maxWidth:field.maxWidth+widen},alphabets).paths);
+      field.paths.forEach(i=>removed.add(i));extra.push(...legend(value,{...field,cx:field.cx+widen/2,right:Number.isFinite(field.right)?field.right+widen:undefined,maxWidth:field.maxWidth+widen},alphabets).paths);
     }
     return [...background.filter((_,i)=>!removed.has(i)),...extra];
   }

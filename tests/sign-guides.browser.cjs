@@ -13,11 +13,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await page.locator('#sheetFile').setInputFiles({name:'Assemblies.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
  await page.waitForFunction(()=>StripeMaker.sheets.selected);
  await page.locator('[data-editor="signsEditor"]').click();
- const choose=async(code,add=false)=>{if(add&&await page.locator('#signAssemblyEditor').isHidden())await page.locator('#openAssemblyEditor').click();await page.locator(add?'#addAssemblySign':'#chooseSign').click();await page.locator('#signSearch').fill(code);await page.locator('#signGrid button').first().click();await page.locator('#signPicker').waitFor({state:'hidden'});if(add)await page.locator('#assemblyCandidate').click();};
+ const choose=async(code,add=false)=>{if(add&&await page.locator('#signAssemblyEditor').isHidden())await page.locator('#openAssemblyEditor').click();await page.locator(add?'#addAssemblySign':'#chooseSign').click();await page.locator('#signSearch').fill(code);await page.locator('#signGrid .iconGridItem').first().click();await page.locator('#signPicker').waitFor({state:'hidden'});};
  await page.locator('#chooseSign').click();await page.locator('#signSearch').fill('US shield');
- assert(await page.locator('#signGrid button').count()>0);await page.keyboard.press('Escape');
- for(const code of ['D1-1','E5-1','D3-1']){await page.locator('#chooseSign').click();await page.locator('#signSearch').fill(code);assert(await page.locator('#signGrid button').count()>0,code);await page.keyboard.press('Escape');}
- for(const code of ['E1-1','E6-1','E8-2','D15-1']){await page.locator('#chooseSign').click();await page.locator('#signSearch').fill(code);assert.equal(await page.locator('#signGrid button').count(),0,code);await page.keyboard.press('Escape');}
+ assert(await page.locator('#signGrid .iconGridItem').count()>0);await page.keyboard.press('Escape');
+ for(const code of ['D1-1','E5-1','D3-1']){await page.locator('#chooseSign').click();await page.locator('#signSearch').fill(code);assert(await page.locator('#signGrid .iconGridItem').count()>0,code);await page.keyboard.press('Escape');}
+ for(const code of ['E1-1','E6-1','E8-2','D15-1']){await page.locator('#chooseSign').click();await page.locator('#signSearch').fill(code);assert.equal(await page.locator('#signGrid .iconGridItem').count(),0,code);await page.keyboard.press('Escape');}
  for(const code of ['M1-1','M1-4']){
    await choose(code);await page.locator('#signValue-route').fill('395');await page.locator('#signValue-route').blur();
    await page.waitForFunction(()=>document.querySelector('#signValue-route').getAttribute('aria-invalid')==='false');

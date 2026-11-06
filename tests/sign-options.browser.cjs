@@ -12,11 +12,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.locator('[data-editor="signsEditor"]').click();await page.locator('#chooseSign').click();
   for(const code of ['R1-2','W14-3']) {
    await page.locator('#signSearch').fill(code);
-   assert.equal(await page.locator('#signGrid button').count(),1,`${code}: only one size in the selector`);
+   assert.equal(await page.locator('#signGrid .iconGridItem').count(),1,`${code}: only one size in the selector`);
   }
   await page.locator('#signSearch').fill('R2-1');
-  assert.equal(await page.locator('#signGrid button').count(),1,'sizes must not appear as separate designs');
-  await page.locator('#signGrid button').click();await page.locator('#signPicker').waitFor({state:'hidden'});
+  assert.equal(await page.locator('#signGrid .iconGridItem').count(),1,'sizes must not appear as separate designs');
+  await page.locator('#signGrid .iconGridItem').click();await page.locator('#signPicker').waitFor({state:'hidden'});
   assert.equal(await page.locator('#signPhysicalSize').count(),0,'physical sizes are not exposed');
   await page.locator('#signValue-speed').waitFor();
   await page.locator('#signValue-speed').fill('35');await page.locator('#signValue-speed').blur();
@@ -41,11 +41,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.deepEqual(await state(),before);
   await page.locator('[data-editor="signsEditor"]').click();await page.locator('.signHit').click();
   await page.locator('#chooseSign').click();await page.locator('#signSearch').fill('W1-1');
-  assert.equal(await page.locator('#signGrid button').count(),2,'left and right variants stay separate');
+  assert.equal(await page.locator('#signGrid .iconGridItem').count(),2,'left and right variants stay separate');
   await page.keyboard.press('Escape');
   for(const [code,key,value] of [['W12-2','inches','10'],['R12-1','weight','20'],['W16-8P','street','University Avenue'],['W16-2P','distance','1000']]){
    await page.locator('#chooseSign').click();await page.locator('#signSearch').fill(code);
-   await page.locator('#signGrid button').first().click();await page.locator('#signPicker').waitFor({state:'hidden'});
+   await page.locator('#signGrid .iconGridItem').first().click();await page.locator('#signPicker').waitFor({state:'hidden'});
    await page.locator(`#signValue-${key}`).fill(value);await page.locator(`#signValue-${key}`).blur();
    assert.equal(await page.locator(`#signValue-${key}`).getAttribute('aria-invalid'),'false',`${code} ${value}`);
    await page.screenshot({path:`/tmp/stripemaker-variable-${code}.png`});

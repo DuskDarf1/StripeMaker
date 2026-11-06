@@ -46,3 +46,21 @@ test('FDOT uses the latest dimensioned independent route-marker artwork and Seri
  assert.deepEqual(entry.size,[24,30]);assert.equal(f.series,'D');assert.equal(f.height,20);assert.equal(f.top,160/3);
  assert.equal(art.paths.length,9);
 });
+
+test('non-tolled state markers use SignMaker guide outlines and right-aligned Series D ink',()=>{
+ for(const digits of [2,3,4]){
+  const entry=entries.find(e=>e.id===`FTP-612-25--${digits}`),art=StripeMaker.signArtwork[entry.id],f=art.fields[0],k=100/entry.size[0];
+  assert(entry.source.includes('SignMaker v2.2'));
+  assert.deepEqual(entry.size,[digits===2?42:48,36]);
+  assert.equal(art.paths.length,3);assert.equal(f.series,'D');
+  assert.equal(f.height,15*k);assert.equal(f.top,14.75*k);
+  for(const number of digits===2?['1','44','99']:digits===3?['111','444','888']:['1111','4444','9999']){
+   const values={route:number},widen=D.expansion(art.fields,values,StripeMaker.signAlphabets);
+   const composed=D.compose(art.paths,art.fields,values,StripeMaker.signAlphabets,entry.box);
+   const xs=composed.slice(3).flatMap(p=>p.d.match(/-?\d*\.?\d+/g).map(Number).filter((_,i)=>i%2===0));
+   assert(Math.abs(Math.max(...xs)-(f.right+widen))<.001,number+' right ink alignment');
+   assert(widen>=0&&widen<=10*k);
+   assert.equal(composed[2].d,widen?D.transformPath(art.paths[2].d,widen,0,1):art.paths[2].d,'ribbon translates without distortion');
+  }
+ }
+});

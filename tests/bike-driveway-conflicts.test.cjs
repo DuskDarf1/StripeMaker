@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');const src=fs.readFileSync('js/elements.js','utf8');const cut=(a,b)=>src.slice(src.indexOf(a),src.indexOf(b));
 const ctx=vm.createContext({window:{StripeMaker:{roadWidths:require(process.cwd()+'/js/road-widths.js')}},console});
 let code=cut('  const LINE_INCHES','  document.addEventListener')+cut('    const inchesToPixels','    function layerFor')+'function layerFor(){}\n'+cut('    function solve(','    // Where a lane node is drawn')+cut('    const shapeOffset=','    function strokePath')+cut('    function wideTurnHosts(','    function joinedPolygons(')+cut('    function laneLinks(','    // Bike lane keyholes')+'const polylineLength=p=>p.slice(1).reduce((a,v,i)=>a+Math.hypot(v.x-p[i].x,v.y-p[i].y),0);';
-code+=cut('    const CONFLICT_SAMPLE_FEET','    // Colored pavement split at a cut')+cut('    function insidePolygon(',"    // A road's centerline (a two-way");
+code+=cut('    function medianEdgeCuts(','    function wideTurnHosts(')+cut('    const CONFLICT_SAMPLE_FEET','    // Colored pavement split at a cut')+cut('    function insidePolygon(',"    // A road's centerline (a two-way");
 vm.runInContext(code,ctx);ctx.sheet=JSON.parse(fs.readFileSync('tests/fixtures/bike-driveway-conflicts.json'));
 
 

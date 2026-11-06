@@ -5,6 +5,12 @@
 (() => {
   const SVG = 'http://www.w3.org/2000/svg';
   const assetBase = new URL('../', document.currentScript.src);
+  // Keep revised state-marker catalog, geometry and thumbnails in sync.
+  const assetURL = path => {
+    const url=new URL(path,assetBase);
+    if(/(?:florida\.js|FTP-612-25)/.test(path))url.searchParams.set('v','state-guide-2');
+    return url.href;
+  };
   document.addEventListener('DOMContentLoaded', () => {
     const app = window.StripeMaker, sheets = app.sheets, D = app.signDesigns, L = app.signLayout;
     const get = id => document.getElementById(id);
@@ -37,7 +43,7 @@
       if (scripts.has(path)) return scripts.get(path);
       const request = new Promise((resolve,reject) => {
         const script=document.createElement('script');
-        script.src=new URL(path,assetBase).href;
+        script.src=assetURL(path);
         const timer=setTimeout(()=>finish(new Error(`Loading timed out: ${path}`)),15000);
         const finish=error=>{clearTimeout(timer);script.remove();error?reject(error):resolve();};
         script.onload=()=>finish();
@@ -151,7 +157,7 @@
           const preview=document.createElementNS(SVG,'svg');preview.setAttribute('xmlns',SVG);preview.setAttribute('viewBox',`0 0 ${entry.box[0]+D.expansion(fields(entry.id),model.values,app.signAlphabets)} ${entry.box[1]}`);
           for(const attrs of drawnPaths(model))svg('path',attrs,preview);
           get('signPreview').src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(preview));
-        }else get('signPreview').src=new URL(entry.src,assetBase).href;
+        }else get('signPreview').src=assetURL(entry.src);
       }
       for(const [id,key,fallback] of [['signRotation','rotation',choiceRotation]]){
         for(const suffix of ['', 'Value']){const input=get(id+suffix);input.disabled=!entry;if(document.activeElement!==input)input.value=root?.[key]??fallback;}
@@ -163,6 +169,7 @@
       list.value=partIndex;list.disabled=!root;
       get('addAssemblySign').disabled=!root;get('removeAssemblySign').disabled=!root?.panels?.length;
       get('assemblyPosition').hidden=!root?.panels?.length;
+      get('assemblyAlignment').disabled=!root;get('assemblyAlignment').value=sign?.alignment??'center';
       for(const [id,key,fallback] of [['assemblyRow','row',partIndex],['assemblyColumn','column',0],['assemblyScale','scale',100]]){
         if(document.activeElement!==get(id))get(id).value=(sign?.[key]??fallback)+(key==='scale'?0:1);
       }
@@ -300,26 +307,28 @@
         drawOne(s,preview,true);
       }
     }
+    const favorites=app.pickerFavorites('signs');
     let pickerMatches=[],pickerCount=0;
-    function populate() {
+    function populate(focusKey) {
       const raw = get('signSearch').value;
       const codeQuery = raw.match(/\b[A-Z]{1,3}0*\d+-0*\d+[a-z]*/i)?.[0];
       const exactCode = codeQuery?.toLowerCase().replace(/([a-z]|-)0+(?=\d)/g, '$1');
       const query = normalize(codeQuery ? raw.replace(codeQuery, '') : raw).split(' ').filter(Boolean), category = get('signCategory').value;
       const matches = groups.filter(g => g.entries.some(e => (!category || e.category === category) && (!exactCode || e.code.toLowerCase() === exactCode || e.code.toLowerCase() === exactCode+'p' || e.variant.split(' ')[0].toLowerCase() === exactCode) && query.every(word => e.search.includes(word))));
-      pickerMatches=matches;pickerCount=0;grid.replaceChildren();grid.scrollTop=0;
+      pickerMatches=favorites.order(matches,g=>g.key);pickerCount=0;grid.replaceChildren();grid.scrollTop=0;
       appendPickerTiles();
+      if(typeof focusKey==='string')while(pickerCount<=pickerMatches.findIndex(g=>g.key===focusKey))appendPickerTiles();
       get('signSearchStatus').textContent=matches.length ? `${matches.length} matching designs` : 'No matching signs. Try another code or name.';
     }
     function appendPickerTiles(){
-      const batch=document.createDocumentFragment();
+      const hasFavorites=pickerMatches.some(g=>favorites.has(g.key));
       for (const group of pickerMatches.slice(pickerCount,pickerCount+48)) {
         pickerCount++;
         const entry=group.entries[0];
         const button = document.createElement('button');button.type='button';button.className='iconGridItem';button.dataset.design=entry.id;
         button.setAttribute('aria-label',`${label(entry)} — ${group.label}`);button.title=button.getAttribute('aria-label');
         button.setAttribute('aria-pressed',String(group.entries.some(e => e.id === (current()?.design ?? choice))));
-        const img = document.createElement('img');img.src=new URL(entry.src,assetBase).href;img.alt='';img.loading='lazy';img.decoding='async';button.append(img);
+        const img = document.createElement('img');img.src=assetURL(entry.src);img.alt='';img.loading='lazy';img.decoding='async';button.append(img);
         const caption = document.createElement('span');caption.textContent=label(entry);button.append(caption);
         button.addEventListener('click',async () => {
           const target = choosingFor;
@@ -330,24 +339,24 @@
             choiceText=null;choice=entry.id;choiceImage=null;choicePanelScale=100;
             const sign = target?.sheet === sheets.selected && sheets.selected.signs?.find(s => s.id === target.id);
             if(sign){
-              if(appendPanel){candidate={design:choice,values:{},scale:100};}
+              if(appendPanel){candidate={design:choice,values:{},scale:100};placeAssemblyPart('candidate',target.cell.row,target.cell.column);}
               else{const targetPart=L.parts(sign)[partIndex]??sign;targetPart.values={};targetPart.design=choice;delete targetPart.image;changed();}
             }else{choiceValues={};choicePanels=[];partIndex=0;}
             appendPanel=false;
-            placement=null;updatePanel();picker.close();tell(!assemblyPanel.hidden ? 'Drag the sign to a row or column, or click its preview to add below.' : sign ? 'Sign changed.' : 'Click Add Sign to place it on the sheet.');
+            placement=null;updatePanel();picker.close();tell(sign ? 'Assembly updated.' : 'Click Add Sign to place it on the sheet.');
           } catch(error) {get('signSearchStatus').textContent=error.message;}
         });
-        batch.append(button);
+        favorites.append(grid,button,group.key,label(entry),populate,{headings:hasFavorites,otherLabel:'Other signs'});
       }
-      grid.append(batch);
     }
     grid.addEventListener('scroll',()=>{if(grid.scrollTop+grid.clientHeight>=grid.scrollHeight-250)appendPickerTiles();},{passive:true});
-    grid.addEventListener('focusin',event=>{if(event.target===grid.lastElementChild)appendPickerTiles();});
-    async function openPicker(add=false) {
+    grid.addEventListener('focusin',event=>{if(event.target.closest('.pickerFavoriteCard')===grid.lastElementChild)appendPickerTiles();});
+    const belowAssembly = () => ({row:Math.max(...L.parts(current()).map((p,i)=>p.row??i))+1,column:0});
+    async function openPicker(add=false,cell=null) {
       appendPanel=add;
       try {await loadCatalog();} catch(error) {tell(error.message);return;}
       placement=null;refreshOverlay();updatePanel();
-      choosingFor=current() ? {sheet:sheets.selected,id:selected} : null;
+      choosingFor=current() ? {sheet:sheets.selected,id:selected,cell:add?(cell??belowAssembly()):null} : null;
       get('signSearch').value='';get('signCategory').value='';populate();picker.showModal();get('signSearch').focus();grid.scrollTop=0;
     }
     get('chooseSign').addEventListener('click',()=>openPicker());
@@ -357,7 +366,7 @@
     picker.addEventListener('keydown', event => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); picker.close(); }
     });
-    picker.addEventListener('close',() => {choosingFor=null;get('chooseSign').focus({preventScroll:true});});
+    picker.addEventListener('close',() => {const cell=choosingFor?.cell;choosingFor=null;appendPanel=false;(cell?get('assemblyGrid').querySelector(`[data-assembly-index="${partIndex}"]`):get('chooseSign'))?.focus({preventScroll:true});});
     get('addSign').addEventListener('click',async () => {
       if (placement) {placement=null;refreshOverlay();updatePanel();tell('Placement canceled.');return;}
       const sheet=sheets.selected, model=current()??draft(),design=model.design;if (!sheet || (!design&&!model.image&&typeof model.text!=='string'))return;
@@ -397,17 +406,18 @@
         p[key]=next;changed();tell('');
       });
     }
+    get('assemblyAlignment').addEventListener('change',event=>{const p=part();if(!p)return;p.alignment=event.target.value;changed();});
     function removeAssemblyPart(){
       const sign=current();if(!sign?.panels?.length)return;
       if(partIndex)sign.panels.splice(partIndex-1,1);
-      else{const first=sign.panels.shift();for(const key of ['design','image','values','row','column','scale']){delete sign[key];if(first[key]!=null)sign[key]=first[key];}}
+      else{const first=sign.panels.shift();for(const key of ['design','image','values','row','column','scale','alignment']){delete sign[key];if(first[key]!=null)sign[key]=first[key];}}
       partIndex=0;changed();
     }
     get('removeAssemblySign').addEventListener('click',removeAssemblyPart);
     function thumbnail(p){
       const entry=entryFor(p);if(!entry)return '';
       if(p.image)return p.image.src;
-      if(!artwork.has(p.design))return new URL(entry.src,assetBase).href;
+      if(!artwork.has(p.design))return assetURL(entry.src);
       const preview=document.createElementNS(SVG,'svg');preview.setAttribute('xmlns',SVG);
       preview.setAttribute('viewBox',`0 0 ${entry.box[0]+D.expansion(fields(p.design),p.values,app.signAlphabets)} ${entry.box[1]}`);
       for(const attrs of drawnPaths(p))svg('path',attrs,preview);
@@ -416,11 +426,8 @@
     function renderAssembly(){
       if(assemblyPanel.hidden||assemblyDrag)return;
       const root=current(),grid=get('assemblyGrid');grid.replaceChildren();
-      const palette=get('assemblyCandidate');palette.replaceChildren();palette.disabled=!root;
-      get('assemblyRemoveDrop').disabled=!root?.panels?.length;
+      get('assemblyRemoveDrop').disabled=!root?.panels?.length;get('duplicateAssemblySign').disabled=!root;
       if(!root)return;
-      candidate??={design:root.design,image:root.image,values:structuredClone(root.values??{}),scale:100};
-      const image=document.createElement('img');image.src=thumbnail(candidate);image.alt='Sign to add';palette.append(image);
       const layout=dimensions(root),columns=[...new Set(layout.items.map(p=>p.column))].sort((a,b)=>a-b),rows=[...new Set(layout.items.map(p=>p.row))].sort((a,b)=>a-b);
       const allColumns=[...new Set(columns.flatMap(c=>[c-1,c,c+1]))].sort((a,b)=>a-b);
       const allRows=[...new Set(rows.flatMap(r=>[r-1,r,r+1]))].sort((a,b)=>a-b);
@@ -430,7 +437,9 @@
         return Math.max(...layout.items.filter(p=>Math.abs(p[axis]-value)===distance).map(p=>p[size]));
       };
       const widths=allColumns.map(c=>extent(c,'column','width')),heights=allRows.map(r=>extent(r,'row','height'));
-      const factor=Math.min(3,350/widths.reduce((a,b)=>a+b,0),270/heights.reduce((a,b)=>a+b,0));
+      // Fit the editor space, independent of the sign's schematic sheet size.
+      const available=Math.max(1,grid.clientWidth);
+      const factor=Math.min(available/widths.reduce((a,b)=>a+b,0),available/heights.reduce((a,b)=>a+b,0));
       grid.style.gridTemplateColumns=widths.map(w=>`${w*factor}px`).join(' ');
       grid.style.gridTemplateRows=heights.map(h=>`${h*factor}px`).join(' ');
       for(const r of allRows)for(const c of allColumns){
@@ -440,19 +449,27 @@
         button.setAttribute('aria-label',item?`${label(entryFor(item.part))}, row ${r+1}, column ${c+1}`:r<0?'Add above this column':c<0?'Add left of this row':`Add at row ${r+1}, column ${c+1}`);
         if(item){
           const img=document.createElement('img');img.src=thumbnail(item.part);img.alt='';img.style.width=`${item.width*factor}px`;img.style.height=`${item.height*factor}px`;button.append(img);
+          const [horizontal,vertical]=L.alignment(item.part.alignment);
+          button.style.justifyContent=['flex-start','center','flex-end'][horizontal+1];
+          button.style.alignItems=['flex-start','center','flex-end'][vertical+1];
           button.setAttribute('aria-pressed',String(i===partIndex));
           button.onclick=()=>{if(assemblyDrag)return;partIndex=i;updatePanel();};
-        }else{button.className='assemblyEmpty';button.textContent='+';button.onclick=()=>placeAssemblyPart('candidate',r,c);}
+        }else{button.className='assemblyEmpty';button.textContent='+';button.onclick=()=>openPicker(true,{row:r,column:c});}
         grid.append(button);
       }
     }
-    function placeAssemblyPart(from,row,column){
+    let assemblyGridWidth=0;
+    new ResizeObserver(entries=>{
+      const width=entries[0].contentRect.width;
+      if(width>0&&Math.abs(width-assemblyGridWidth)>.5){assemblyGridWidth=width;renderAssembly();}
+    }).observe(get('assemblyGrid'));
+    function placeAssemblyPart(from,row,column,preserveScale=false){
       const root=current();if(!root)return;
       const parts=L.parts(root),occupied=parts.findIndex((p,i)=>(p.row??i)===row&&(p.column??0)===column);
       if(from==='candidate'){
         if(!candidate)return;
         if(occupied>=0){tell('Drop the new sign on a + cell.');return;}
-        (root.panels??=[]).push({...structuredClone(candidate),row,column,scale:100});partIndex=root.panels.length;
+        (root.panels??=[]).push({...structuredClone(candidate),row,column,scale:preserveScale?(candidate.scale??100):100});partIndex=root.panels.length;
       }else{
         const index=+from,p=parts[index];if(!p)return;
         const old={row:p.row??index,column:p.column??0};
@@ -465,15 +482,20 @@
       added.forEach((p,i)=>{p.row=(p.row??i)-minRow;p.column=(p.column??0)-minColumn;});
       changed();tell('Assembly updated.');
     }
-    get('assemblyCandidate').onclick=()=>{
-      if(assemblyDrag||!current())return;
-      placeAssemblyPart('candidate',Math.max(...L.parts(current()).map((p,i)=>p.row??i))+1,0);
+    get('duplicateAssemblySign').onclick=()=>{
+      const root=current(),selectedPart=part();if(!root||!selectedPart)return;
+      // Copy just the selected face, never the root's complete assembly or leader.
+      candidate={};for(const key of ['design','image','text','values','scale','alignment'])if(selectedPart[key]!=null)candidate[key]=structuredClone(selectedPart[key]);
+      const parts=L.parts(root),column=selectedPart.column??0;
+      let row=(selectedPart.row??partIndex)+1;
+      while(parts.some((p,i)=>(p.row??i)===row&&(p.column??0)===column))row++;
+      placeAssemblyPart('candidate',row,column,true);
     };
     get('assemblyRemoveDrop').onclick=removeAssemblyPart;
     assemblyPanel.addEventListener('pointerdown',event=>{
-      const source=event.target.closest('#assemblyCandidate, [data-assembly-index]');
+      const source=event.target.closest('[data-assembly-index]');
       if(!source||source.disabled||event.button!==0||source.dataset.assemblyIndex==='-1')return;
-      assemblyDrag={source,from:source.id==='assemblyCandidate'?'candidate':source.dataset.assemblyIndex,x:event.clientX,y:event.clientY,pointer:event.pointerId,moved:false};
+      assemblyDrag={source,from:source.dataset.assemblyIndex,x:event.clientX,y:event.clientY,pointer:event.pointerId,moved:false};
       source.setPointerCapture(event.pointerId);
     });
     assemblyPanel.addEventListener('pointermove',event=>{
@@ -506,7 +528,7 @@
       updatePanel();refreshOverlay();
     }
     new MutationObserver(syncEditor).observe(assemblyPanel,{attributes:true,attributeFilter:['hidden']});
-    async function importSignImage(file, pasted=false){
+    async function importSignImage(file, pasted=false, cell=null){
       const sheet=sheets.selected,token=++pasteRequest;
       const assembly=!pasted&&!assemblyPanel.hidden&&current(),target=assembly?.id;
       if(!sheet){tell('Upload a sheet before adding a sign.');return;}
@@ -522,7 +544,7 @@
         canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
         if(token!==pasteRequest||sheet!==sheets.selected||!active()||(target&&current()?.id!==target))return;
         const custom={src:canvas.toDataURL('image/png'),width:canvas.width,height:canvas.height,name:pasted?'Pasted image':file.name};
-        if(assembly){candidate={image:custom,values:{},scale:100};updatePanel();tell('Drag the uploaded sign into a cell, or click its preview to add below.');return;}
+        if(assembly){candidate={image:custom,values:{},scale:100};const destination=cell??belowAssembly();placeAssemblyPart('candidate',destination.row,destination.column);tell('Uploaded sign added.');return;}
         choiceText=null;choicePanelScale=100;choiceImage=custom;
         choice=null;choiceValues={};choicePanels=[];choiceRotation=0;selected=null;partIndex=0;placement={};
         updatePanel();refreshOverlay();tell((pasted?'Image pasted. ':'')+'Click the arrow tip location, then the sign face location.');
@@ -531,7 +553,7 @@
     for(const id of ['uploadSign','uploadAssemblySign','uploadSignPicker'])get(id).addEventListener('click',()=>get('signImageFile').click());
     get('signImageFile').addEventListener('change',event=>{
       const file=event.target.files[0];event.target.value='';if(!file)return;
-      picker.close();importSignImage(file);
+      const cell=choosingFor?.cell;picker.close();importSignImage(file,false,cell);
     });
     document.addEventListener('paste',event=>{
       if(picker.open)return;
