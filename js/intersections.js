@@ -1374,6 +1374,7 @@
       if (round(item)) return drawRoundaboutGuides(item, convert);
       const paths = movementRoutes(item);
       for (const m of item.movements) {
+        if (chosen && (app.traffic.reversed ? m.to : m.from) !== chosen) continue;
         if (!G.curve(item, m)) continue;
         const route = paths.get(m.id) ?? [];
         const points = app.traffic.path(arrows ? trim(route, ARROW_FEET) : route).map(convert);
@@ -1691,13 +1692,15 @@
           parent,
         );
         text.textContent = i + 1;
+        const pick = () => { select(item.id, a.id); showPanel(); };
         text.onpointerdown = event => {
           if (event.button !== 0) return;
           event.preventDefault();
           event.stopPropagation();
           text.focus({ preventScroll: true });
+          // Select before an intervening overlay rebuild can discard the click.
+          pick();
         };
-        const pick = () => { select(item.id, a.id); showPanel(); };
         text.onclick = event => { event.stopPropagation(); pick(); };
         text.onkeydown = event => {
           if (event.key !== "Enter" && event.key !== " ") return;
@@ -2419,6 +2422,7 @@
       selectedSheet = sheets.selected;
       if (approach) {
         chosen = approach;
+        selectedIsland = null;
         inputLane = null;
       }
       refresh();
@@ -2562,8 +2566,9 @@
       if(islandDraft?.item!==current()?.id)islandDraft=null;
       if (!current()?.movements.some((m) => m.id === chosenMovement)) chosenMovement = null;
       refreshList();
-      refreshOverlay();
+      // Fields resolve default approach/lane selection before its guides draw.
       if (!panel.hidden) renderFields();
+      refreshOverlay();
     }
     function commit() {
       roads.tidyGores(sheets.selected);

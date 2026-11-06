@@ -529,7 +529,7 @@
       // With no tapers or width profiles, an unchanged cross section has the
       // same arithmetic result at every station. Copy it instead of sampling
       // every lane's smoothstep again along a long curve.
-      const uniform = !tapers.size && (typeof shift !== 'function' || shiftByWidthOnly) && !road.widthProfiles && !road.gapProfiles &&
+      const uniform = !road.centerlineTransition && !tapers.size && (typeof shift !== 'function' || shiftByWidthOnly) && !road.widthProfiles && !road.gapProfiles &&
         ends.every(([a,b],lane) => road.keepWidthAtJoins || a === b && a === roadWidths.laneWidth(road,lane)) &&
         gapEnds[0].every((g,k) => g.width === gapEnds[1][k].width);
       let crossSection;
@@ -567,6 +567,7 @@
     // a joint), Taper, or None.
     function tapersOf(sheet, road, solved) {
       const tapers = new Map();
+      if (road.centerlineTransition) return tapers;
       for (const e of [0, 1]) {
         for (let lane = 0; lane < road.lanes; lane++) {
           // FDM Exhibit 223-3: taper the vehicle lane, never the bike lane.
@@ -612,9 +613,15 @@
       let shape;
       if (partner) {
         const gap = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES) + feetToPixels(sheet, pairLinks(sheet, road, partner)[0]?.median ?? 0);
-        const shift = [0, 1].map(e => gap / 2 - laneLateral(sheet, road, LEFT_EDGE, e));
+        const transition = road.centerlineTransition && partner.centerlineTransition;
+        const oppositeWidth = f => feetToPixels(sheet, Array.from({length: partner.lanes}, (_, lane) =>
+          window.StripeMaker.roadWidths.laneAt(sheet, partner, lane, 1 - f)).reduce((a,b) => a+b, 0));
+        // Transition sections follow the pavement axis; only the division of
+        // that fixed-width pavement between directions changes along its length.
+        const shift = [0, 1].map(e => transition ? gap / 2 + oppositeWidth(e) / 2 : gap / 2 - laneLateral(sheet, road, LEFT_EDGE, e));
         const { a, c0, c1, b } = sharedControls(road, partner, solved, shift);
-        shape = buildShape(sheet, road, bezier(a, c0, c1, b, road.keepWidthAtJoins), tapers, width => gap / 2 + road.lanes * width / 2, true);
+        shape = buildShape(sheet, road, bezier(a, c0, c1, b, road.keepWidthAtJoins), tapers,
+          transition ? (_width, f) => gap / 2 + oppositeWidth(f) / 2 : width => gap / 2 + road.lanes * width / 2, !transition);
       } else {
         shape=buildShape(sheet,road,centerline(road,solved),tapers);
         if(road.keepWidthAtJoins) {
@@ -703,7 +710,9 @@
       const partner = pairOf(sheet, road);
       if (!partner) return controls(solved.get(`${road.id}:0`), solved.get(`${road.id}:1`), road.ends.map(end => end.length));
       const gap = inchesToPixels(sheet, DOUBLE_GAP_INCHES + LINE_INCHES) + feetToPixels(sheet, pairLinks(sheet, road, partner)[0]?.median ?? 0);
-      return sharedControls(road, partner, solved, [0, 1].map(e => gap / 2 - laneLateral(sheet, road, LEFT_EDGE, e)));
+      return sharedControls(road, partner, solved, [0, 1].map(e => road.centerlineTransition && partner.centerlineTransition
+        ? gap / 2 + feetToPixels(sheet, partner.lanes * endWidth(sheet, partner, 1-e)) / 2
+        : gap / 2 - laneLateral(sheet, road, LEFT_EDGE, e)));
     }
     // Where a lane node is drawn: just inside the road, so the end nodes of one road
     // and the start nodes of the next don't cover each other at a joint.
@@ -2531,6 +2540,14 @@
       return removedGreen || before !== JSON.stringify([sheet.roads.map(r => r.laneTypes ?? null), sheet.joints.map(j => j.links)]);
     }
     function changed(change = null) {
+      // A lane-count edit replaces the automatic cross-section with an
+      // ordinary road; never retain profiles with missing lane entries.
+      for (const road of sheets.selected?.roads ?? []) if (road.centerlineTransition &&
+          [road.centerlineTransition.start, road.centerlineTransition.end].some(widths => widths.length !== road.lanes)) {
+        const partner = pairOf(sheets.selected, road);
+        delete road.centerlineTransition;
+        if (partner) delete partner.centerlineTransition;
+      }
       curveLinks.prune(sheets.selected);
       if(change && sheets.selected?.roads.some(r=>r.ends.some(e=>e.curveLink)))change=null;
       pruneGores(sheets.selected);
@@ -3615,10 +3632,59 @@
     // Joins lane `lane` at end `e` of `road` to the target lane. The road's end (and
     // anything already joined to it) moves onto the target's joint, turning to its
     // direction so the ends line up. Opposite directions join left edge to left edge.
+    function centerlineTransitionCandidate(sheet, road, e, target) {
+      const partner = pairOf(sheet, road), other = target.road, opposite = pairOf(sheet, other);
+      if (!partner || !opposite || target.e === e || road.lanes === other.lanes ||
+          road.lanes + partner.lanes !== other.lanes + opposite.lanes) return null;
+      const four = [road, partner, other, opposite];
+      // Only simple, undivided, uniform-width travel roads. Branches, bike
+      // facilities and explicit tapers retain their normal lane-to-lane joins.
+      if (four.some(r => r.centerlineTransition || r.perLaneWidths || r.widthProfiles?.some(p => p && [p.start,p.end,p.width].some(w => w !== r.laneWidth)) || r.gapProfiles ||
+          r.laneWidth !== road.laneWidth || Object.values(r.laneTypes ?? {}).some(t => t.type !== 'travel') ||
+          Object.values(r.tapers ?? {}).some(t => t.mode === 'taper')) ||
+          [road, other].some(r => pairLinks(sheet, r, pairOf(sheet, r)).some(l => l.median > 0)) ||
+          attachments(sheet, jointOf(sheet, road.ends[e].joint)).length !== 2 ||
+          attachments(sheet, jointOf(sheet, other.ends[target.e].joint)).length !== 2) return null;
+      const before = solve(sheet);
+      if (dot(travelAt(road, e, before), travelAt(other, target.e, before)) < .95) return null;
+      return {partner, other, opposite};
+    }
+    function prepareCenterlineTransition(sheet, road, e, target) {
+      const candidate = centerlineTransitionCandidate(sheet, road, e, target);
+      if (!candidate) return null;
+      const {partner, other, opposite} = candidate;
+      // Half of the joining segment becomes the transition. This is editable
+      // geometry, not a speed-based design taper length.
+      const count = road.lanes, backCount = partner.lanes;
+      const cut = cutRoad(sheet, road, .5);
+      const section = e ? cut.after : road, back = pairOf(sheet, section);
+      const baseline = solve(sheet);
+      const configure = (r, start, end) => {
+        const added = Math.max(start, end) - r.lanes;
+        for (const joint of sheet.joints) for (const link of joint.links) {
+          if (link.a === r.id && typeof link.ai === 'number') link.ai += added;
+          if (link.b === r.id && typeof link.bi === 'number') link.bi += added;
+        }
+        r.lanes = Math.max(start, end);
+        r.centerlineTransition = Object.fromEntries([['start', start], ['end', end]].map(([key, n]) =>
+          [key, Array.from({length:r.lanes}, (_, lane) => lane < r.lanes - n ? 0 : r.laneWidth)]));
+        delete r.widthProfiles; delete r.laneEndWidths;
+      };
+      configure(section, e ? count : other.lanes, e ? other.lanes : count);
+      configure(back, e ? opposite.lanes : backCount, e ? backCount : opposite.lanes);
+      reanchor(sheet, baseline, [cut.joint]);
+      return section;
+    }
     function connect(sheet, road, e, lane, target) {
       const host = jointOf(sheet, target.road.ends[target.e].joint);
+      if (road.ends[e].joint === host.id || road.ends[1 - e].joint === host.id) return;
+      const transition = prepareCenterlineTransition(sheet, road, e, target);
+      if (transition) {
+        road = transition; lane = road.lanes - 1;
+        target = {...target, lane: target.road.lanes - 1};
+        selectedRoad = road;
+      }
       const moving = jointOf(sheet, road.ends[e].joint);
-      if (host === moving || road.ends[1 - e].joint === host.id) return;
       // A physical lane join supersedes a separate curve constraint.
       curveLinks.unlink(sheet,road.ends[e].curveLink);
       curveLinks.unlink(sheet,target.road.ends[target.e].curveLink);
@@ -4298,11 +4364,14 @@
         if (!(value >= min && value <= max)) return;
         defaults[key] = value;
         if (selectedRoad) {
+          const oldWidth = selectedRoad.laneWidth;
           selectedRoad[key] = value;
           // Both sides of a two-way road share a lane width.
           const partner = key === "laneWidth" && pairOf(sheets.selected, selectedRoad);
           if (partner) partner.laneWidth = value;
           if (key === "laneWidth") for (const road of [selectedRoad, partner].filter(Boolean)) {
+            if (road.centerlineTransition) for (const key of ['start','end'])
+              road.centerlineTransition[key] = road.centerlineTransition[key].map(width => width * value / oldWidth);
             delete road.laneWidths; delete road.laneEndWidths; delete road.widthProfiles;
           }
           changed();
@@ -4379,7 +4448,14 @@
       const m = lerp(p012, p123);
       const distance = (p, q) => Math.hypot(q.x - p.x, q.y - p.y);
       const pulls = { start: a.travel ? distance(a, p01) : null, before: distance(p012, m), after: distance(m, p123), end: b.travel ? distance(p23, b) : null };
-      const joint = newJoint(sheet, m, road.id, unit(distance(p012, p123) > 1e-6 ? { x: p123.x - p012.x, y: p123.y - p012.y } : { x: b.x - a.x, y: b.y - a.y }));
+      const direction = unit(distance(p012, p123) > 1e-6 ? { x: p123.x - p012.x, y: p123.y - p012.y } : { x: b.x - a.x, y: b.y - a.y });
+      let jointPoint = m;
+      if (road.centerlineTransition && partner?.centerlineTransition) {
+        const width = (r, f) => Array.from({length:r.lanes}, (_, lane) => window.StripeMaker.roadWidths.laneAt(sheet,r,lane,f)).reduce((a,b)=>a+b,0);
+        const shift = feetToPixels(sheet, (width(partner,1-fraction)-width(road,fraction))/2), normal = rightOf(direction);
+        jointPoint = {x:m.x+normal.x*shift,y:m.y+normal.y*shift};
+      }
+      const joint = newJoint(sheet, jointPoint, road.id, direction);
       const rename = (at, from, to) => {
         window.StripeMaker.intersections?.rehomeRoad(sheet, from, 1, to, 1);
         for (const spawn of sheet.vehicleSpawns ?? []) {
@@ -4397,6 +4473,12 @@
       };
       // The far end's tapers travel with the part after the cut.
       const split = (from, to) => {
+        if (from.centerlineTransition) {
+          const profile = from.centerlineTransition, f = from === road ? fraction : 1-fraction;
+          const middle = profile.start.map((w, lane) => w + (profile.end[lane] - w) * f);
+          to.centerlineTransition = {start: middle.slice(), end: profile.end.slice()};
+          from.centerlineTransition = {start: profile.start.slice(), end: middle};
+        }
         to.tapers = Object.fromEntries(Object.entries(from.tapers ?? {}).filter(([key]) => key.startsWith("1:")));
         from.tapers = Object.fromEntries(Object.entries(from.tapers ?? {}).filter(([key]) => !key.startsWith("1:")));
       };
@@ -4731,8 +4813,9 @@
         }
         const edge = !event.shiftKey && !snapTarget && snapEdge(sheet, solved, wanted, SNAP_PIXELS / sheet.view.scale, [...moving, road]);
         if (edge) snapTarget = { ...edge, x: edge.center.x, y: edge.center.y, edgePoint: { x: edge.x, y: edge.y } };
-        const goal = snapTarget ?? wanted;
-        const current = lanePoint(sheet, road, e, lane, solve(sheet));
+        const transition = snapTarget?.road && !snapTarget.edge && centerlineTransitionCandidate(sheet, road, e, snapTarget);
+        const goal = transition ? lanePoint(sheet, snapTarget.road, snapTarget.e, snapTarget.road.lanes - 1, solved) : snapTarget ?? wanted;
+        const current = lanePoint(sheet, road, e, transition ? road.lanes - 1 : lane, solve(sheet));
         joint.x += goal.x - current.x;
         joint.y += goal.y - current.y;
         syncCurve(nodeRef(road, e), true);

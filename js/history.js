@@ -149,6 +149,8 @@
     }, true);
     updateButtons();
     return { record, rebase, undo, redo, runWithUndo,
+      capture() { finishChange();return {undo:[...undoStack],redo:[...redoStack]}; },
+      resume(state) { pendingBefore=null;editingInput=null;undoStack.splice(0,undoStack.length,...(state?.undo??[]));redoStack.splice(0,redoStack.length,...(state?.redo??[]));currentSnapshot=serialize();updateButtons(); },
       diagnostics: ids => {
         const subset = value => value === null ? null : Object.fromEntries(Object.entries(JSON.parse(value)).filter(([id])=>ids.includes(Number(id))));
         return {undo:undoStack.map(subset),redo:redoStack.map(subset),pending:subset(pendingBefore),current:subset(serialize()),editingInput:editingInput?.id??null};

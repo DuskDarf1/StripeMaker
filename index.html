@@ -9,17 +9,18 @@
   <script src="js/vendor/geotiff.js"></script>
   <script src="js/select-picker.js"></script>
   <script src="js/picker-favorites.js"></script>
-  <script src="js/history.js"></script>
-  <script src="js/settings.js"></script>
+  <script src="js/history.js?v=projects-1"></script>
+  <script src="js/settings.js?v=scroll-mode-1"></script>
   <script src="js/shortcuts.js"></script>
-  <script src="js/sheets.js"></script>
-  <script src="js/road-widths.js"></script>
+  <script src="js/projects.js"></script>
+  <script src="js/sheets.js?v=scroll-mode-1"></script>
+  <script src="js/road-widths.js?v=centerline-transition-1"></script>
   <script src="js/marking-trim.js"></script>
   <script src="js/line-styles.js"></script>
   <script src="js/item-transform.js"></script>
   <script src="js/longitudinal.js"></script>
   <script src="js/curve-links.js"></script>
-  <script src="js/elements.js"></script>
+  <script src="js/elements.js?v=centerline-transition-1"></script>
   <script src="js/levels.js"></script>
   <script src="js/simulator-lane-changes.js"></script>
   <script src="js/simulator-routing.js"></script>
@@ -41,7 +42,7 @@
   <script src="js/signal-editor.js"></script>
   <script src="js/intersection-geometry.js"></script>
   <script src="js/roundabout-geometry.js"></script>
-  <script src="js/intersections.js"></script>
+  <script src="js/intersections.js?v=approach-selection-1"></script>
   <script src="js/sign-designs.js?v=state-guide-2"></script>
   <script src="js/sign-layout.js?v=assembly-cells-1"></script>
   <script src="fonts/osifont-outlines.js"></script>
@@ -56,13 +57,13 @@
   <script src="js/markings.js?v=picker-favorites-1"></script>
   <script src="js/surfaces.js"></script>
   <script src="js/download.js"></script>
-  <script src="js/project-json.js"></script>
+  <script src="js/project-json.js?v=scroll-mode-1"></script>
   <script src="js/selection.js"></script>
   <script src="js/main.js"></script>
   <script src="js/action-instructions.js"></script>
   <link href="css/page.css" rel="stylesheet" />
   <link href="css/form.css" rel="stylesheet" />
-  <link href="css/menus.css" rel="stylesheet" />
+  <link href="css/menus.css?v=approach-selection-1" rel="stylesheet" />
   <link href="css/signs.css" rel="stylesheet" />
   <link href="css/signals.css" rel="stylesheet" />
   <link href="css/markings.css" rel="stylesheet" />
@@ -599,7 +600,7 @@
     </div>
     <p id="downloadStatus" role="status" aria-live="polite"></p>
     <hr />
-    <div class="fieldRow"><label for="projectExportScope">JSON sheets</label><select id="projectExportScope"><option value="all">All sheets</option><option value="selected">Selected sheet</option></select></div>
+    <div class="fieldRow"><label for="projectExportScope">JSON sheets</label><select id="projectExportScope"><option value="all">All sheets in this project</option><option value="selected">Selected sheet</option></select></div>
     <p class="headPopoverHint">Editable project, including original images, geometry, links, markings, and settings.</p>
     <div class="headActions"><button type="button" id="exportProject">Export Project JSON</button></div>
     <p id="projectExportStatus" role="status" aria-live="polite"></p>
@@ -610,6 +611,11 @@
       <h2 id="settingsTitle">Settings</h2>
       <span class="headPopoverHint">All sheets</span>
     </div>
+    <label for="scrollWheelMode" class="downloadLabel">Scroll wheel</label>
+    <select id="scrollWheelMode" aria-describedby="scrollWheelModeHint">
+      <option value="auto">Automatic</option><option value="zoom">Zoom</option><option value="pan">Pan</option>
+    </select>
+    <p id="scrollWheelModeHint" class="headPopoverHint">Choose Zoom for a mouse wheel or Pan for trackpad scrolling. Pinch and Ctrl+scroll always zoom.</p>
     <label for="drawingOpacity" class="downloadLabel">Drawing opacity (%)</label>
     <div class="dimensionInputs">
       <input id="drawingOpacity" type="range" min="0" max="100" step="1" value="100" aria-describedby="drawingOpacityHint" />
@@ -652,6 +658,13 @@
       <h2 id="sheetsTitle">Sheets</h2>
       <span class="headPopoverHint">GeoTIFF, JPEG, PNG</span>
     </div>
+    <div class="fieldRow"><label for="projectSelect">Project</label><select id="projectSelect" aria-label="Open project"></select></div>
+    <div class="headActions"><button type="button" id="newProject">New Project</button><button type="button" id="openProject">Open Project JSON</button><button type="button" id="closeProject">Close Project</button></div>
+    <input id="openProjectFile" type="file" accept=".json,application/json" multiple hidden aria-label="Open project JSON files" />
+    <div class="fieldRow"><label for="projectName">Project name</label><input id="projectName" maxlength="80" /></div>
+    <div class="fieldRow" id="closedProjectsRow" hidden><label for="closedProjectSelect">Reopen</label><select id="closedProjectSelect"></select></div>
+    <p class="headPopoverHint">Projects save in this browser. Closing keeps a project available under Reopen. Export JSON for a portable copy.</p>
+    <p id="projectStatus" role="status" aria-live="polite"></p>
     <div class="headActions">
       <button type="button" id="uploadSheet">Upload Sheet</button>
       <button type="button" id="blankSheet">New Blank Sheet</button>
@@ -661,7 +674,7 @@
     <div class="headActions"><button type="button" id="importProject">Import Project JSON</button></div>
     <input id="projectFile" type="file" accept=".json,application/json" hidden aria-label="Import project JSON" />
     <div class="fieldRow"><label for="projectImportSettings">Use imported app settings</label><input id="projectImportSettings" type="checkbox" /></div>
-    <p class="headPopoverHint">Imports as new sheets. Existing sheets stay in place.</p>
+    <p class="headPopoverHint">Imports sheets into the current project. Use Open Project JSON to keep a separate set of sheets.</p>
     <p id="projectImportStatus" role="status" aria-live="polite"></p>
     <input id="sheetFile" type="file" accept=".tif,.tiff,.jpg,.jpeg,.png,image/tiff,image/jpeg,image/png" multiple hidden aria-label="Upload sheet images" />
     <p id="sheetsEmpty">No sheets yet.</p>

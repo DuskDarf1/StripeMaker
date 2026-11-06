@@ -59,6 +59,7 @@
   function endWidth(sheet, road, e, lane, visiting = new Set()) {
     if (lane == null && road.lanes) return Array.from({length: road.lanes}, (_, i) => endWidth(sheet, road, e, i)).reduce((a,b) => a+b, 0) / road.lanes;
     lane ??= 0;
+    if (road.centerlineTransition) return road.centerlineTransition[e ? "end" : "start"][lane] ?? laneWidth(road, lane);
     // FDM 223.2.2.1: bicycle width belongs to the bicycle facility. A travel
     // lane feed or a generic intersection mouth must not stretch it to 12 ft.
     const type = road.laneTypes?.[lane]?.type;
@@ -132,6 +133,10 @@
   // Callers sampling many fractions of one lane can pass its [start, end]
   // endpoint widths, which don't change along the road.
   function laneAt(sheet, road, lane, fraction, ends = [endWidth(sheet, road, 0, lane), endWidth(sheet, road, 1, lane)]) {
+    if (road.centerlineTransition) {
+      const t = Math.max(0, Math.min(1, fraction));
+      return ends[0] + (ends[1] - ends[0]) * t;
+    }
     // A wide turn meets the receiving road by geometric clipping, not by
     // narrowing its cross-section into the receiving lane.
     if (road.keepWidthAtJoins) return laneWidth(road,lane);

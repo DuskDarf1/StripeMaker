@@ -4,10 +4,12 @@
   const KEY = 'stripemaker-settings-v1';
   // Drawing opacity and sign leader arrow thickness (percent), the highest level drawn (0: all), and
   // black contrast for markings on elevated levels (concrete bridge decks).
-  const defaults = { drawingOpacity: 100, signArrowWeight: 100, hideLevelsAbove: 0, autoContrast: true, leftHandTraffic: false, simulationTemperature: 40, simulationPlaybackRate: 1, simulationOverlay: 'none', simulationOverlays: [], keybindMode: 'all' };
+  const defaults = { drawingOpacity: 100, signArrowWeight: 100, hideLevelsAbove: 0, autoContrast: true, leftHandTraffic: false, simulationTemperature: 40, simulationPlaybackRate: 1, simulationOverlay: 'none', simulationOverlays: [], keybindMode: 'all', scrollWheelMode: 'auto' };
   let values = { ...defaults };
   let stored={};
   try { stored=JSON.parse(localStorage.getItem(KEY)??'{}')??{};Object.assign(values,stored); } catch {}
+  const validScrollMode=value=>['auto','zoom','pan'].includes(value);
+  if(!validScrollMode(values.scrollWheelMode))values.scrollWheelMode=defaults.scrollWheelMode;
   const validArrowWeight=value=>Number.isFinite(value)&&value>=1&&value<=400;
   if(!validArrowWeight(values.signArrowWeight))values.signArrowWeight=defaults.signArrowWeight;
   const validOpacity = value => Number.isFinite(value) && value >= 0 && value <= 100;
@@ -36,6 +38,7 @@
         if(!['none',...overlayNames].includes(value))return;
         values.simulationOverlays=value==='none'?[]:[value];
       }
+      if(key==='scrollWheelMode'&&!validScrollMode(value))return;
       if(key==='signArrowWeight'&&!validArrowWeight(value))return;
       if (key === 'drawingOpacity' && !validOpacity(value)) return;
       if (key === 'simulationTemperature' && !validTemperature(value)) return;
@@ -74,6 +77,9 @@
       controls.forEach(update => update());
       document.documentElement.style.setProperty('--drawing-opacity', settings.get('drawingOpacity') / 100);
     };
+    const scrollMode=document.getElementById('scrollWheelMode');
+    scrollMode.value=settings.get('scrollWheelMode');
+    scrollMode.addEventListener('change',()=>settings.set('scrollWheelMode',scrollMode.value));
     const levels = document.getElementById('hideLevelsAbove');
     levels.value = String(settings.get('hideLevelsAbove'));
     levels.addEventListener('change', () => settings.set('hideLevelsAbove', Number(levels.value)));
@@ -83,7 +89,7 @@
     const contrast = document.getElementById('autoContrast');
     contrast.checked = settings.get('autoContrast');
     contrast.addEventListener('change', () => settings.set('autoContrast', contrast.checked));
-    document.addEventListener('settingschange', event => { show();traffic.checked=settings.get('leftHandTraffic');levels.value=String(settings.get('hideLevelsAbove'));contrast.checked=settings.get('autoContrast');if(!['drawingOpacity','simulationSpeed','simulationTemperature','simulationPlaybackRate','simulationOverlay','simulationOverlays'].includes(event.detail?.key))window.StripeMaker.roadEditor?.render(); });
+    document.addEventListener('settingschange', event => { show();scrollMode.value=settings.get('scrollWheelMode');traffic.checked=settings.get('leftHandTraffic');levels.value=String(settings.get('hideLevelsAbove'));contrast.checked=settings.get('autoContrast');if(!['scrollWheelMode','drawingOpacity','simulationSpeed','simulationTemperature','simulationPlaybackRate','simulationOverlay','simulationOverlays'].includes(event.detail?.key))window.StripeMaker.roadEditor?.render(); });
     show();
   });
 })();

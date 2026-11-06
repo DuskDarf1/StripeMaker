@@ -342,7 +342,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
       for (let i = 0; i < values.length; i += 2) points.push({ x: values[i], y: values[i + 1] });
       return points[Math.floor(points.length * 0.75)];
     });
-    await page.locator("#addRoad").click();
+    await selectChoice(page.locator("#elementToAdd"), "road");
+    await page.locator("#addElement").click();
     for (const p of [branchPoint, { x: branchPoint.x, y: branchPoint.y - 130 }]) {
       const at = await sheetPoint(p);
       await page.mouse.click(at.x, at.y);
@@ -359,7 +360,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     // Standalone median points snap to the curved intersection boundary and stay anchored.
     if (!(await page.locator("#elementsEditor").isVisible()))
       await page.getByRole("button", { name: "Elements", exact: true }).click();
-    await page.locator("#addMedian").click();
+    await selectChoice(page.locator("#elementToAdd"), "median");
+    await page.locator("#addElement").click();
     const edge = await page.evaluate(() => {
       const s = StripeMaker.sheets.selected;
       const edge = StripeMaker.intersections
@@ -563,14 +565,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     assert.equal(JSON.stringify(await state()), roadBefore, "lane link is one undo step");
     console.log("road end to approach snapping passed");
     // Drawing to a free incoming mouth links the new road and finishes the chain.
-    if (!(await page.locator("#addRoad").isVisible()))
+    if (!(await page.locator("#addElement").isVisible()))
       await page.getByRole("button", { name: "Elements", exact: true }).click();
     const beforeDraw = await page.evaluate(() => JSON.stringify({
       roads: StripeMaker.sheets.selected.roads, joints: StripeMaker.sheets.selected.joints,
       intersections: StripeMaker.sheets.selected.intersections,
     }));
     const mouth = await laneMouth();
-    await page.locator("#addRoad").click();
+    await selectChoice(page.locator("#elementToAdd"), "road");
+    await page.locator("#addElement").click();
     const startPoint = await sheetPoint({ x: mouth.x - 180, y: mouth.y - 70 });
     const endPoint = await sheetPoint(mouth);
     await page.mouse.click(startPoint.x, startPoint.y);

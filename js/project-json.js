@@ -72,6 +72,9 @@
       for(const r of d.roads) {
         if(!id(r.id)||roads.has(r.id)||!Number.isInteger(r.lanes)||r.lanes<1||r.lanes>999||!finite(r.laneWidth)||r.laneWidth<=0||!Array.isArray(r.ends)||r.ends.length!==2)fail('Invalid road or lane count.');
         if(r.ends.some(e=>!object(e)||!id(e.joint)||![1,-1].includes(e.sign)))fail('Invalid road end.');
+        if(r.centerlineTransition!=null && (!object(r.centerlineTransition) || ['start','end'].some(key =>
+          !Array.isArray(r.centerlineTransition[key]) || r.centerlineTransition[key].length!==r.lanes ||
+          r.centerlineTransition[key].some(w=>!finite(w)||w<0) || !r.centerlineTransition[key].some(w=>w>0))))fail('Invalid centerline transition.');
         roads.set(r.id,r);
       }
       for(const j of d.joints) {
@@ -167,6 +170,7 @@
       const added=await app.sheets.importProject(entries,project.selectedSheet);
       if(applySettings) {
         const s=project.settings??{};
+        if(['auto','zoom','pan'].includes(s.scrollWheelMode))app.settings.set('scrollWheelMode',s.scrollWheelMode);
         if(finite(s.drawingOpacity)&&s.drawingOpacity>=0&&s.drawingOpacity<=100)app.settings.set('drawingOpacity',s.drawingOpacity);
         if(finite(s.signArrowWeight)&&s.signArrowWeight>=1&&s.signArrowWeight<=400)app.settings.set('signArrowWeight',s.signArrowWeight);
         if(Number.isInteger(s.hideLevelsAbove)&&s.hideLevelsAbove>=0&&s.hideLevelsAbove<=9)app.settings.set('hideLevelsAbove',s.hideLevelsAbove);
@@ -183,10 +187,11 @@
     }
     exportButton.addEventListener('click',async()=>{
       exportButton.disabled=true;exportStatus.textContent='Preparing project JSON…';
+      const projectName=app.projects?.active?.name??'StripeMaker-project';
       try {
         const project=await snapshot(document.getElementById('projectExportScope').value);
         const blob=new Blob([JSON.stringify(project,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob);
-        const link=document.createElement('a');link.href=url;link.download='StripeMaker-project.json';link.click();
+        const link=document.createElement('a');link.href=url;link.download=projectName.replace(/[\\/:*?"<>|]/g,'-')+'.json';link.click();
         setTimeout(()=>URL.revokeObjectURL(url),30000);
         exportStatus.textContent=`Exported ${project.sheets.length} sheet${project.sheets.length===1?'':'s'}.`;
       } catch(error) {exportStatus.textContent='Could not export: '+error.message;}
@@ -196,8 +201,10 @@
     input.addEventListener('change',async()=>{
       const file=input.files[0];if(!file)return;
       importButton.disabled=true;importStatus.textContent='Reading project JSON…';
+      const destination=app.projects?.active?.id;
       try {
         const project=JSON.parse(await file.text());
+        if(destination!==app.projects?.active?.id)throw Error('The active project changed. Import the file again into the intended project.');
         const added=await load(project,{applySettings:document.getElementById('projectImportSettings').checked});
         importStatus.textContent=`Imported ${added.length} sheet${added.length===1?'':'s'}. Existing sheets preserved.`;
         if(project.version>VERSION||project.sheets.some(s=>Object.keys(s.data).some(key=>!DATA_KEYS.has(key))))importStatus.textContent+=' Additional data retained for re-export; newer features may not be editable here.';

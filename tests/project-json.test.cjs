@@ -87,3 +87,10 @@ test('intersection medians preserve local geometry and anchors; malformed island
   const q=structuredClone(p);edit(q.sheets[0].data.intersections[0].medians[0]);assert.throws(()=>validate(q),/intersection medians/);
  }
 });
+test('centerline transition is additive version-1 geometry with validated widths',()=>{
+ const p=sample(),r=p.sheets[0].data.roads[0];r.centerlineTransition={start:[0,12],end:[12,12]};
+ const copy=JSON.stringify(p);assert.equal(validate(p),p);assert.equal(JSON.stringify(p),copy);
+ for(const bad of [{start:[12],end:[12,12]},{start:[0,0],end:[12,12]},{start:[-1,12],end:[12,12]},{start:[null,12],end:[12,12]}]){
+  r.centerlineTransition=bad;assert.throws(()=>validate(p),/centerline transition/);
+ }
+});

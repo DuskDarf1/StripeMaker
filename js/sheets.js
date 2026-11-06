@@ -181,7 +181,8 @@
 
     // Sheets persist across reloads in IndexedDB. Original files are written once;
     // scale, view, and roads are small records saved shortly after each change.
-    let database = null;
+    let database = null, databaseName='StripeMaker', switching=false, fileOperations=0, storageError=null;
+    const projectContexts=new Map(), writes=new Set();
     const pendingSaves = new Set();
     let saveTimer = 0;
     let restoring = true;
@@ -195,7 +196,7 @@
     });
     function openDatabase() {
       database ??= new Promise((resolve, reject) => {
-        const request = indexedDB.open("StripeMaker", 1);
+        const request = indexedDB.open(databaseName, 1);
         request.onupgradeneeded = () => {
           for (const store of ["files", "sheets", "meta"]) request.result.createObjectStore(store);
         };
@@ -204,16 +205,18 @@
       });
       return database;
     }
-    async function transact(mode, work) {
-      const db = await openDatabase();
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction(["files", "sheets", "meta"], mode);
-        let result;
-        transaction.oncomplete = () => resolve(result);
-        transaction.onerror = transaction.onabort = event => reject(event.target.error ?? transaction.error);
-        try { result = work(transaction); }
-        catch (error) { transaction.abort(); reject(error); }
-      });
+    function transact(mode, work) {
+      const opening=openDatabase(); // Capture the database before any project switch.
+      const task=opening.then(db=>new Promise((resolve,reject)=>{
+        const transaction=db.transaction(["files","sheets","meta"],mode);let result;
+        transaction.oncomplete=()=>resolve(result);
+        transaction.onerror=transaction.onabort=event=>reject(event.target.error??transaction.error);
+        try{result=work(transaction);}catch(error){transaction.abort();reject(error);}
+      }));
+      if(mode==='readwrite'){
+        writes.add(task);task.then(()=>writes.delete(task),error=>{writes.delete(task);storageError=error;});
+      }
+      return task;
     }
     const record = sheet => ({
       name: sheet.name, inchesPerPixel: sheet.inchesPerPixel, view: sheet.view,
@@ -231,15 +234,33 @@
       clearTimeout(saveTimer);
       saveTimer = setTimeout(flushSaves, SAVE_DELAY);
     }
-    function flushSaves() {
-      const saving = [...pendingSaves].filter(sheet => sheets.includes(sheet));
+    function flushSaves(strict=false) {
+      clearTimeout(saveTimer);
+      const saving=(strict?sheets:[...pendingSaves]).filter(sheet=>sheets.includes(sheet)).map(sheet=>({id:sheet.id,data:record(sheet)}));
       pendingSaves.clear();
-      transact("readwrite", transaction => {
-        const store = transaction.objectStore("sheets");
-        saving.forEach(sheet => store.put(record(sheet), sheet.id));
-        // Until restore finishes, the list is partial; keep the saved order intact.
-        if (!restoring) transaction.objectStore("meta").put(appRecord(), "app");
-      }).catch(saveFailed);
+      const meta=restoring?null:appRecord();
+      const task=transact("readwrite",transaction=>{
+        const store=transaction.objectStore("sheets");saving.forEach(sheet=>store.put(sheet.data,sheet.id));
+        if(meta)transaction.objectStore("meta").put(meta,"app");
+      });
+      if(strict)return task;
+      return task.catch(saveFailed);
+    }
+    async function flushProject(){
+      await Promise.allSettled([...writes]);
+      if(storageError){
+        // Retry a failed file write too, not merely its small drawing record.
+        // This path only runs after a storage failure; ordinary switches never
+        // rewrite large background images.
+        const retry=await Promise.all(sheets.map(async sheet=>({id:sheet.id,data:record(sheet),file:await fileRecord(sheet.file)})));
+        const meta=appRecord();
+        await transact('readwrite',transaction=>{
+          for(const sheet of retry){transaction.objectStore('files').put(sheet.file,sheet.id);transaction.objectStore('sheets').put(sheet.data,sheet.id);}
+          transaction.objectStore('meta').put(meta,'app');
+        });
+        storageError=null;
+      }
+      await flushSaves(true);
     }
     // Safari/WebKit can fail IndexedDB Blob/File preparation. Store immutable
     // bytes plus metadata instead; runtime/export still receive ordinary Files.
@@ -284,7 +305,7 @@
       } catch (error) {
         restoring = false;
         saveFailed(error);
-        return;
+        throw error;
       }
       // Old failed restores could save an incomplete order. Records, rather
       // than that index alone, are the source of truth for recoverable sheets.
@@ -352,7 +373,12 @@
     }
 
     // `extra` overrides what's read from the file (a blank sheet's name and scale).
-    async function addFiles(files, extra = {}) {
+    async function addFiles(files,extra={}) {
+      if(restoring||switching){status.textContent='Wait for the project to finish opening.';return;}
+      fileOperations++;
+      try{return await addFilesImpl(files,extra);}finally{fileOperations--;}
+    }
+    async function addFilesImpl(files, extra = {}) {
       for (const file of files) {
         if (!SUPPORTED.test(file.name)) {
           status.textContent = `${file.name} isn't supported. Use GeoTIFF, JPEG, or PNG.`;
@@ -381,7 +407,12 @@
 
     // Decode every background before changing the open project. Import adds
     // sheets with new sheet IDs; all geometry IDs stay local to each sheet.
-    async function importProject(entries, selectedId) {
+    async function importProject(entries,selectedId) {
+      if(restoring||switching)throw Error('Wait for the project to finish opening.');
+      fileOperations++;
+      try{return await importProjectImpl(entries,selectedId);}finally{fileOperations--;}
+    }
+    async function importProjectImpl(entries, selectedId) {
       if(restoring)throw Error("Sheets are still loading. Try again in a moment.");
       const prepared=[];
       try {
@@ -431,9 +462,13 @@
       return new File([blob], `${name}.png`, { type: "image/png" });
     }
     blankButton.addEventListener("click", async () => {
+      if(restoring||switching)return;
+      const destination=databaseName;
       const used = sheets.map(sheet => Number(sheet.name.match(/^Blank sheet (\d+)$/)?.[1] ?? 0));
       const name = `Blank sheet ${Math.max(0, ...used) + 1}`;
-      await addFiles([await blankFile(name)], { name, inchesPerPixel: BLANK.inchesPerPixel, blank: true, width: BLANK.width, height: BLANK.height });
+      fileOperations++;let file;try{file=await blankFile(name);}finally{fileOperations--;}
+      if(destination!==databaseName)return;
+      await addFiles([file], { name, inchesPerPixel: BLANK.inchesPerPixel, blank: true, width: BLANK.width, height: BLANK.height });
     });
     // Renaming: the list, downloads, and saved sheets take the new name. Not an undo step.
     nameInput.addEventListener("input", () => {
@@ -713,20 +748,26 @@
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? stage.clientHeight : 1;
       const dx = event.deltaX * unit;
       const dy = event.deltaY * unit;
+      const mode=window.StripeMaker.settings.get('scrollWheelMode');
+      // Explicit modes bypass all device guessing and any previous pan burst.
+      if(event.ctrlKey){zoomAt(selected,Math.exp(-dy*.01),event.clientX,event.clientY);return;}
+      if(mode==='zoom'){zoomAt(selected,Math.exp(-dy*.002),event.clientX,event.clientY);return;}
+      if(mode==='pan'){panBy(selected,-dx,-dy);return;}
       const legacy=event.wheelDeltaY;
-      // Legacy wheel deltas are rounded independently of pixel deltas. Exact
-      // equality can therefore turn individual trackpad/momentum events into
-      // mouse-wheel zooms. Prefer panning for pixel scrolls, recognize discrete
-      // wheel notches, and keep a trackpad burst in pan mode between events.
+      // WheelEvent has no device-type flag. A 120-unit notch is mouse evidence
+      // even when deltaY is 40 (the same 3:1 ratio some trackpads report), or
+      // fractional because of OS scaling. Without legacy notch information,
+      // recognize large integral vertical steps. Small/diagonal smooth scrolls
+      // begin a pan burst; its momentum stays panning until the burst ends.
       const pixel=event.deltaMode===0,now=performance.now();
-      const pixelRatio=legacy&&Math.abs(legacy+3*event.deltaY)<=Math.max(1,Math.abs(legacy)*.01);
-      const notch=legacy&&Math.abs(legacy)>=120&&Math.abs(legacy)%120===0&&Number.isInteger(event.deltaY);
-      const trackpad=pixel&&(now<trackpadScrollUntil||dx!==0||!notch||pixelRatio);
-      if(trackpad&&!event.ctrlKey)trackpadScrollUntil=now+300;
-      if (event.ctrlKey) zoomAt(selected, Math.exp(-dy * 0.01), event.clientX, event.clientY);
-      else if (trackpad) panBy(selected, -dx, -dy);
+      const notch=Number.isFinite(legacy)&&Math.abs(legacy)>=120&&Math.abs(legacy)%120===0;
+      const verticalStep=Number.isInteger(event.deltaY)&&Math.abs(event.deltaY)>=40;
+      const trackpad=pixel&&(now<trackpadScrollUntil||dx!==0||!(notch||verticalStep));
+      if(trackpad)trackpadScrollUntil=now+300;
+      if (trackpad) panBy(selected, -dx, -dy);
       else zoomAt(selected, Math.exp(-dy * 0.002), event.clientX, event.clientY);
     }, { passive: false });
+    document.addEventListener('settingschange',event=>{if(event.detail?.key==='scrollWheelMode')trackpadScrollUntil=0;});
     let gestureScale = 1;
     workspace.addEventListener("gesturestart", event => { event.preventDefault(); gestureScale = 1; });
     workspace.addEventListener("gesturechange", event => {
@@ -773,6 +814,41 @@
     workspace.addEventListener("pointercancel", endPointer);
     window.addEventListener("resize", () => { if (selected?.view.fitted) fitSheet(selected); });
 
+    function captureProject(){
+      return {sheets:[...sheets],selected,database,unrestored:[...unrestored],restoreErrors:structuredClone(restoreErrors),savedSelection,storageError,history:history.capture()};
+    }
+    function resumeProject(context){
+      sheets.splice(0,sheets.length,...context.sheets);unrestored.clear();context.unrestored.forEach(id=>unrestored.add(id));
+      restoreErrors.splice(0,restoreErrors.length,...context.restoreErrors);savedSelection=context.savedSelection;database=context.database;storageError=context.storageError;
+      restoring=false;renderList();select(context.selected);history.resume(context.history);
+      status.textContent=restoreErrors.map(error=>error.message).join(' ');
+    }
+    async function activateProject(name,{discardCurrent=false}={}){
+      if(name===databaseName)return;
+      if(restoring||switching||fileOperations)throw Error('Wait for the current sheet operation to finish.');
+      switching=true;workspace.inert=true;
+      const previousName=databaseName;
+      try{
+        document.activeElement?.blur();
+        window.StripeMaker.showEditor?.(null);
+        // Stop previews/simulation and finish number-field edits before saving.
+        history.capture();
+        if(!discardCurrent)await flushProject();
+        const previous=captureProject();projectContexts.set(previousName,previous);
+        clearTimeout(saveTimer);pendingSaves.clear();
+        databaseName=name;
+        // New sheet IDs never collide with previously visited projects' IDs.
+        nextId=Math.max(nextId,Date.now());
+        const cached=projectContexts.get(name);
+        if(cached)resumeProject(cached);
+        else{
+          database=null;storageError=null;sheets.splice(0);unrestored.clear();restoreErrors.splice(0);savedSelection=null;
+          restoring=true;select(null);renderList();history.resume();
+          try{await restore();}catch(error){databaseName=previousName;resumeProject(previous);throw error;}
+        }
+      }finally{switching=false;workspace.inert=false;}
+    }
+
     // Other tools draw on the selected sheet through this API and the sheetview
     // (pan/zoom) and sheetchange (selection or scale) events.
     const overlays = [];
@@ -788,8 +864,9 @@
       select,
       save: scheduleSave,
       snapshot: sheet => { const {projectArchive,...data}=record(sheet);return structuredClone(data); },
-      importProject,
-      get ready() { return !restoring; },
+      importProject,activateProject,flush:flushProject,
+      get initialized() { return initialized; },
+      get ready() { return !restoring&&!switching; },
       diagnostics: () => ({ restoring, unrestored: [...unrestored], restoreErrors: structuredClone(restoreErrors) }),
       addOverlay(element) {
         overlays.push(element);
@@ -843,6 +920,7 @@
       document.dispatchEvent(new CustomEvent("sheethistory"));
       report("Sheet cleared.");
     });
-    restore();
+    const initialized=(window.StripeMaker.projectWorkspace?.ready??Promise.resolve('StripeMaker')).then(name=>{databaseName=name;return restore();}).catch(error=>{saveFailed(error);});
+    document.dispatchEvent(new CustomEvent('sheetsinitialized'));
   });
 })();

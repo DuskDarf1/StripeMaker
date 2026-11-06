@@ -426,6 +426,7 @@ button.medianPoint:focus-visible { outline: 2px solid var(--textColor); outline-
 .intersectionMovement { fill:none; pointer-events:none; }
 .intersectionControlLine { fill:none; stroke:#ffc72c; stroke-width:.7; stroke-dasharray:3 3; pointer-events:none; }
 .intersectionApproachLabel { fill:var(--textColor); font:600 8px "Overpass",sans-serif; pointer-events:all; cursor:pointer; touch-action:none; }
+.intersectionApproachLabel[aria-pressed="true"],
 .intersectionApproachLabel:focus-visible { outline:2px solid var(--textColor); outline-offset:2px; }
 .intersectionOutline { fill:none; stroke:#ffc72c; stroke-width:2; pointer-events:none; }
 .intersectionHit { fill:transparent; stroke:none; cursor:move; pointer-events:fill; touch-action:none; }
@@ -465,3 +466,10 @@ body.menusHidden #configBar, body.menusHidden .editor, body.menusHidden .headsMe
 /* Rotation uses the existing marking handle, with room for its action icon. */
 .markingOverlay .selectionRotate { width: 24px; height: 24px; display: grid; place-items: center; color: #252628; cursor: grab; }
 .selectionRotate .material-symbols-outlined { font-size: 18px; }
+
+/* Project controls reuse SignalMaker's compact fields and wrapping action rows. */
+#sheetsMenu { width:min(24rem, calc(100vw - 1rem)); }
+#sheetsMenu .fieldRow > label { flex-basis:6rem; }
+#sheetsMenu .headActions { flex-wrap:wrap; }
+#sheetsMenu .headActions button { flex:1 1 auto; }
+#projectName, #sheetName { min-width:0; }

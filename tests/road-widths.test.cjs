@@ -124,3 +124,13 @@ test('wide turn endpoint follows host while free cross-section retains its own w
  host.laneWidth=10;
  assert.equal(endWidth(s,wide,1),10);
 });
+test('centerline transition trades inside width while keeping total pavement width fixed',()=>{
+ const a={id:1,lanes:2,laneWidth:12,ends:[{joint:1},{joint:2}],centerlineTransition:{start:[12,12],end:[0,12]}},
+ b={id:2,lanes:2,laneWidth:12,ends:[{joint:2},{joint:1}],centerlineTransition:{start:[12,12],end:[0,12]}};
+ const s={roads:[a,b],joints:[]};
+ for(const f of [0,.1,.25,.5,.9,1]) {
+  assert(Math.abs(laneAt(s,a,0,f)-12*(1-f))<1e-10);assert.equal(laneAt(s,a,1,f),12);
+  assert(Math.abs([0,1].reduce((sum,l)=>sum+laneAt(s,a,l,f)+laneAt(s,b,l,1-f),0)-36)<1e-10);
+ }
+ assert.equal(endWidth(s,a,1,0),0);
+});

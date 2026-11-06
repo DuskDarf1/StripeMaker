@@ -63,7 +63,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.deepEqual(new Set(await visible()), new Set([fixture.approaches[2].id]), 'edge handle selection also switches guides');
     assert.equal(await page.locator('.roadLayer .intersectionMovement').count(), 0, 'editor guides remain outside exported artwork');
 
-    // Ordinary intersections retain their existing simultaneous movement view.
+    // Ordinary intersections also filter movements by the selected approach.
     const ids = await page.evaluate(() => {
       const app = StripeMaker, G = app.intersectionGeometry, s = app.sheets.selected, old = s.intersections[0], x = G.create();
       Object.assign(x, { id: old.id, x: old.x, y: old.y });
@@ -82,7 +82,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(await chosen(), ids[0], 'ordinary intersection number supports Enter');
     assert.equal(await page.evaluate(() => JSON.stringify(StripeMaker.sheets.selected.intersections[0])), unchanged, 'selection preserves geometry and movements');
     const colors = await page.locator('.intersectionMovement[stroke^="hsl"]').evaluateAll(paths => [...new Set(paths.map(p => p.getAttribute('stroke')))]);
-    assert.equal(colors.length, 2, 'ordinary intersection keeps movements from both approaches visible');
+    assert.equal(colors.length, 1, 'ordinary intersection shows only the selected approach movements');
     assert.deepEqual(errors, []);
     console.log('roundabout selected-approach guide browser tests passed');
   } finally { await browser.close(); }
