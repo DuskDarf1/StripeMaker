@@ -72,6 +72,12 @@
       for(const r of d.roads) {
         if(!id(r.id)||roads.has(r.id)||!Number.isInteger(r.lanes)||r.lanes<1||r.lanes>999||!finite(r.laneWidth)||r.laneWidth<=0||!Array.isArray(r.ends)||r.ends.length!==2)fail('Invalid road or lane count.');
         if(r.ends.some(e=>!object(e)||!id(e.joint)||![1,-1].includes(e.sign)))fail('Invalid road end.');
+        if(r.arcAngle!=null&&(!finite(r.arcAngle)||Math.abs(r.arcAngle)>360))fail('Invalid circular arc angle.');
+        if(r.arcJoinFit!=null&&typeof r.arcJoinFit!=='boolean')fail('Invalid arc join fitting.');
+        if(r.arcJoinRadius!=null&&(!finite(r.arcJoinRadius)||r.arcJoinRadius<=0))fail('Invalid fitted arc radius.');
+        if(r.arcLoop!=null&&(!object(r.arcLoop)||!finite(r.arcLoop.radius)||r.arcLoop.radius<=0||!object(r.arcLoop.heading)||!finite(r.arcLoop.heading.x)||!finite(r.arcLoop.heading.y)||Math.abs(Math.hypot(r.arcLoop.heading.x,r.arcLoop.heading.y)-1)>1e-6||Math.abs(r.arcAngle)!==360))fail('Invalid circular loop.');
+        if(Math.abs(r.arcAngle)===360&&!r.arcLoop)fail('Missing circular loop radius.');
+        if(r.clothoid!=null&&(!object(r.clothoid)||!finite(r.clothoid.start)||!finite(r.clothoid.end)||Math.max(Math.abs(r.clothoid.start),Math.abs(r.clothoid.end))>720||r.arcAngle!=null))fail('Invalid clothoid.');
         if(r.centerlineTransition!=null && (!object(r.centerlineTransition) || ['start','end'].some(key =>
           !Array.isArray(r.centerlineTransition[key]) || r.centerlineTransition[key].length!==r.lanes ||
           r.centerlineTransition[key].some(w=>!finite(w)||w<0) || !r.centerlineTransition[key].some(w=>w>0))))fail('Invalid centerline transition.');
@@ -171,6 +177,7 @@
       if(applySettings) {
         const s=project.settings??{};
         if(['auto','zoom','pan'].includes(s.scrollWheelMode))app.settings.set('scrollWheelMode',s.scrollWheelMode);
+        if(finite(s.pavementDarkness)&&s.pavementDarkness>=0&&s.pavementDarkness<=100)app.settings.set('pavementDarkness',s.pavementDarkness);
         if(finite(s.drawingOpacity)&&s.drawingOpacity>=0&&s.drawingOpacity<=100)app.settings.set('drawingOpacity',s.drawingOpacity);
         if(finite(s.signArrowWeight)&&s.signArrowWeight>=1&&s.signArrowWeight<=400)app.settings.set('signArrowWeight',s.signArrowWeight);
         if(Number.isInteger(s.hideLevelsAbove)&&s.hideLevelsAbove>=0&&s.hideLevelsAbove<=9)app.settings.set('hideLevelsAbove',s.hideLevelsAbove);

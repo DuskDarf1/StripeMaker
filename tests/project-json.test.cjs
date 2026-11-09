@@ -94,3 +94,23 @@ test('centerline transition is additive version-1 geometry with validated widths
   r.centerlineTransition=bad;assert.throws(()=>validate(p),/centerline transition/);
  }
 });
+test('circular arc angles round-trip additively and reject malformed geometry',()=>{
+ const p=sample(),r=p.sheets[0].data.roads[0];
+ for(const angle of [-180,-90,0,90,180]){r.arcAngle=angle;assert.equal(validate(p),p);assert.equal(r.arcAngle,angle);}
+ for(const angle of ['90',NaN,Infinity,-361,361]){r.arcAngle=angle;assert.throws(()=>validate(p),/circular arc|non-finite/);}
+});
+test('closed circles and clothoids retain additive geometry with bounded finite metadata',()=>{
+ const p=sample(),r=p.sheets[0].data.roads[0];r.arcAngle=360;r.arcLoop={radius:250,heading:{x:1,y:0}};assert.equal(validate(p),p);
+ for(const radius of [0,-5,Infinity]){r.arcLoop.radius=radius;assert.throws(()=>validate(p));}r.arcLoop.radius=250;
+ r.arcLoop.heading={x:2,y:0};assert.throws(()=>validate(p),/loop/);
+ delete r.arcLoop;assert.throws(()=>validate(p),/loop/);delete r.arcAngle;
+ r.clothoid={start:0,end:540};assert.equal(validate(p),p);
+ for(const end of ['90',NaN,721]){r.clothoid.end=end;assert.throws(()=>validate(p));}
+});
+test('fitted circular join settings round-trip without changing the version-1 road graph',()=>{
+ const p=sample(),r=p.sheets[0].data.roads[0];r.arcAngle=-112;r.arcJoinFit=true;r.arcJoinRadius=55;
+ const before=JSON.stringify(p);assert.equal(validate(p),p);assert.equal(JSON.stringify(p),before);
+ for(const edit of [r=>r.arcJoinFit='yes',r=>r.arcJoinRadius=0,r=>r.arcJoinRadius=Infinity]){
+  const q=structuredClone(p);edit(q.sheets[0].data.roads[0]);assert.throws(()=>validate(q));
+ }
+});

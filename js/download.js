@@ -11,9 +11,9 @@
   const PDF_MAX_POINTS = 14400;        // PDF pages are at most 200 in on a side
   const PDF_JPEG_QUALITY = 0.92;
   const TITLE_SLANT = 0.21;            // about 12°, like slanted plan-sheet lettering
-  const ASPHALT = "#3a3b3d";
+  const asphalt = () => window.StripeMaker.settings.pavementColor();
   const BAND_EDGE = 0.6;               // pavement outline width, sheet pixels
-  const ROAD_STYLES = `.roadBand{fill:${ASPHALT};stroke:${ASPHALT};stroke-width:${BAND_EDGE}px}
+  const roadStyles = () => `.roadBand{fill:${asphalt()};stroke:${asphalt()};stroke-width:${BAND_EDGE}px}
     .roadMarking{fill:none}.roadOutline,.preview{display:none}`;
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -191,7 +191,7 @@
       svg.setAttribute("preserveAspectRatio","none");
       svg.querySelector(".roadSelection")?.remove();
       const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
-      style.textContent = ROAD_STYLES;
+      style.textContent = roadStyles();
       svg.prepend(style);
       const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" }));
       const image = new Image();
@@ -280,7 +280,10 @@
             for (const hole of mask.querySelectorAll("path")) out.push(`${box} re\n${pathOps(hole.getAttribute("d"))}\nW* n`);
           }
           const clip = node.getAttribute("clip-path") && byId(node.getAttribute("clip-path"));
-          if (clip) for (const shape of clip.querySelectorAll("path")) out.push(`${pathOps(shape.getAttribute("d"))}\nW n`);
+          if (clip) for (const shape of clip.querySelectorAll("path")) {
+            const evenOdd=(shape.getAttribute('clip-rule')??clip.getAttribute('clip-rule'))==='evenodd';
+            out.push(`${pathOps(shape.getAttribute("d"))}\n${evenOdd?'W*':'W'} n`);
+          }
           [...node.children].forEach(walk);
           out.push("Q");
           return;
@@ -296,8 +299,8 @@
         }
         if (name !== "path") return;
         const band = classes.contains("roadBand");
-        const fill = node.getAttribute("fill") ?? (band ? ASPHALT : null);
-        const stroke = node.getAttribute("stroke") ?? (band ? ASPHALT : null);
+        const fill = node.getAttribute("fill") ?? (band ? asphalt() : null);
+        const stroke = node.getAttribute("stroke") ?? (band ? asphalt() : null);
         const ops = [pathOps(node.getAttribute("d"))];
         if (stroke) {
           // Miter joins with SVG's miter limit, or round joins (contrast borders).

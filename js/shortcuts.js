@@ -43,6 +43,7 @@
     ['ClearAll', 'Clear All', 'CTRL+BACKSPACE', click('clearAll')],
     ['ZoomIn', 'Zoom In', '=', () => app.sheets?.zoomBy?.(1.25)],
     ['ZoomOut', 'Zoom Out', '-', () => app.sheets?.zoomBy?.(0.8)],
+    ['RecenterView', 'Recenter viewport (fit sheet)', 'F', () => app.sheets?.recenter?.()],
   ];
   // Shortcuts other code handles directly (selection, history, Escape); when
   // remapped, the new keys are sent on as the original ones.

@@ -4,7 +4,7 @@
   const KEY = 'stripemaker-settings-v1';
   // Drawing opacity and sign leader arrow thickness (percent), the highest level drawn (0: all), and
   // black contrast for markings on elevated levels (concrete bridge decks).
-  const defaults = { drawingOpacity: 100, signArrowWeight: 100, hideLevelsAbove: 0, autoContrast: true, leftHandTraffic: false, simulationTemperature: 40, simulationPlaybackRate: 1, simulationOverlay: 'none', simulationOverlays: [], keybindMode: 'all', scrollWheelMode: 'auto' };
+  const defaults = { drawingOpacity: 100, pavementDarkness: 77, signArrowWeight: 100, hideLevelsAbove: 0, autoContrast: true, leftHandTraffic: false, simulationTemperature: 40, simulationPlaybackRate: 1, simulationOverlay: 'none', simulationOverlays: [], keybindMode: 'all', scrollWheelMode: 'auto' };
   let values = { ...defaults };
   let stored={};
   try { stored=JSON.parse(localStorage.getItem(KEY)??'{}')??{};Object.assign(values,stored); } catch {}
@@ -14,6 +14,7 @@
   if(!validArrowWeight(values.signArrowWeight))values.signArrowWeight=defaults.signArrowWeight;
   const validOpacity = value => Number.isFinite(value) && value >= 0 && value <= 100;
   if(typeof values.leftHandTraffic!=='boolean')values.leftHandTraffic=false;
+  if (!validOpacity(values.pavementDarkness)) values.pavementDarkness = defaults.pavementDarkness;
   if (!validOpacity(values.drawingOpacity)) values.drawingOpacity = defaults.drawingOpacity;
   // Discard the retired global speed; local road zones own speeds.
   delete values.simulationSpeed;
@@ -26,6 +27,13 @@
   const validOverlays=value=>Array.isArray(value)&&value.every(name=>overlayNames.includes(name));
   values.simulationOverlays=validOverlays(stored.simulationOverlays)?[...new Set(stored.simulationOverlays)]:values.simulationOverlay==='none'?[]:[values.simulationOverlay];
   const settings = {
+    pavementColor: () => {
+      // Keep the original slightly cool asphalt at the default, with white/black
+      // endpoints. This changes the opaque surface color, not marking opacity.
+      const d = values.pavementDarkness;
+      const channels = [58, 59, 61].map(c => Math.round(d <= 77 ? 255 + (c-255)*d/77 : c*(100-d)/23));
+      return '#' + channels.map(c=>c.toString(16).padStart(2,'0')).join('');
+    },
     snapshot: () => ({...defaults,...values,simulationOverlays:[...values.simulationOverlays]}),
     get: key => key==='simulationOverlays'?[...values.simulationOverlays]:values[key] ?? defaults[key],
     set(key, value) {
@@ -40,7 +48,7 @@
       }
       if(key==='scrollWheelMode'&&!validScrollMode(value))return;
       if(key==='signArrowWeight'&&!validArrowWeight(value))return;
-      if (key === 'drawingOpacity' && !validOpacity(value)) return;
+      if ((key === 'drawingOpacity' || key === 'pavementDarkness') && !validOpacity(value)) return;
       if (key === 'simulationTemperature' && !validTemperature(value)) return;
       if (key === 'simulationPlaybackRate') { if (!validPlaybackRate(value)) return; value = Math.round(value * 10) / 10; }
       if (key === 'simulationSpeed') return; // Legacy project setting, intentionally ignored.
@@ -62,7 +70,7 @@
   };
 
   document.addEventListener('DOMContentLoaded', () => {
-    const controls = ['drawingOpacity', 'signArrowWeight'].map(key => {
+    const controls = ['drawingOpacity', 'pavementDarkness', 'signArrowWeight'].map(key => {
       const range = document.getElementById(key), number = document.getElementById(`${key}Value`);
       const show = () => { range.value = number.value = settings.get(key); };
       for (const input of [range, number]) input.addEventListener('input', () => {
@@ -75,6 +83,7 @@
     });
     const show = () => {
       controls.forEach(update => update());
+      document.documentElement.style.setProperty('--pavement-color', settings.pavementColor());
       document.documentElement.style.setProperty('--drawing-opacity', settings.get('drawingOpacity') / 100);
     };
     const scrollMode=document.getElementById('scrollWheelMode');
@@ -89,7 +98,7 @@
     const contrast = document.getElementById('autoContrast');
     contrast.checked = settings.get('autoContrast');
     contrast.addEventListener('change', () => settings.set('autoContrast', contrast.checked));
-    document.addEventListener('settingschange', event => { show();scrollMode.value=settings.get('scrollWheelMode');traffic.checked=settings.get('leftHandTraffic');levels.value=String(settings.get('hideLevelsAbove'));contrast.checked=settings.get('autoContrast');if(!['scrollWheelMode','drawingOpacity','simulationSpeed','simulationTemperature','simulationPlaybackRate','simulationOverlay','simulationOverlays'].includes(event.detail?.key))window.StripeMaker.roadEditor?.render(); });
+    document.addEventListener('settingschange', event => { show();scrollMode.value=settings.get('scrollWheelMode');traffic.checked=settings.get('leftHandTraffic');levels.value=String(settings.get('hideLevelsAbove'));contrast.checked=settings.get('autoContrast');if(!['pavementDarkness','scrollWheelMode','drawingOpacity','simulationSpeed','simulationTemperature','simulationPlaybackRate','simulationOverlay','simulationOverlays'].includes(event.detail?.key))window.StripeMaker.roadEditor?.render(); });
     show();
   });
 })();

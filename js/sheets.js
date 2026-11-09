@@ -854,6 +854,7 @@
     const overlays = [];
     (window.StripeMaker ??= {}).sheets = {
       get selected() { return selected; },
+      recenter() { if (selected) fitSheet(selected); },
       // Zooms about the middle of the stage (the Zoom In/Out shortcuts).
       zoomBy(factor) {
         if (!selected) return;

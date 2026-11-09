@@ -10,17 +10,19 @@
   <script src="js/select-picker.js"></script>
   <script src="js/picker-favorites.js"></script>
   <script src="js/history.js?v=projects-1"></script>
-  <script src="js/settings.js?v=scroll-mode-1"></script>
-  <script src="js/shortcuts.js"></script>
+  <script src="js/settings.js?v=pavement-darkness-1"></script>
+  <script src="js/shortcuts.js?v=recenter-1"></script>
   <script src="js/projects.js"></script>
-  <script src="js/sheets.js?v=scroll-mode-1"></script>
+  <script src="js/sheets.js?v=recenter-1"></script>
   <script src="js/road-widths.js?v=centerline-transition-1"></script>
   <script src="js/marking-trim.js"></script>
   <script src="js/line-styles.js"></script>
   <script src="js/item-transform.js"></script>
   <script src="js/longitudinal.js"></script>
   <script src="js/curve-links.js"></script>
-  <script src="js/elements.js?v=centerline-transition-1"></script>
+  <script src="js/circular-arc.js?v=curved-host-arc-joins-1"></script>
+  <script src="js/clothoid.js"></script>
+  <script src="js/elements.js?v=left-hand-road-drawing-1"></script>
   <script src="js/levels.js"></script>
   <script src="js/simulator-lane-changes.js"></script>
   <script src="js/simulator-routing.js"></script>
@@ -56,14 +58,14 @@
   <script src="js/marking-catalog.js"></script>
   <script src="js/markings.js?v=picker-favorites-1"></script>
   <script src="js/surfaces.js"></script>
-  <script src="js/download.js"></script>
-  <script src="js/project-json.js?v=scroll-mode-1"></script>
+  <script src="js/download.js?v=gore-road-clips-1"></script>
+  <script src="js/project-json.js?v=tangent-arc-joins-1"></script>
   <script src="js/selection.js"></script>
   <script src="js/main.js"></script>
   <script src="js/action-instructions.js"></script>
   <link href="css/page.css" rel="stylesheet" />
   <link href="css/form.css" rel="stylesheet" />
-  <link href="css/menus.css?v=approach-selection-1" rel="stylesheet" />
+  <link href="css/menus.css?v=pavement-darkness-1" rel="stylesheet" />
   <link href="css/signs.css" rel="stylesheet" />
   <link href="css/signals.css" rel="stylesheet" />
   <link href="css/markings.css" rel="stylesheet" />
@@ -130,6 +132,16 @@
         <div class="fieldRow">
           <label for="roadLaneWidth">Lane width (ft)</label>
           <input id="roadLaneWidth" type="number" min="8" max="50" step="0.5" value="12" />
+        </div>
+        <div id="roadCurveFields" hidden>
+          <div class="fieldRow"><label for="roadCurveType">Curve</label><select id="roadCurveType"><option value="freeform">Freeform</option><option value="arc">Circular arc</option><option value="clothoid">Clothoid</option></select></div>
+          <div id="roadArcFields" hidden>
+            <div id="roadArcFitRow" class="fieldRow" hidden><label for="roadArcFit">Fit split/merge arcs</label><input id="roadArcFit" type="checkbox" aria-describedby="roadArcFitHint" /></div>
+            <div class="fieldRow"><label for="roadArcAngle">Curve angle (°)</label><div class="dimensionInputs"><input id="roadArcAngle" type="range" min="-360" max="360" step="0.1" value="90" /><input id="roadArcAngleValue" type="number" min="-360" max="360" step="any" value="90" aria-label="Curve angle in degrees" /></div></div>
+            <div id="roadArcRadiusRow" class="fieldRow"><label for="roadArcRadius">Radius (ft)</label><input id="roadArcRadius" type="number" min="0" step="any" /></div>
+            <p id="roadArcFitHint" class="fieldHint" hidden>The joined roads determine the angle; adjust Radius to change the bend.</p>
+            <p class="fieldHint">Drag the curve handle to change the bend. Positive angles turn right; negative angles turn left. Circular arcs also have a radius handle at the circle center; 360° closes a loop. Clothoids change curvature gradually.</p>
+          </div>
         </div>
         <div class="fieldRow">
           <label for="autoTapers">Auto tapers</label>
@@ -377,7 +389,7 @@
         <div class="fieldRow"><label for="matchLineName">Name</label><input id="matchLineName" type="text" maxlength="80" value="A-A" /></div>
         <div id="matchPlacementFields" hidden>
           <div class="fieldRow"><label for="matchStubLength">Continuation (ft)</label><input id="matchStubLength" type="number" min="10" max="1000" step="5" value="100" /></div>
-          <div class="fieldRow"><label for="matchPlacementAngle">Placement rotation (°)</label><div class="dimensionInputs"><input id="matchPlacementAngle" type="range" min="-180" max="180" step="1" value="0" /><input id="matchPlacementAngleValue" type="number" min="-180" max="180" step="1" value="0" aria-label="Match line placement rotation in degrees" /></div></div>
+          <div class="fieldRow"><label for="matchPlacementAngle">Placement rotation (°)</label><div class="dimensionInputs"><input id="matchPlacementAngle" type="range" min="-360" max="360" step="1" value="0" /><input id="matchPlacementAngleValue" type="number" min="-360" max="360" step="1" value="0" aria-label="Match line placement rotation in degrees" /></div></div>
         </div>
         <div id="matchLineList" class="headActions"></div>
         <button id="deleteMatchLine" type="button" disabled>Delete Paired Match Lines</button>
@@ -622,6 +634,12 @@
       <input id="drawingOpacityValue" type="number" min="0" max="100" step="1" value="100" aria-label="Drawing opacity in percent" aria-describedby="drawingOpacityHint" />
     </div>
     <p id="drawingOpacityHint" class="headPopoverHint">Lower to see the sheet beneath the drawing.</p>
+    <label for="pavementDarkness" class="downloadLabel">Pavement darkness (%)</label>
+    <div class="dimensionInputs">
+      <input id="pavementDarkness" type="range" min="0" max="100" step="1" value="77" aria-describedby="pavementDarknessHint" />
+      <input id="pavementDarknessValue" type="number" min="0" max="100" step="1" value="77" aria-label="Pavement darkness in percent" aria-describedby="pavementDarknessHint" />
+    </div>
+    <p id="pavementDarknessHint" class="headPopoverHint">Light to dark pavement. Applies to all sheets and downloads.</p>
     <label for="signArrowWeight" class="downloadLabel">Sign arrow thickness (%)</label>
     <div class="dimensionInputs">
       <input id="signArrowWeight" type="range" min="1" max="400" step="1" value="100" />
